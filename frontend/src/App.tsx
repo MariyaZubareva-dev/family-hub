@@ -8,8 +8,9 @@ type Section='home'|'calendar'|'lists'|'more'|'finance'|'notes'|'ideas';
 type FinanceTab='overview'|'budget'|'annual'|'savings'|'large'|'debt';
 type FinanceForm={type:'INCOME'|'EXPENSE';amount:string;category:string;budget_type:'FIXED'|'FLEXIBLE'|'FUTURE';description:string;occurred_on:string};
 type LargeExpense={name:string;cost:number;months:number;kind:'NECESSITY'|'WANT'};
-type PaymentScheduleItem={from_month:number;to_month:number;amount:string};
-type CreditForm={name:string;principal:string;annual_rate:string;standard_payment:string;term_months:string;start_date:string;first_payment_date:string;recalculation_mode:'TERM'|'PAYMENT';payment_schedule:PaymentScheduleItem[]};
+type PaymentScheduleInputItem={from_month:number;to_month:number;amount:string};
+type PaymentScheduleItem={from_month:number;to_month:number;amount:number};
+type CreditForm={name:string;principal:string;annual_rate:string;standard_payment:string;term_months:string;start_date:string;first_payment_date:string;recalculation_mode:'TERM'|'PAYMENT';payment_schedule:PaymentScheduleInputItem[]};
 type ScheduleRow={month:number;dueDate:string;payment:number;interest:number;principal:number;prepayment:number;prepaymentInterest:number;prepaymentPrincipal:number;totalPaid:number;balance:number;newPayment?:number;paymentChangeDate?:string;newEndDate?:string;prepaymentDates?:string[];status:'PAID'|'FUTURE';};
 
 const TG_ID=423597651;
@@ -84,7 +85,7 @@ function FinanceView(p:{allowed:boolean;finance:{data:FinanceTransaction[];summa
  {tab==='annual'&&<AnnualBudget annual={annual} setAnnual={setAnnual} rows={annualRows}/>} {tab==='savings'&&<EmergencyFund monthly={emergencyMonthly} setMonthly={setEmergencyMonthly} months={emergencyMonths} setMonths={setEmergencyMonths} saved={emergencySaved} setSaved={setEmergencySaved} monthlySave={emergencyMonthlySave} setMonthlySave={setEmergencyMonthlySave} targetMonths={emergencyTargetMonths} setTargetMonths={setEmergencyTargetMonths} target={emergencyTarget} remaining={emergencyRemaining} monthsToGoal={emergencyMonthsToGoal} requiredPerMonth={emergencyRequiredPerMonth}/>} {tab==='large'&&<LargeExpensePlanner rows={largeExpenses} setRows={setLargeExpenses} totals={largeTotals}/>} {tab==='debt'&&<CreditsPlanner credits={p.credits} onReload={p.onReload}/>} </div>
 }
 
-function validatePaymentSchedule(items:PaymentScheduleItem[],term:number):string|null{
+function validatePaymentSchedule(items:PaymentScheduleInputItem[],term:number):string|null{
  const sorted=[...items].sort((a,b)=>a.from_month-b.from_month);
  if(!sorted.length)return 'Добавьте хотя бы один период договорного графика.';
  let expected=1;
@@ -100,12 +101,12 @@ function validatePaymentSchedule(items:PaymentScheduleItem[],term:number):string
  return null;
 }
 
-function apiSchedule(items:PaymentScheduleItem[]):Array<{from_month:number;to_month:number;amount:number}>{
+function apiSchedule(items:PaymentScheduleInputItem[]):PaymentScheduleItem[]{
  return [...items].sort((a,b)=>a.from_month-b.from_month).map(x=>({from_month:Math.round(x.from_month),to_month:Math.round(x.to_month),amount:num(x.amount)}));
 }
 
-function PaymentScheduleEditor({items,setItems,term}:{items:PaymentScheduleItem[];setItems:(items:PaymentScheduleItem[])=>void;term:number}){
- const update=(index:number,key:keyof PaymentScheduleItem,value:string)=>{const next=[...items];next[index]={...next[index],[key]:key==='amount'?value:Math.max(1,Math.round(num(value)))};setItems(next)};
+function PaymentScheduleEditor({items,setItems,term}:{items:PaymentScheduleInputItem[];setItems:(items:PaymentScheduleInputItem[])=>void;term:number}){
+ const update=(index:number,key:keyof PaymentScheduleInputItem,value:string)=>{const next=[...items];next[index]={...next[index],[key]:key==='amount'?value:Math.max(1,Math.round(num(value)))};setItems(next)};
  const add=()=>{const last=items[items.length-1];const from=Math.min(term,last?last.to_month+1:1);setItems([...items,{from_month:from,to_month:term,amount:''}]);};
  const remove=(index:number)=>{if(items.length===1)return;setItems(items.filter((_,i)=>i!==index));};
  const err=validatePaymentSchedule(items,term);
@@ -128,7 +129,7 @@ function CreditCard({credit,onReload}:{credit:Credit;onReload:()=>Promise<void>}
  const principal=num(credit.principal); const rate=num(credit.annual_rate); const originalPayment=num(credit.standard_payment); const originalMonths=Math.max(1,Math.round(num(credit.term_months)));
  const savedSchedule=(credit.payment_schedule??[]).map(x=>({from_month:Number(x.from_month),to_month:Number(x.to_month),amount:String(x.amount)}));
  const initialSchedule=(isCompletePaymentSchedule(savedSchedule,originalMonths)?savedSchedule:contractScheduleFallback(credit));
- const [showMore,setShowMore]=useState(false); const [prepayAmount,setPrepayAmount]=useState(''); const [prepayDate,setPrepayDate]=useState(todayString()); const [prepayComment,setPrepayComment]=useState(''); const [mode,setMode]=useState(credit.recalculation_mode); const [edit,setEdit]=useState(false); const [editPayment,setEditPayment]=useState(String(originalPayment)); const [editStartDate,setEditStartDate]=useState(credit.start_date); const [editFirstPaymentDate,setEditFirstPaymentDate]=useState(credit.first_payment_date); const [editTermMonths,setEditTermMonths]=useState(String(credit.term_months)); const [editSchedule,setEditSchedule]=useState<PaymentScheduleItem[]>(initialSchedule); const [busy,setBusy]=useState(false);
+ const [showMore,setShowMore]=useState(false); const [prepayAmount,setPrepayAmount]=useState(''); const [prepayDate,setPrepayDate]=useState(todayString()); const [prepayComment,setPrepayComment]=useState(''); const [mode,setMode]=useState(credit.recalculation_mode); const [edit,setEdit]=useState(false); const [editPayment,setEditPayment]=useState(String(originalPayment)); const [editStartDate,setEditStartDate]=useState(credit.start_date); const [editFirstPaymentDate,setEditFirstPaymentDate]=useState(credit.first_payment_date); const [editTermMonths,setEditTermMonths]=useState(String(credit.term_months)); const [editSchedule,setEditSchedule]=useState<PaymentScheduleInputItem[]>(initialSchedule); const [busy,setBusy]=useState(false);
  const schedule=useCreditSchedule(credit,mode); const visibleRows=showMore?schedule.rows:schedule.rows.slice(0,12);
  const submitPrepay=async(e:FormEvent)=>{e.preventDefault();const amount=num(prepayAmount);const date=normalizeDateOnly(prepayDate);if(amount<=0||!date||date<credit.start_date||date>todayString()){alert('Укажите корректную сумму и дату досрочного платежа.');return;}setBusy(true);try{await post(`/credits/${credit.id}/prepayments`,{amount,paid_on:date,comment:prepayComment||null});setPrepayAmount('');setPrepayComment('');setPrepayDate(todayString());await onReload()}catch(err){alert(err instanceof Error?err.message:'Не удалось сохранить досрочный платёж.')}finally{setBusy(false)}};
  const saveEdit=async()=>{const editTerm=Math.max(1,Math.round(num(editTermMonths)));const scheduleError=validatePaymentSchedule(editSchedule,editTerm);if(scheduleError){alert(scheduleError);return;}setBusy(true);try{await patch(`/credits/${credit.id}`,{standard_payment:num(editPayment),term_months:editTerm,start_date:editStartDate,first_payment_date:editFirstPaymentDate,recalculation_mode:mode,payment_schedule:apiSchedule(editSchedule)});await onReload();setEdit(false)}catch(err){alert(err instanceof Error?err.message:'Не удалось обновить кредит.')}finally{setBusy(false)}};
@@ -170,7 +171,7 @@ function Metric(p:{title:string;value:number;unit?:string}){
   return <div className="metric"><span>{p.title}</span><strong>{money(p.value)}{p.unit ? ` ${p.unit}` : ' ₽'}</strong></div>;
 }
 
-function isCompletePaymentSchedule(items:PaymentScheduleItem[],term:number):boolean{
+function isCompletePaymentSchedule(items:PaymentScheduleInputItem[],term:number):boolean{
  const sorted=[...items].sort((a,b)=>a.from_month-b.from_month);
  if(!sorted.length)return false;
  let expected=1;
@@ -181,7 +182,7 @@ function isCompletePaymentSchedule(items:PaymentScheduleItem[],term:number):bool
  return expected===term+1;
 }
 
-function contractScheduleFallback(credit:Credit):PaymentScheduleItem[]{
+function contractScheduleFallback(credit:Credit):PaymentScheduleInputItem[]{
  const principal=num(credit.principal);
  const rate=num(credit.annual_rate);
  const payment=num(credit.standard_payment);
@@ -202,7 +203,7 @@ function contractScheduleFallback(credit:Credit):PaymentScheduleItem[]{
 function paymentForMonth(items:PaymentScheduleItem[],month:number,fallback:number):number{
  const sorted=[...items].sort((a,b)=>a.from_month-b.from_month);
  const row=sorted.find(x=>month>=x.from_month&&month<=x.to_month);
- return row?num(row.amount):fallback;
+ return row?row.amount:fallback;
 }
 
 function solveFixedPayment(balance:number,annualRate:number,anchor:string,dueDates:string[]):number{
@@ -211,7 +212,7 @@ function solveFixedPayment(balance:number,annualRate:number,anchor:string,dueDat
    let b=balance;
    let prev=anchor;
    for(const due of dueDates){
-     const interest=dailyAccruedInterest(b,prev,due);
+     const interest=dailyAccruedInterest(b,annualRate,prev,due);
      const principalPart=Math.min(b,Math.max(0,payment-interest));
      b=Math.max(0,b-principalPart);
      prev=due;
