@@ -1,0 +1,1 @@
+{"root":["./src/vite-env.d.ts","./src/lib/api.ts","./src/lib/telegram.ts","./src/types/domain.ts","./src/app.tsx","./src/main.tsx"],"errors":true,"version":"5.9.3"}
