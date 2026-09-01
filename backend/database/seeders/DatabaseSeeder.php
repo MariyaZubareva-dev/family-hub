@@ -13,7 +13,7 @@ use Illuminate\Database\Seeder;
 class DatabaseSeeder extends Seeder {
  public function run():void{
   $maria=User::updateOrCreate(['telegram_user_id'=>423597651],['username'=>null,'first_name'=>'Мария','last_name'=>null,'avatar_url'=>null,'timezone'=>'Europe/Moscow','locale'=>'ru']);
-  $andrey=User::updateOrCreate(['telegram_user_id'=>100000002],['username'=>'andrey','first_name'=>'Андрей','last_name'=>null,'avatar_url'=>null,'timezone'=>'Europe/Moscow','locale'=>'ru']);
+  $andrey=User::updateOrCreate(['telegram_user_id'=>148717886],['username'=>'andrey','first_name'=>'Андрей','last_name'=>null,'avatar_url'=>null,'timezone'=>'Europe/Moscow','locale'=>'ru']);
   $family=Family::firstOrCreate(['name'=>'Наша семья'],['status'=>'ACTIVE','created_by'=>$maria->id]);
   $mm=FamilyMember::updateOrCreate(['family_id'=>$family->id,'user_id'=>$maria->id],['role'=>'ADMIN','status'=>'ACTIVE','invited_by'=>null,'joined_at'=>now()]);
   $am=FamilyMember::updateOrCreate(['family_id'=>$family->id,'user_id'=>$andrey->id],['role'=>'ADMIN','status'=>'ACTIVE','invited_by'=>$maria->id,'joined_at'=>now()]);
