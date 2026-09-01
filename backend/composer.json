@@ -1,0 +1,29 @@
+{
+  "name": "family-hub/backend",
+  "type": "project",
+  "require": {
+    "php": "^8.5",
+    "laravel/framework": "^12.0"
+  },
+  "require-dev": {
+    "fakerphp/faker": "^1.24",
+    "laravel/pint": "^1.25",
+    "phpunit/phpunit": "^11.5"
+  },
+  "autoload": {
+    "psr-4": {
+      "App\\": "app/",
+      "Database\\Factories\\": "database/factories/",
+      "Database\\Seeders\\": "database/seeders/"
+    }
+  },
+  "autoload-dev": {
+    "psr-4": {
+      "Tests\\": "tests/"
+    }
+  },
+  "scripts": {
+    "test": "php artisan test",
+    "lint": "vendor/bin/pint --test"
+  }
+}

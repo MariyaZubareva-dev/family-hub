@@ -1,0 +1,15 @@
+<?php
+namespace App\Http\Controllers\Api;
+use App\Models\FamilyMember;
+use App\Models\User;
+use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
+use Illuminate\Support\Str;
+class FamilyController extends BaseApiController {
+ public function show(Request $request): JsonResponse { $m=$this->membership($request); $family=$m->family()->with('members.user')->firstOrFail(); return response()->json(['data'=>$this->payload($family,$m)]); }
+ public function invite(Request $request): JsonResponse { $m=$this->membership($request); $this->assertAdmin($m); $d=$request->validate(['telegram_user_id'=>['required','integer','min:1'],'username'=>['nullable','string','max:255'],'first_name'=>['nullable','string','max:255']]); $u=User::firstOrCreate(['telegram_user_id'=>$d['telegram_user_id']],['username'=>$d['username']??null,'first_name'=>$d['first_name']??'Пользователь']); $member=FamilyMember::updateOrCreate(['family_id'=>$m->family_id,'user_id'=>$u->id],['role'=>'USER','status'=>'ACTIVE','invited_by'=>$m->user_id,'joined_at'=>now()]); return response()->json(['data'=>['id'=>$member->id,'role'=>$member->role,'status'=>$member->status,'user'=>$u]],201); }
+ public function updateMember(Request $request, FamilyMember $member): JsonResponse { $m=$this->membership($request,$member->family_id); $this->assertAdmin($m); abort_if($member->family_id!==$m->family_id,404); $d=$request->validate(['role'=>['required','in:ADMIN,USER'],'status'=>['sometimes','in:ACTIVE,INACTIVE']]); if($member->user_id===$m->user_id && ($d['role']??'ADMIN')!=='ADMIN') abort(422,'You cannot remove your own administrator role.'); $member->update($d); return response()->json(['data'=>$member->fresh()->load('user')]); }
+ public function removeMember(Request $request, FamilyMember $member): JsonResponse { $m=$this->membership($request,$member->family_id); $this->assertAdmin($m); abort_if($member->family_id!==$m->family_id,404); abort_if($member->user_id===$m->user_id,422,'You cannot remove yourself from the family.'); $member->update(['status'=>'INACTIVE']); return response()->json([],204); }
+ public function create(Request $request): JsonResponse { abort_if($request->user()->familyMembers()->where('status','ACTIVE')->exists(),409,'User already belongs to an active family.'); $d=$request->validate(['name'=>['required','string','max:120']]); $family=\App\Models\Family::create(['name'=>$d['name'],'status'=>'ACTIVE','created_by'=>$request->user()->id]); $member=FamilyMember::create(['family_id'=>$family->id,'user_id'=>$request->user()->id,'role'=>'ADMIN','status'=>'ACTIVE','joined_at'=>now()]); return response()->json(['data'=>$this->payload($family->load('members.user'),$member)],201); }
+ private function payload($family,$m): array { return ['id'=>$family->id,'name'=>$family->name,'status'=>$family->status,'my_role'=>$m->role,'members'=>$family->members->where('status','ACTIVE')->values()->map(fn($x)=>['id'=>$x->id,'role'=>$x->role,'status'=>$x->status,'joined_at'=>$x->joined_at,'user'=>$x->user])]; }
+}
