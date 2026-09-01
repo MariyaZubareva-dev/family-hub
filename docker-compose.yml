@@ -28,7 +28,7 @@ services:
       APP_ENV: local
       APP_DEBUG: "true"
       APP_KEY: "base64:3Ww5xqK7G4mP5HhJ6Zq1K8r2Vv9Nc0Ls7Yp4Qa2Ts6U="
-      APP_URL: http://localhost:8000
+      APP_URL: https://teamportal.ru
       APP_TIMEZONE: Europe/Moscow
       APP_LOCALE: ru
       APP_FALLBACK_LOCALE: ru
@@ -63,7 +63,7 @@ services:
     container_name: family-hub-frontend
     restart: unless-stopped
     environment:
-      VITE_API_BASE_URL: http://localhost:8000/api/v1
+      VITE_API_BASE_URL: /api/v1
       VITE_DEV_TELEGRAM_USER_ID: 423597651
     volumes:
       - ./frontend:/app
