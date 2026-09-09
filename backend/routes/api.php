@@ -16,10 +16,15 @@ Route::prefix('v1')->group(function(){
  Route::middleware(TelegramAuthenticate::class)->group(function(){
   Route::get('/me',function(Request $r){$u=$r->user();$m=$u->familyMembers()->where('status','ACTIVE')->with('family')->first();return response()->json(['data'=>['id'=>$u->id,'telegram_user_id'=>$u->telegram_user_id,'username'=>$u->username,'first_name'=>$u->first_name,'last_name'=>$u->last_name,'avatar_url'=>$u->avatar_url,'timezone'=>$u->timezone,'locale'=>$u->locale,'family'=>$m?['id'=>$m->family->id,'name'=>$m->family->name,'role'=>$m->role]:null]]);});
   Route::get('/family',[FamilyController::class,'show']);
+  Route::patch('/family',[FamilyController::class,'update']);
   Route::post('/families',[FamilyController::class,'create']);
+  Route::get('/family/invitations',[FamilyController::class,'invitations']);
+  Route::post('/family/invitations',[FamilyController::class,'invite']);
+  Route::post('/family/invitations/{invitation}/accept',[FamilyController::class,'acceptInvitation']);
   Route::post('/family/invite',[FamilyController::class,'invite']);
   Route::patch('/family/members/{member}',[FamilyController::class,'updateMember']);
   Route::delete('/family/members/{member}',[FamilyController::class,'removeMember']);
+  Route::delete('/family/membership',[FamilyController::class,'leave']);
   Route::apiResource('events',EventController::class)->only(['index','store','show','update','destroy']);
   Route::apiResource('reminders',ReminderController::class)->only(['index','store','update','destroy']);
   Route::apiResource('lists',ListController::class)->only(['index','store','update','destroy']);

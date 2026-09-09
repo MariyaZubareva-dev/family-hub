@@ -24,4 +24,10 @@ class Family extends Model
     public function notes(): HasMany { return $this->hasMany(Note::class); }
     public function ideas(): HasMany { return $this->hasMany(Idea::class); }
     public function transactions(): HasMany { return $this->hasMany(FinanceTransaction::class); }
+    public function invitations(): HasMany { return $this->hasMany(FamilyInvitation::class); }
+    public function expenseCategories(): HasMany { return $this->hasMany(ExpenseCategory::class); }
+    public function budgets(): HasMany { return $this->hasMany(Budget::class); }
+    public function incomes(): HasMany { return $this->hasMany(Income::class); }
+    public function expenses(): HasMany { return $this->hasMany(Expense::class); }
+    public function financialGoals(): HasMany { return $this->hasMany(FinancialGoal::class); }
 }
