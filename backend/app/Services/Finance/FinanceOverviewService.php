@@ -7,6 +7,7 @@ use App\Models\Expense;
 use App\Models\FinancialGoal;
 use App\Models\GoalContribution;
 use App\Models\Income;
+use App\Models\FinanceTransaction;
 use App\Models\FamilyMember;
 use Carbon\CarbonImmutable;
 
@@ -32,13 +33,20 @@ class FinanceOverviewService
             ->with('category')
             ->get();
 
+        $legacyTransactions = FinanceTransaction::query()
+            ->where('family_id', $familyId)
+            ->whereBetween('occurred_on', [$start->toDateString(), $end->toDateString()])
+            ->get();
+        $legacyExpenses = $legacyTransactions->where('type', 'EXPENSE');
+        $legacyIncome = $legacyTransactions->where('type', 'INCOME');
+
         $spentByCategory = $expenses->groupBy('category_id')->map(fn ($items) => round((float) $items->sum('amount'), 2));
-        $spent = round((float) $expenses->sum('amount'), 2);
+        $spent = round((float) $expenses->sum('amount') + (float) $legacyExpenses->sum('amount'), 2);
         $receivedIncome = round((float) Income::query()
             ->where('family_id', $familyId)
             ->where('status', Income::RECEIVED)
             ->whereBetween('income_date', [$start->toDateString(), $end->toDateString()])
-            ->sum('amount'), 2);
+            ->sum('amount') + (float) $legacyIncome->sum('amount'), 2);
         $plannedIncome = round((float) Income::query()
             ->where('family_id', $familyId)
             ->where('status', Income::PLANNED)
@@ -75,7 +83,14 @@ class FinanceOverviewService
                 'amount' => $amount,
                 'percent' => $spent > 0 ? round($amount / $spent * 100, 1) : 0,
             ];
-        })->values()->sortByDesc('amount')->values()->all();
+        })->values();
+        $legacyChart = $legacyExpenses->groupBy('category')->map(fn ($items, $name) => [
+            'category_id' => null,
+            'name' => $name ?: 'Без категории',
+            'amount' => round((float) $items->sum('amount'), 2),
+            'percent' => $spent > 0 ? round((float) $items->sum('amount') / $spent * 100, 1) : 0,
+        ])->values();
+        $expenseChart = $expenseChart->concat($legacyChart)->sortByDesc('amount')->values()->all();
 
         return [
             'period' => ['year' => $year, 'month' => $month],
