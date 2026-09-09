@@ -16,6 +16,7 @@ export interface Note { id:string; family_id:string; created_by:string; title:st
 export interface Idea { id:string; family_id:string; created_by:string; title:string; description:string|null; status:'OPEN'|'DONE'|'ARCHIVED'; author?:User; }
 export interface FinanceTransaction { id:string; family_id:string; created_by:string; type:'INCOME'|'EXPENSE'; amount:string; category:string; budget_type:'FIXED'|'FLEXIBLE'|'FUTURE'; description:string|null; occurred_on:string; }
 export interface FinanceSummary { income:number; expense:number; balance:number; }
+export interface FinanceOverview { period:{year:number;month:number}; budget:{total_limit:number;spent_amount:number;available_amount:number;progress_percent:number;categories:{category_id:string;name:string;icon:string|null;limit_amount:number;spent_amount:number;remaining_amount:number;progress_percent:number}[]}; fact:{received_income:number;confirmed_expenses:number;confirmed_goal_contributions:number;available_cash:number}; forecast:{planned_income:number;forecasted_balance:number}; expense_chart:{category_id:string|null;name:string;amount:number;percent:number}[]; }
 
 export interface CreditPaymentScheduleItem { from_month:number; to_month:number; amount:string; }
 export interface CreditPrepayment { id:string; credit_id:string; created_by:string; amount:string; paid_on:string; comment:string|null; }
