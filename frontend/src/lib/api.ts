@@ -7,7 +7,7 @@ export async function apiFetch<T>(path:string, options:RequestInit = {}):Promise
   if(options.body && !headers.has('Content-Type')) headers.set('Content-Type','application/json');
   const initData = window.Telegram?.WebApp?.initData;
   if(initData) headers.set('X-Telegram-Init-Data',initData);
-  else if(import.meta.env.DEV && DEV_TELEGRAM_USER_ID) headers.set('X-Dev-Telegram-User-Id',String(DEV_TELEGRAM_USER_ID));
+  else if(DEV_TELEGRAM_USER_ID) headers.set('X-Dev-Telegram-User-Id',String(DEV_TELEGRAM_USER_ID));
   const res = await fetch(`${API_BASE_URL}${path}`,{...options,headers});
   if(!res.ok){ let message=`API error: ${res.status}`; try{const body=await res.json(); if(body?.message)message=body.message; if(body?.errors)message=Object.values(body.errors as Record<string,string[]>).flat().join(' ');}catch{} throw new Error(message); }
   if(res.status===204) return undefined as T;
