@@ -413,7 +413,7 @@ function FinanceV07(p:{
               <div style={{display:'flex',justifyContent:'space-between',marginTop:4}}><span style={{fontSize:11,color:'var(--muted)'}}>{pct}% от расходов</span>{over && <span style={{fontSize:11,color:'#E11D48',fontWeight:700}}>лимит превышен</span>}</div>
               <div className="progress" style={{marginTop:6,position:'relative',height:8,background:'#EDF0F4',borderRadius:999,overflow:'hidden'}}><span style={{display:'block',height:'100%',width:`${Math.min(100,pct)}%`,background:c.color,borderRadius:999,opacity:isActive?1:.95}} />{showLimits && limitPos!==null && <span style={{position:'absolute',top:0,bottom:0,left:`${limitPos}%`,width:2,background:'#E11D48',opacity:.9}} />}</div>
             </div>
-          ))}
+          })}
           {visibleRanked.length===0 && <div className="empty" style={{marginTop:10,padding:'18px',textAlign:'center',color:'var(--muted)',fontSize:13,border:'1px dashed var(--border)',borderRadius:12,background:'var(--surface-2)'}}>Нет категорий по фильтру</div>}
         </div>
         <button className="button secondary" style={{width:'100%',marginTop:12}} onClick={()=>setShowAll(!showAll)}>{showAll? 'Свернуть' : `Показать остальные ${Math.max(0,filteredRanked.length-8)}`}</button>
