@@ -34,12 +34,17 @@ class FinanceCoreController extends FinanceBaseController
         $payload=['income'=>$income,'expense'=>$expense,'balance'=>round($income-$expense,2),'top_expense_categories'=>$categories];
         if(env('OPENAI_API_KEY')){
             try{
-                $resp=Http::withToken(env('OPENAI_API_KEY'))->timeout(30)->post('https://api.openai.com/v1/responses',['model'=>env('OPENAI_MODEL','gpt-5.6-luna'),'input'=>'Сделай короткий финансовый разбор для семьи на русском. Используй только эти агрегированные данные, без персональных данных. Дай 3 наблюдения и 3 практических действия. JSON не нужен. Данные: '.json_encode($payload,JSON_UNESCAPED_UNICODE)]);
+                $model = env('OPENAI_MODEL','gpt-4o-mini');
+                $resp=Http::withToken(env('OPENAI_API_KEY'))->timeout(30)->post('https://api.openai.com/v1/responses',['model'=>$model,'input'=>'Сделай короткий финансовый разбор для семьи на русском. Используй только эти агрегированные данные, без персональных данных. Дай 3 наблюдения и 3 практических действия. JSON не нужен. Данные: '.json_encode($payload,JSON_UNESCAPED_UNICODE)]);
                 if($resp->successful()){
                     $json=$resp->json();
-                    return response()->json(['data'=>['text'=>$json['output'][0]['content'][0]['text']??json_encode($json,JSON_UNESCAPED_UNICODE),'source'=>'openai']]);
+                    $text=$json['output'][0]['content'][0]['text'] ?? null;
+                    if(!$text && isset($json['output_text'])) $text=$json['output_text'];
+                    return response()->json(['data'=>['text'=>$text??json_encode($json,JSON_UNESCAPED_UNICODE),'source'=>'openai','model'=>$model]]);
+                } else {
+                    \Illuminate\Support\Facades\Log::warning('OpenAI aiReview failed', ['status'=>$resp->status(),'body'=>mb_substr($resp->body(),0,1000),'model'=>$model]);
                 }
-            }catch(\Throwable $e){report($e);}
+            }catch(\Throwable $e){\Illuminate\Support\Facades\Log::warning('OpenAI aiReview exception', ['error'=>$e->getMessage()]); report($e);}
         }
         $text='Доходы: '.number_format($income,2,',',' ').' ₽. Расходы: '.number_format($expense,2,',',' ').' ₽. Баланс: '.number_format($income-$expense,2,',',' ').' ₽.\n';
         $text.=$expense>0?'Наблюдение: расходная часть составляет '.round($expense/max(1,$income)*100,1).'% от доходов.\n':'';
@@ -140,14 +145,27 @@ class FinanceCoreController extends FinanceBaseController
             if($code===0){$escaped=escapeshellarg($tmp);$text=shell_exec("tesseract $escaped stdout -l rus+eng 2>/dev/null");$ocrText=is_string($text)?trim($text):null;}
             @unlink($tmp);
         }
-        $result=null;
-        if(env('OPENAI_API_KEY')){
+        $result=null; $aiError=null;
+        if(env('OPENAI_API_KEY') && is_string($image) && $image!==''){
             try{
-                $resp=Http::withToken(env('OPENAI_API_KEY'))->timeout(45)->post('https://api.openai.com/v1/responses',['model'=>env('OPENAI_MODEL','gpt-5.6-luna'),'input'=>[['role'=>'user','content'=>[['type'=>'input_text','text'=>'Распознай чек. Верни JSON только с полями merchant,total,date,currency,items. Не придумывай значения. Если поле неизвестно, null.'],['type'=>'input_image','image_url'=>$image]]]]]);
-                if($resp->successful())$result=['raw'=>$resp->json()];
-            }catch(\Throwable $e){report($e);}
+                $model = env('OPENAI_MODEL','gpt-4o-mini');
+                $isPdf = str_contains($image, 'application/pdf');
+                $content = $isPdf
+                    ? [['type'=>'input_text','text'=>'Распознай чек в PDF. Верни JSON только с полями merchant,total,date,currency,items. Не придумывай значения. Если поле неизвестно, null.'], ['type'=>'input_file','filename'=>'receipt.pdf','file_data'=>$image]]
+                    : [['type'=>'input_text','text'=>'Распознай чек. Верни JSON только с полями merchant,total,date,currency,items. Не придумывай значения. Если поле неизвестно, null.'], ['type'=>'input_image','image_url'=>$image]];
+                $resp=Http::withToken(env('OPENAI_API_KEY'))->timeout(60)->post('https://api.openai.com/v1/responses',['model'=>$model,'input'=>[['role'=>'user','content'=>$content]]]);
+                if($resp->successful()){
+                    $result=['raw'=>$resp->json()];
+                } else {
+                    $aiError = 'OpenAI '.$resp->status().': '.mb_substr($resp->body(),0,800);
+                    \Illuminate\Support\Facades\Log::warning('OpenAI receipt failed', ['status'=>$resp->status(),'body'=>mb_substr($resp->body(),0,1500),'model'=>$model,'isPdf'=>$isPdf]);
+                }
+            }catch(\Throwable $e){$aiError=$e->getMessage(); report($e); \Illuminate\Support\Facades\Log::warning('OpenAI receipt exception', ['error'=>$e->getMessage()]);}
         }
-        DB::table('receipts')->where('id',$id)->update(['ocr_status'=>$ocrText||$result?'COMPLETED':'NOT_CONFIGURED','ocr_text'=>$ocrText,'ai_result'=>$result?json_encode($result,JSON_UNESCAPED_UNICODE):null,'updated_at'=>now()]);
+        $status = $result ? 'READY_FOR_REVIEW' : ($aiError && str_contains($aiError,'PDF parser') ? 'FAILED' : ($ocrText||$result ? 'READY_FOR_REVIEW' : 'NOT_CONFIGURED'));
+        $update = ['ocr_status'=>$status,'ocr_text'=>$ocrText,'ai_result'=>$result?json_encode($result,JSON_UNESCAPED_UNICODE):($aiError?json_encode(['error'=>$aiError],JSON_UNESCAPED_UNICODE):null),'updated_at'=>now()];
+        if($aiError && $status==='FAILED') $update['ocr_text'] = ($ocrText ? $ocrText."\n" : '')."[AI error] ".$aiError;
+        DB::table('receipts')->where('id',$id)->update($update);
     }
 
     private function ownedRow(string $table,string $id,string $familyId): object { $row=DB::table($table)->where('id',$id)->where('family_id',$familyId)->first(); abort_unless($row,404); return $row; }
