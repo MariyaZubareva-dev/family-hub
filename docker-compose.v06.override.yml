@@ -1,0 +1,13 @@
+services:
+  backend:
+    environment:
+      APP_TIMEZONE: Europe/Moscow
+      APP_LOCALE: ru
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_MODEL: ${OPENAI_MODEL:-gpt-5.6-luna}
+  # Legacy notifications service is replaced by scheduler+queue in main compose.
+  # Kept for backward compat but disabled — scheduler handles family:send-reminders via schedule:run
+  notifications:
+    image: busybox
+    command: ["sh", "-c", "echo 'notifications service deprecated, use scheduler+queue'; sleep infinity"]
+    restart: "no"
