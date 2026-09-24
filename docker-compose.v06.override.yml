@@ -5,9 +5,30 @@ services:
       APP_LOCALE: ru
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       OPENAI_MODEL: ${OPENAI_MODEL:-gpt-5.6-luna}
-  # Legacy notifications service is replaced by scheduler+queue in main compose.
-  # Kept for backward compat but disabled — scheduler handles family:send-reminders via schedule:run
   notifications:
-    image: busybox
-    command: ["sh", "-c", "echo 'notifications service deprecated, use scheduler+queue'; sleep infinity"]
-    restart: "no"
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: family-hub-notifications
+    restart: unless-stopped
+    working_dir: /var/www/html
+    environment:
+      APP_ENV: local
+      APP_DEBUG: "true"
+      APP_KEY: "base64:3Ww5xqK7G4mP5HhJ6Zq1K8r2Vv9Nc0Ls7Yp4Qa2Ts6U="
+      APP_TIMEZONE: Europe/Moscow
+      APP_LOCALE: ru
+      DB_CONNECTION: pgsql
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_DATABASE: family_hub
+      DB_USERNAME: family_hub
+      DB_PASSWORD: family_hub
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      backend:
+        condition: service_started
+    command: >
+      sh -lc "while true; do php artisan family:send-reminders; sleep 60; done"

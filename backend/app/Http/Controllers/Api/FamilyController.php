@@ -52,7 +52,7 @@ class FamilyController extends BaseApiController
         ]);
         abort_unless(!empty($d['telegram_user_id']) || !empty($d['username']),422,'Укажите Telegram ID или логин.');
         $telegramId=$d['telegram_user_id']??null;
-        $username=isset($d['username']) && $d['username'] ? ltrim(trim($d['username']),'@') : null;
+        $username=$d['username']?ltrim(trim($d['username']),'@'):null;
         if($username){
             $known=User::whereRaw('LOWER(username)=?', [mb_strtolower($username)])->first();
             if($known) $telegramId=$known->telegram_user_id;

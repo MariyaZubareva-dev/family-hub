@@ -1,133 +1,944 @@
-import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from 'react';
-import { del, get, patch, post } from './lib/api';
-import { initTelegram } from './lib/telegram';
-import './styles.css';
+import { useEffect, useMemo, useState } from 'react'
+import './styles.v07.css'
 
-type Role='ADMIN'|'USER';
-type Section='home'|'calendar'|'lists'|'notes'|'ideas'|'finance'|'family';
-type ModalKind='list'|'item'|'member'|'transaction'|'goal'|'card'|'cashback'|'contribution'|'price'|'receipt'|null;
-
-type User={id:string;telegram_user_id:number;username?:string|null;first_name:string;last_name?:string|null;avatar_url?:string|null;timezone:string;locale?:string|null};
-type Member={id:string;role:Role;status:string;joined_at?:string|null;user:User};
-type Family={id:string;name:string;status:string;my_role:Role;members:Member[]};
-type ListItem={id:string;list_id:string;title:string;is_completed:boolean;created_by:string;completed_by?:string|null;completed_at?:string|null;position:number};
-type FamilyList={id:string;name:string;type:string;items:ListItem[]};
-type Invitation={id:string;family_id:string;telegram_user_id?:number|null;username?:string|null;first_name?:string|null;status:string;expires_at?:string|null;family?:Family;inviter?:User};
-type FinanceTransaction={id:string;type:'INCOME'|'EXPENSE';amount:string|number;category:string;budget_type:string;description?:string|null;occurred_on:string};
-type FinanceData={data:FinanceTransaction[];summary:{income:number;expense:number;balance:number}};
-type Goal={id:string;name:string;type:string;target_amount:number;current_price?:number|null;target_date?:string|null;priority:string;status:string;description?:string|null;url?:string|null;contributions?:Contribution[];price_history?:PricePoint[]};
-type Contribution={id:string;goal_id:string;amount:number;contribution_date:string;comment?:string|null};
-type PricePoint={id:string;goal_id:string;price:number;recorded_at:string;url?:string|null;comment?:string|null};
-type Card={id:string;name:string;bank_name?:string|null;last4?:string|null;payment_system?:string|null;default_cashback_rate:number;status:string;notes?:string|null};
-type Cashback={id:string;card_id?:string|null;merchant_name?:string|null;category?:string|null;cashback_rate:number;cap_amount?:number|null;valid_from?:string|null;valid_to?:string|null;notes?:string|null};
-type Credit={id:string;name:string;principal:string|number;annual_rate:string|number;standard_payment:string|number;term_months:number;start_date:string;first_payment_date:string;recalculation_mode:'TERM'|'PAYMENT';payment_schedule:any[];prepayments?:any[]};
-type EventItem={id:string;title:string;description?:string|null;start_at:string;end_at:string;timezone:string;location?:string|null;status:string;recurrence_rule?:string|null;responsible_member_id?:string|null;responsibleMember?:Member|null};
-type Reminder={id:string;title:string;description?:string|null;scheduled_at:string;timezone:string;status:string;recurrence_rule?:string|null;responsible_member_id?:string|null;responsibleMember?:Member|null};
-type Receipt={id:string;file_name?:string|null;mime_type?:string|null;ocr_status:string;ocr_text?:string|null;ai_result?:any;created_at:string;expense_id?:string|null};
-
-const MOSCOW='Europe/Moscow';
-const today=()=>new Intl.DateTimeFormat('en-CA',{timeZone:MOSCOW,year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
-const rub=(v:number)=>`${v.toLocaleString('ru-RU',{minimumFractionDigits:2,maximumFractionDigits:2})} ₽`;
-const n=(v:unknown)=>{const x=typeof v==='number'?v:Number(String(v??'').replace(',','.'));return Number.isFinite(x)?x:0};
-
-// Lightweight routing for Telegram deep links & browser history — mobile-friendly
-const pathToSection = (path: string): Section | null => {
-  const p = path.replace(/\/+$/,'') || '/';
-  if (p === '/' || p === '/home') return 'home';
-  if (p.startsWith('/calendar')) return 'calendar';
-  if (p.startsWith('/lists')) return 'lists';
-  if (p.startsWith('/notes')) return 'notes';
-  if (p.startsWith('/ideas')) return 'ideas';
-  if (p.startsWith('/finance')) return 'finance';
-  if (p.startsWith('/family') || p.startsWith('/settings')) return 'family';
-  return null;
-};
-const sectionToPath = (s: Section): string => ({home:'/',calendar:'/calendar',lists:'/lists',notes:'/notes',ideas:'/ideas',finance:'/finance',family:'/family'}[s] || '/');
-
-export default function App(){
- const [section,setSection]=useState<Section>('home');
- const [me,setMe]=useState<User|null>(null); const [family,setFamily]=useState<Family|null>(null); const [events,setEvents]=useState<EventItem[]>([]); const [reminders,setReminders]=useState<Reminder[]>([]); const [lists,setLists]=useState<FamilyList[]>([]); const [notes,setNotes]=useState<any[]>([]); const [ideas,setIdeas]=useState<any[]>([]); const [finance,setFinance]=useState<FinanceData|null>(null); const [credits,setCredits]=useState<Credit[]>([]); const [invitations,setInvitations]=useState<Invitation[]>([]);
- const [busy,setBusy]=useState(true); const [error,setError]=useState<string|null>(null); const [modal,setModal]=useState<ModalKind>(null); const [activeList,setActiveList]=useState<FamilyList|null>(null); const [editingItem,setEditingItem]=useState<ListItem|null>(null); const [editingList,setEditingList]=useState<FamilyList|null>(null); const [selectedGoal,setSelectedGoal]=useState<Goal|null>(null);
- const [goals,setGoals]=useState<Goal[]>([]); const [cards,setCards]=useState<Card[]>([]); const [cashbacks,setCashbacks]=useState<Cashback[]>([]); const [receipts,setReceipts]=useState<Receipt[]>([]); const [analytics,setAnalytics]=useState<any>(null); const [budget,setBudget]=useState<any>(null);
-  const loadCore=async()=>{setError(null);try{const meR=await get<{data:User}>('/me');setMe(meR.data);const invR=await get<{data:Invitation[]}>('/family/invitations').catch(()=>({data:[]}));setInvitations(invR.data??[]);const fam=await get<{data:Family}>('/family').catch(()=>null);if(!fam?.data){setFamily(null);return;}setFamily(fam.data);const [ev,rem,l,n,i]=await Promise.all([get<{data:EventItem[]}>('/events'),get<{data:Reminder[]}>('/reminders'),get<{data:FamilyList[]}>('/lists'),get<{data:any[]}>('/notes'),get<{data:any[]}>('/ideas')]);setEvents(ev.data??[]);setReminders(rem.data??[]);setLists(l.data);setNotes(n.data);setIdeas(i.data);if(fam.data.my_role==='ADMIN'){const [fin,cr,gg,cc,cb,rr]=await Promise.all([get<FinanceData>('/finances'),get<{data:Credit[]}>('/credits'),get<{data:Goal[]}>('/finance/goals'),get<{data:Card[]}>('/finance/cards'),get<{data:Cashback[]}>('/finance/cashback'),get<{data:Receipt[]}>('/finance/receipts')]);setFinance(fin);setCredits(cr.data);setGoals(gg.data);setCards(cc.data);setCashbacks(cb.data);setReceipts(rr.data);try{const an=await get<any>('/finance/analytics');setAnalytics(an.data)}catch{}try{const b=await get<any>(`/finance/budgets/${new Date().getFullYear()}/${new Date().getMonth()+1}`);setBudget(b.data)}catch{}}}catch(e){setError(e instanceof Error?e.message:'Не удалось загрузить Family Hub.')}finally{setBusy(false)}};
-  // Deep-link & Telegram start_param routing
-  useEffect(()=>{
-    initTelegram();
-    const initial = pathToSection(window.location.pathname) || 'home';
-    const startParam = new URLSearchParams(window.location.search).get('tgWebAppStartParam') || (window as any).Telegram?.WebApp?.initDataUnsafe?.start_param;
-    if (startParam) {
-      const mapped = pathToSection('/' + String(startParam).replace(/^\/+/, ''));
-      if (mapped) { setSection(mapped); window.history.replaceState({}, '', sectionToPath(mapped)); }
-      else setSection(initial);
-    } else {
-      setSection(initial);
-    }
-    const onPop = () => { const s = pathToSection(window.location.pathname); if (s) setSection(s); };
-    window.addEventListener('popstate', onPop);
-    void loadCore();
-    return () => window.removeEventListener('popstate', onPop);
-  },[]);
-  const navigate = (s: Section) => { setSection(s); try { window.history.pushState({}, '', sectionToPath(s)); } catch {} };
-  const accept=async(inv:Invitation)=>{try{await post(`/family/invitations/${inv.id}/accept`,{});await loadCore();navigate('home')}catch(e){setError(e instanceof Error?e.message:'Не удалось принять приглашение')}};
-  const createFamily=async(name:string)=>{try{await post('/families',{name});await loadCore();navigate('home')}catch(e){setError(e instanceof Error?e.message:'Не удалось создать семью')}};
- const saveList=async(name:string)=>{try{if(editingList){await patch(`/lists/${editingList.id}`,{name});}else{await post('/lists',{name,type:'CUSTOM'});}setEditingList(null);setModal(null);await loadCore()}catch(e){setError(e instanceof Error?e.message:'Не удалось сохранить список')}};
- const saveItem=async(title:string)=>{if(!activeList)return;try{if(editingItem){await patch(`/lists/${activeList.id}/items/${editingItem.id}`,{title});}else{await post(`/lists/${activeList.id}/items`,{title});}setEditingItem(null);setModal(null);await loadCore()}catch(e){setError(e instanceof Error?e.message:'Не удалось сохранить пункт')}};
- const removeItem=async(item:ListItem)=>{if(!activeList)return;try{await del(`/lists/${activeList.id}/items/${item.id}`);await loadCore()}catch(e){setError(e instanceof Error?e.message:'Не удалось удалить пункт')}};
- const toggleItem=async(item:ListItem)=>{if(!activeList)return;try{await patch(`/lists/${activeList.id}/items/${item.id}`,{is_completed:!item.is_completed});await loadCore()}catch(e){setError(e instanceof Error?e.message:'Не удалось изменить пункт')}};
- if(busy)return <div className="loading">Загружаем Family Hub…</div>;
- return <div className="app-shell"><header className="topbar"><div><div className="eyebrow">Семья</div><h1>{family?.name??'Family Hub'}</h1></div><div className="user-badge">{me?.first_name?.slice(0,1)??'?'}</div></header>{error&&<div className="error-banner">{error}<button onClick={()=>setError(null)}>×</button></div>}
-    {!family?<main className="page">{invitations.length>0?<InvitationView invitations={invitations} onAccept={accept}/>:<NoFamilyView onCreate={createFamily}/>}</main>:<main className="page">{section==='home'&&<HomeView family={family} lists={lists} finance={finance} goals={goals} onSection={navigate} onAccept={accept} invitations={invitations}/>} {section==='calendar'&&<CalendarView events={events} reminders={reminders} members={family?.members??[]} onReload={loadCore}/>} {section==='lists'&&<ListsView lists={lists} activeList={activeList??lists[0]??null} setActiveList={setActiveList} onNewList={()=>{setEditingList(null);setModal('list')}} onEditList={(l)=>{setEditingList(l);setModal('list')}} onDeleteList={async(l)=>{if(!confirm('Удалить список?'))return;await del(`/lists/${l.id}`);await loadCore()}} onAdd={()=>{setEditingItem(null);setModal('item')}} onEdit={(it)=>{setEditingItem(it);setModal('item')}} onDelete={removeItem} onToggle={toggleItem}/>} {section==='notes'&&<SimpleCrud title="Мои заметки" items={notes} kind="note" onSave={async(data)=>{await post('/notes',data);await loadCore()}} onDelete={async(id)=>{await del(`/notes/${id}`);await loadCore()}}/>} {section==='ideas'&&<SimpleCrud title="Семейные идеи" items={ideas} kind="idea" onSave={async(data)=>{await post('/ideas',data);await loadCore()}} onDelete={async(id)=>{await del(`/ideas/${id}`);await loadCore()}}/>} {section==='finance'&&<FinanceView finance={finance} goals={goals} cards={cards} cashbacks={cashbacks} receipts={receipts} analytics={analytics} budget={budget} credits={credits} onReload={loadCore}/>} {section==='family'&&<FamilyView family={family} invitations={invitations} onInvite={async(data)=>{await post('/family/invitations',data);await loadCore()}} onAccept={accept}/>}</main>}
-    <nav className="bottom-nav"><Nav a={section==='home'} l="Главная" c={()=>navigate('home')} i="⌂"/><Nav a={section==='calendar'} l="Календарь" c={()=>navigate('calendar')} i="□"/><Nav a={section==='lists'} l="Списки" c={()=>navigate('lists')} i="☷"/><Nav a={section==='finance'} l="Финансы" c={()=>navigate('finance')} i="₽"/><Nav a={section==='family'} l="Семья" c={()=>navigate('family')} i="👨‍👩‍👧"/><Nav a={section==='notes'} l="Ещё" c={()=>navigate('notes')} i="•••"/></nav>
-   {modal==='list'&&<FormModal title={editingList?'Редактировать список':'Новый список'} fields={[{name:'name',label:'Название',defaultValue:editingList?.name??''}]} onClose={()=>{setModal(null);setEditingList(null)}} onSave={(d)=>saveList(d.name)}/>} {modal==='item'&&<FormModal title={editingItem?'Редактировать пункт':'Добавить пункт'} fields={[{name:'title',label:'Название пункта',defaultValue:editingItem?.title??''}]} onClose={()=>{setModal(null);setEditingItem(null)}} onSave={(d)=>saveItem(d.title)}/>} </div>
+// ---- API helpers (Telegram auth + local dev fallback) ----
+function getAuthHeaders(): Record<string,string> {
+  const h: Record<string,string> = { 'Content-Type': 'application/json' }
+  const tg = (window as any).Telegram?.WebApp
+  if (tg?.initData) h['X-Telegram-Init-Data'] = tg.initData
+  else {
+    const devId = (typeof localStorage !== 'undefined' && localStorage.getItem('dev_telegram_id')) || '999001'
+    h['X-Dev-Telegram-User-Id'] = devId
+  }
+  return h
+}
+async function apiGet(path:string){
+  const r = await fetch(`/api/v1${path}`, { headers: getAuthHeaders() })
+  if(!r.ok) throw new Error(await r.text())
+  return r.json()
+}
+async function apiPost(path:string, body:any){
+  const r = await fetch(`/api/v1${path}`, { method:'POST', headers: getAuthHeaders(), body: JSON.stringify(body) })
+  if(!r.ok) throw new Error(await r.text())
+  return r.json()
+}
+async function apiPatch(path:string, body:any){
+  const r = await fetch(`/api/v1${path}`, { method:'PATCH', headers: getAuthHeaders(), body: JSON.stringify(body) })
+  if(!r.ok) throw new Error(await r.text())
+  return r.json()
+}
+function toBase64(file:File):Promise<string>{
+  return new Promise((res,rej)=>{
+    const fr=new FileReader()
+    fr.onload=()=>res(fr.result as string)
+    fr.onerror=rej
+    fr.readAsDataURL(file)
+  })
 }
 
+// ---- MOCK DATA from screenshot ----
+type Cat = { id:string; name:string; icon:string; color:string; amount:number; budget?:number; income?:boolean }
+const CATS: Cat[] = [
+  { id:'products', name:'Продукты', icon:'🥫', color:'#EF4444', amount:57357, budget:20000 },
+  { id:'eating_out', name:'Еда вне дома', icon:'🥤', color:'#F97316', amount:4587, budget:5000 },
+  { id:'transport', name:'Транспорт', icon:'🚃', color:'#9CA3AF', amount:0, budget:4000 },
+  { id:'shopping', name:'Покупки', icon:'🛍️', color:'#EF4444', amount:40235, budget:40000 },
+  { id:'entertain', name:'Развлечения', icon:'🎬', color:'#22C55E', amount:1348 },
+  { id:'health', name:'Здоровье', icon:'➕', color:'#22C55E', amount:13083 },
+  { id:'services', name:'Услуги', icon:'📰', color:'#22C55E', amount:2500 },
+  { id:'home', name:'Дом. хоз-во', icon:'🏠', color:'#22C55E', amount:7673 },
+  { id:'gifts', name:'Подарки', icon:'🎁', color:'#9CA3AF', amount:4857, budget:20000 },
+  { id:'credit', name:'Кредит', icon:'🧮', color:'#9CA3AF', amount:0, budget:5400 },
+  { id:'commission', name:'Комиссия', icon:'%', color:'#22C55E', amount:0 },
+  { id:'rent', name:'Квартира', icon:'🏠', color:'#22C55E', amount:0 },
+  { id:'travel', name:'Путешествия', icon:'✈️', color:'#22C55E', amount:0 },
+  { id:'clothes', name:'Одежда', icon:'👗', color:'#22C55E', amount:809 },
+  { id:'sites', name:'Сайты', icon:'📰', color:'#22C55E', amount:3000 },
+  { id:'invest', name:'Инвестиции', icon:'📈', color:'#22C55E', amount:0 },
+  { id:'crypto', name:'Крипта', icon:'🌐', color:'#22C55E', amount:0 },
+  { id:'edu', name:'Образование', icon:'🎓', color:'#22C55E', amount:0 },
+  { id:'auto', name:'Автомобиль', icon:'🚗', color:'#22C55E', amount:5998 },
+  { id:'maria', name:'Мария', icon:'🪴', color:'#22C55E', amount:18200 },
+]
+const INCOMES: Cat[] = [
+  { id:'income', name:'Доход', icon:'💰', color:'#0EA5E9', amount:651, income:true },
+  { id:'work', name:'РАбота', icon:'🏢', color:'#0EA5E9', amount:173571, income:true },
+  { id:'cashback', name:'Кеш бек', icon:'◐', color:'#0EA5E9', amount:2913, income:true },
+  { id:'invest_i', name:'Инвестиции', icon:'◎', color:'#0EA5E9', amount:26500, income:true },
+]
 
-function NoFamilyView(p:{onCreate:(name:string)=>Promise<void>}){const [name,setName]=useState('');return <div className="stack"><SectionTitle title="Создадим семью" subtitle="После создания можно сразу приглашать участников"/><Card title="Новая семья"><form className="form-stack" onSubmit={async e=>{e.preventDefault();if(!name.trim())return;await p.onCreate(name.trim())}}><input value={name} onChange={e=>setName(e.target.value)} placeholder="Например, Наша семья"/><button className="button primary">Создать семью</button></form></Card></div>}
-function Nav(p:{a:boolean;l:string;c:()=>void;i:string}){return <button className={p.a?'nav-item active':'nav-item'} onClick={p.c}><span>{p.i}</span><small>{p.l}</small></button>}
-function InvitationView(p:{invitations:Invitation[];onAccept:(i:Invitation)=>void}){return <div className="stack"><SectionTitle title="Приглашение в семью" subtitle="Сначала примите приглашение"/>{p.invitations.map(i=><Card key={i.id} title={i.family?.name??'Семья'}><p>Вас приглашает <strong>{i.inviter?.first_name??i.first_name??'член семьи'}</strong>.</p><button className="button primary full" onClick={()=>p.onAccept(i)}>Принять приглашение</button></Card>)}</div>}
-function HomeView(p:{family:Family|null;lists:FamilyList[];finance:FinanceData|null;goals:Goal[];onSection:(s:Section)=>void;onAccept:(i:Invitation)=>void;invitations:Invitation[]}){const open=p.lists.flatMap(x=>x.items).filter(x=>!x.is_completed).slice(0,5);return <div className="stack"><SectionTitle title="Сегодня" subtitle={new Intl.DateTimeFormat('ru-RU',{timeZone:MOSCOW,day:'numeric',month:'long'}).format(new Date())}/>{p.invitations.length>0&&<InvitationView invitations={p.invitations} onAccept={p.onAccept}/>}<div className="grid-2"><Card title="Список">{p.lists[0]?<><strong>{p.lists[0].name}</strong>{open.map(i=><div className="list-row" key={i.id}><span className="checkbox"/>{i.title}</div>)}<button className="button primary full" onClick={()=>p.onSection('lists')}>Открыть список</button></>:<><p className="muted">Списков пока нет.</p><button className="button primary full" onClick={()=>p.onSection('lists')}>Создать список</button></>}</Card><Card title="Финансы">{p.finance?<><Metric title="Доходы" value={p.finance.summary.income}/><Metric title="Расходы" value={p.finance.summary.expense}/><Metric title="Баланс" value={p.finance.summary.balance}/></>:<p className="muted">Финансы доступны администратору.</p>}</Card></div><Card title="Цели">{p.goals.length?p.goals.slice(0,3).map(g=><div className="goal-row" key={g.id}><div><strong>{g.name}</strong><small>{rub(pctAmount(g))} из {rub(g.target_amount)}</small></div><div className="progress"><span style={{width:`${Math.min(100,pct(g))}%`}}/></div></div>):<p className="muted">Целей пока нет.</p>}</Card></div>}
-const pct=(g:Goal)=>{const c=(g.contributions??[]).reduce((s,x)=>s+n(x.amount),0);return g.target_amount>0?c/g.target_amount*100:0}; const pctAmount=(g:Goal)=>Math.round((g.contributions??[]).reduce((s,x)=>s+n(x.amount),0)*100)/100;
-function CalendarView(p:{events:EventItem[];reminders:Reminder[];members:Member[];onReload:()=>Promise<void>}){
- const [eventForm,setEventForm]=useState({title:'',date:today(),start:'10:00',end:'11:00',location:'',description:'',recurrence_rule:'',responsible_member_id:p.members[0]?.id??''});
- const [remForm,setRemForm]=useState({title:'',date:today(),time:'18:00',description:'',recurrence_rule:'',responsible_member_id:p.members[0]?.id??''});
- const [open,setOpen]=useState<'event'|'reminder'|null>(null); const [saving,setSaving]=useState(false);
- const saveEvent=async(e:React.FormEvent)=>{e.preventDefault();if(!eventForm.title.trim())return;setSaving(true);try{await post('/events',{title:eventForm.title.trim(),description:eventForm.description||null,start_at:`${eventForm.date}T${eventForm.start}:00`,end_at:`${eventForm.date}T${eventForm.end}:00`,timezone:MOSCOW,location:eventForm.location||null,responsible_member_id:eventForm.responsible_member_id||p.members[0]?.id,participant_member_ids:eventForm.responsible_member_id?[eventForm.responsible_member_id]:[] ,recurrence_rule:eventForm.recurrence_rule||null});setEventForm({...eventForm,title:'',description:'',location:'',recurrence_rule:''});setOpen(null);await p.onReload()}catch(err){alert(err instanceof Error?err.message:'Не удалось сохранить событие')}finally{setSaving(false)}};
- const saveReminder=async(e:React.FormEvent)=>{e.preventDefault();if(!remForm.title.trim())return;setSaving(true);try{await post('/reminders',{title:remForm.title.trim(),description:remForm.description||null,scheduled_at:`${remForm.date}T${remForm.time}:00`,timezone:MOSCOW,responsible_member_id:remForm.responsible_member_id||p.members[0]?.id,recurrence_rule:remForm.recurrence_rule||null});setRemForm({...remForm,title:'',description:'',recurrence_rule:''});setOpen(null);await p.onReload()}catch(err){alert(err instanceof Error?err.message:'Не удалось сохранить напоминание')}finally{setSaving(false)}};
- const editEvent=async(item:EventItem)=>{const title=prompt('Название события',item.title);if(!title?.trim())return;try{await patch(`/events/${item.id}`,{title:title.trim()});await p.onReload()}catch(err){alert(err instanceof Error?err.message:'Не удалось изменить событие')}};
- const deleteEvent=async(item:EventItem)=>{if(!confirm(`Удалить событие «${item.title}»?`))return;try{await del(`/events/${item.id}`);await p.onReload()}catch(err){alert(err instanceof Error?err.message:'Не удалось удалить событие')}};
- const editReminder=async(item:Reminder)=>{const title=prompt('Название напоминания',item.title);if(!title?.trim())return;try{await patch(`/reminders/${item.id}`,{title:title.trim()});await p.onReload()}catch(err){alert(err instanceof Error?err.message:'Не удалось изменить напоминание')}};
- const deleteReminder=async(item:Reminder)=>{if(!confirm(`Удалить напоминание «${item.title}»?`))return;try{await del(`/reminders/${item.id}`);await p.onReload()}catch(err){alert(err instanceof Error?err.message:'Не удалось удалить напоминание')}};
- const sortedEvents=[...p.events].sort((a,b)=>a.start_at.localeCompare(b.start_at)); const sortedReminders=[...p.reminders].sort((a,b)=>a.scheduled_at.localeCompare(b.scheduled_at));
- return <div className="stack"><SectionTitle title="Календарь" subtitle={`Москва · ${new Intl.DateTimeFormat('ru-RU',{timeZone:MOSCOW,day:'numeric',month:'long',year:'numeric'}).format(new Date())}`} action={<div className="calendar-actions"><button className="button primary" onClick={()=>setOpen('event')}>＋ Событие</button><button className="button secondary" onClick={()=>setOpen('reminder')}>＋ Напоминание</button></div>}/>
- {open==='event'&&<Card title="Новое событие"><form className="form-grid" onSubmit={saveEvent}><input required value={eventForm.title} onChange={e=>setEventForm({...eventForm,title:e.target.value})} placeholder="Название"/><input type="date" value={eventForm.date} onChange={e=>setEventForm({...eventForm,date:e.target.value})}/><input type="time" value={eventForm.start} onChange={e=>setEventForm({...eventForm,start:e.target.value})}/><input type="time" value={eventForm.end} onChange={e=>setEventForm({...eventForm,end:e.target.value})}/><input value={eventForm.location} onChange={e=>setEventForm({...eventForm,location:e.target.value})} placeholder="Место"/><select value={eventForm.responsible_member_id} onChange={e=>setEventForm({...eventForm,responsible_member_id:e.target.value})}>{p.members.map(m=><option key={m.id} value={m.id}>{m.user.first_name}</option>)}</select><input value={eventForm.recurrence_rule} onChange={e=>setEventForm({...eventForm,recurrence_rule:e.target.value})} placeholder="Повторение (необязательно)"/><textarea className="wide" value={eventForm.description} onChange={e=>setEventForm({...eventForm,description:e.target.value})} placeholder="Описание"/><div className="modal-actions wide"><button type="button" className="button secondary" onClick={()=>setOpen(null)}>Отмена</button><button className="button primary" disabled={saving}>Сохранить</button></div></form></Card>}
- {open==='reminder'&&<Card title="Новое напоминание"><form className="form-grid" onSubmit={saveReminder}><input required value={remForm.title} onChange={e=>setRemForm({...remForm,title:e.target.value})} placeholder="Название"/><input type="date" value={remForm.date} onChange={e=>setRemForm({...remForm,date:e.target.value})}/><input type="time" value={remForm.time} onChange={e=>setRemForm({...remForm,time:e.target.value})}/><select value={remForm.responsible_member_id} onChange={e=>setRemForm({...remForm,responsible_member_id:e.target.value})}>{p.members.map(m=><option key={m.id} value={m.id}>{m.user.first_name}</option>)}</select><input value={remForm.recurrence_rule} onChange={e=>setRemForm({...remForm,recurrence_rule:e.target.value})} placeholder="Повторение (необязательно)"/><textarea className="wide" value={remForm.description} onChange={e=>setRemForm({...remForm,description:e.target.value})} placeholder="Описание"/><div className="modal-actions wide"><button type="button" className="button secondary" onClick={()=>setOpen(null)}>Отмена</button><button className="button primary" disabled={saving}>Сохранить</button></div></form></Card>}
- <Card title="События">{sortedEvents.length?sortedEvents.map(x=><div className="calendar-row" key={x.id}><div><strong>{x.title}</strong><small>{x.start_at.slice(0,10)} · {x.start_at.slice(11,16)}–{x.end_at.slice(11,16)} · Москва</small>{x.location&&<small>{x.location}</small>}{x.recurrence_rule&&<small>Повторяется: {x.recurrence_rule}</small>}</div><div className="row-actions"><button onClick={()=>editEvent(x)}>✎</button><button className="danger" onClick={()=>deleteEvent(x)}>×</button></div></div>):<p className="muted">Событий пока нет.</p>}</Card>
- <Card title="Напоминания">{sortedReminders.length?sortedReminders.map(x=><div className="calendar-row" key={x.id}><div><strong>{x.title}</strong><small>{x.scheduled_at.slice(0,10)} · {x.scheduled_at.slice(11,16)} · Москва</small>{x.recurrence_rule&&<small>Повторяется: {x.recurrence_rule}</small>}</div><div className="row-actions"><button onClick={()=>editReminder(x)}>✎</button><button className="danger" onClick={()=>deleteReminder(x)}>×</button></div></div>):<p className="muted">Напоминаний пока нет.</p>}</Card></div>}
+const rub = (v:number)=> `${v.toLocaleString('ru-RU')} ₽`
+const shortRub = (v:number)=> v>=1000? `${(v/1000).toFixed(v>=10000?0:1)}k ₽` : `${v} ₽`
 
-function ListsView(p:{lists:FamilyList[];activeList:FamilyList|null;setActiveList:(l:FamilyList)=>void;onNewList:()=>void;onEditList:(l:FamilyList)=>void;onDeleteList:(l:FamilyList)=>void;onAdd:()=>void;onEdit:(i:ListItem)=>void;onDelete:(i:ListItem)=>void;onToggle:(i:ListItem)=>void}){const l=p.activeList;return <div className="stack"><SectionTitle title="Списки" subtitle="Общие семейные списки" action={<button className="icon-button" onClick={p.onNewList}>＋</button>}/><div className="list-switcher">{p.lists.map(x=><button key={x.id} className={l?.id===x.id?'chip active':'chip'} onClick={()=>p.setActiveList(x)}>{x.name}</button>)}</div>{l?<Card title={l.name} actions={<><button className="tiny" onClick={()=>p.onEditList(l)}>Изменить</button><button className="tiny danger" onClick={()=>p.onDeleteList(l)}>Удалить</button></>}><div className="stack compact">{l.items.map(i=><div className="list-item-card" key={i.id}><button className={i.is_completed?'checkbox checked':'checkbox'} onClick={()=>p.onToggle(i)}>{i.is_completed?'✓':''}</button><span className={i.is_completed?'done':''}>{i.title}</span><div className="row-actions"><button onClick={()=>p.onEdit(i)}>✎</button><button className="danger" onClick={()=>p.onDelete(i)}>×</button></div></div>)}{!l.items.length&&<p className="muted">В списке пока нет пунктов.</p>}</div><button className="button primary full" onClick={p.onAdd}>＋ Добавить пункт списка</button></Card>:<Card title="Новый список"><p className="muted">Создайте первый список семьи.</p><button className="button primary full" onClick={p.onNewList}>Создать список</button></Card>}</div>}
-function SimpleCrud(p:{title:string;items:any[];kind:'note'|'idea';onSave:(d:any)=>Promise<void>;onDelete:(id:string)=>Promise<void>}){const [title,setTitle]=useState('');const [body,setBody]=useState('');return <div className="stack"><SectionTitle title={p.title}/><Card title={p.kind==='note'?'Новая заметка':'Новая идея'}><form className="form-stack" onSubmit={async e=>{e.preventDefault();if(!title.trim())return;await p.onSave(p.kind==='note'?{title,body}:{title,description:body});setTitle('');setBody('')}}><input value={title} onChange={e=>setTitle(e.target.value)} placeholder="Название"/><textarea value={body} onChange={e=>setBody(e.target.value)} placeholder="Описание"/><button className="button primary">Сохранить</button></form></Card>{p.items.map(x=><Card key={x.id} title={x.title}><p>{x.body??x.description}</p><button className="button secondary" onClick={()=>p.onDelete(x.id)}>Удалить</button></Card>)}</div>}
+type Section = 'home'|'calendar'|'lists'|'finance'|'family'
+type FinanceTab = 'overview'|'categories'|'receipts'|'stocks'|'large'|'credits'|'budget'
 
-function FamilyView(p:{family:Family|null;invitations:Invitation[];onInvite:(d:any)=>Promise<void>;onAccept:(i:Invitation)=>void}){const [mode,setMode]=useState<'username'|'id'>('username');const [value,setValue]=useState('');const [first,setFirst]=useState('');const [msg,setMsg]=useState<string|null>(null);return <div className="stack"><SectionTitle title="Семья" subtitle="Участники и приглашения"/><Card title="Участники">{p.family?.members.map(m=><div className="member-row" key={m.id}><div><strong>{m.user.first_name} {m.user.last_name??''}</strong><small>{m.user.username?`@${m.user.username}`:`Telegram ID ${m.user.telegram_user_id}`}</small></div><span className="role-badge">{m.role==='ADMIN'?'Админ':'Участник'}</span></div>)}</Card><Card title="Пригласить в семью"><div className="segmented"><button className={mode==='username'?'active':''} onClick={()=>setMode('username')}>По логину</button><button className={mode==='id'?'active':''} onClick={()=>setMode('id')}>По ID</button></div><div className="form-stack"><input value={value} onChange={e=>setValue(e.target.value)} placeholder={mode==='username'?'@username':'Telegram ID'}/>{mode==='id'&&<input value={first} onChange={e=>setFirst(e.target.value)} placeholder="Имя (необязательно)"/>}<button className="button primary" onClick={async()=>{try{await p.onInvite(mode==='username'?{username:value.replace(/^@/,'')||null,telegram_user_id:null,first_name:first||null}:{telegram_user_id:Number(value),username:null,first_name:first||null});setValue('');setFirst('');setMsg('Приглашение отправлено.')}catch(e){setMsg(e instanceof Error?e.message:'Ошибка')}}}>Отправить приглашение</button>{msg&&<p className="muted">{msg}</p>}</div></Card>{p.invitations.length>0&&<Card title="Входящие приглашения">{p.invitations.map(i=><div className="inv-row" key={i.id}><span>{i.family?.name??'Семья'}</span><button className="button secondary" onClick={()=>p.onAccept(i)}>Принять</button></div>)}</Card>}</div>}
+export default function App(){
+  const [section,setSection]=useState<Section>('finance')
+  const [fTab,setFTab]=useState<FinanceTab>('overview')
+  const [selectedCat,setSelectedCat]=useState<string|null>(null)
+  const [receiptItems,setReceiptItems]=useState([
+    { id:'1', name:'Молоко 1л', qty:1, price:89, cat:'Продукты' },
+    { id:'2', name:'Хлеб Бородинский', qty:1, price:45, cat:'Продукты' },
+    { id:'3', name:'Сыр 200г', qty:1, price:210, cat:'Продукты' },
+  ])
+  const [showReceiptConfirm,setShowReceiptConfirm]=useState(true)
+  const [monthlyPlan,setMonthlyPlan]=useState(10000)
 
-function FinanceView(p:{finance:FinanceData|null;goals:Goal[];cards:Card[];cashbacks:Cashback[];receipts:Receipt[];analytics:any;budget:any;credits:Credit[];onReload:()=>Promise<void>}){const [tab,setTab]=useState('overview');const [type,setType]=useState<'INCOME'|'EXPENSE'>('EXPENSE');const [amount,setAmount]=useState('');const [category,setCategory]=useState('');const [date,setDate]=useState(today());const [desc,setDesc]=useState(''); const [modal,setModal]=useState<string|null>(null);const [receiptData,setReceiptData]=useState<any>(null);
- const saveTx=async(e:FormEvent)=>{e.preventDefault();await post('/finances',{type,amount:Number(amount),category,budget_type:type==='EXPENSE'?'FLEXIBLE':'FIXED',description:desc,occurred_on:date});setAmount('');setDesc('');await p.onReload()};
- const expenseBy=p.analytics?.expense_chart??[];
- return <div className="stack"><SectionTitle title="Финансы" subtitle="Все данные сохраняются в базе семьи"/><div className="finance-tabs">{[['overview','Обзор'],['budget','Бюджет'],['goals','Цели'],['large','Крупные покупки'],['cards','Карты / cashback'],['receipts','Чеки'],['credits','Кредиты']].map(([k,l])=><button key={k} className={tab===k?'finance-tab active':'finance-tab'} onClick={()=>setTab(k)}>{l}</button>)}</div>
- {tab==='overview'&&<><div className="grid-3"><Metric title="Доходы" value={p.finance?.summary.income??0}/><Metric title="Расходы" value={p.finance?.summary.expense??0}/><Metric title="Баланс" value={p.finance?.summary.balance??0}/></div><Card title="Добавить операцию"><form className="form-grid" onSubmit={saveTx}><select value={type} onChange={e=>setType(e.target.value as any)}><option value="EXPENSE">Расход</option><option value="INCOME">Доход</option></select><input type="number" min="0.01" step="0.01" value={amount} onChange={e=>setAmount(e.target.value)} placeholder="Сумма" required/><input value={category} onChange={e=>setCategory(e.target.value)} placeholder="Категория" required/><input type="date" value={date} onChange={e=>setDate(e.target.value)} required/><input className="wide" value={desc} onChange={e=>setDesc(e.target.value)} placeholder="Комментарий"/><button className="button primary wide">Сохранить</button></form></Card><Card title="AI review"><button className="button primary full" onClick={async()=>{const r=await post<any>('/finance/ai-review',{});alert(r.data?.text??'AI review готов') }}>Получить финансовый разбор</button><p className="muted">Без персональных данных: анализ агрегированных сумм, бюджета и расходов.</p></Card><Card title="Аналитика расходов">{expenseBy.length?expenseBy.map((x:any)=><div className="bar-row" key={x.name}><div><strong>{x.name}</strong><span>{rub(n(x.amount))} · {x.percent}%</span></div><div className="progress"><span style={{width:`${x.percent}%`}}/></div></div>):<p className="muted">Нет подтверждённых расходов.</p>}</Card></>}
- {tab==='budget'&&<BudgetPanel budget={p.budget} onReload={p.onReload}/>} {tab==='goals'&&<GoalsPanel goals={p.goals} onReload={p.onReload}/>} {tab==='large'&&<LargePanel goals={p.goals} onReload={p.onReload}/>} {tab==='cards'&&<CardsPanel cards={p.cards} cashbacks={p.cashbacks} onReload={p.onReload}/>} {tab==='receipts'&&<ReceiptsPanel receipts={p.receipts} onReload={p.onReload}/>} {tab==='credits'&&<CreditsPanel credits={p.credits}/>} </div>}
+  const totalExpense = useMemo(()=> CATS.reduce((s,c)=>s+c.amount,0),[])
+  const sortedAll = useMemo(()=> [...CATS].filter(c=>c.amount>0).sort((a,b)=>b.amount-a.amount),[])
+  const ranked = sortedAll
+  const donutTop5 = sortedAll.slice(0,5)
+  const donutOtherAmount = totalExpense - donutTop5.reduce((s,c)=>s+c.amount,0)
+  const donutData: Cat[] = (donutTop5.length===5 && donutOtherAmount>0) ? [...donutTop5, {id:'other', name:`Остальные ${sortedAll.length-5}`, icon:'•', color:'#9CA3AF', amount: donutOtherAmount}] : donutTop5
 
-function BudgetPanel(p:{budget:any;onReload:()=>Promise<void>}){const [total,setTotal]=useState(String(p.budget?.budget?.total_limit??''));return <Card title="Месячный бюджет"><div className="summary-line"><span>Лимит</span><strong>{rub(n(p.budget?.budget?.total_limit))}</strong></div><div className="form-stack"><input type="number" step="0.01" value={total} onChange={e=>setTotal(e.target.value)} placeholder="Лимит месяца"/><button className="button primary" onClick={async()=>{await fetchBudgetSave(Number(total));await p.onReload()}}>Сохранить бюджет</button></div>{p.budget?.budget?.categories?.map((c:any)=><div className="budget-row" key={c.category_id}><div><strong>{c.name}</strong><span>{rub(n(c.spent_amount))} / {rub(n(c.limit_amount))}</span></div><div className="progress"><span style={{width:`${Math.min(100,c.progress_percent)}%`}}/></div></div>)}</Card>}
-async function fetchBudgetSave(total:number){await post('/finance/budgets/save',{year:new Date().getFullYear(),month:new Date().getMonth()+1,total_limit:total,categories:[]})}
-function GoalsPanel(p:{goals:Goal[];onReload:()=>Promise<void>}){const [name,setName]=useState('');const [target,setTarget]=useState('');return <div className="stack"><Card title="Новая финансовая цель"><form className="form-grid" onSubmit={async e=>{e.preventDefault();await post('/finance/goals',{name,type:'SAVING',target_amount:Number(target),priority:'MEDIUM',status:'PLANNED'});setName('');setTarget('');await p.onReload()}}><input value={name} onChange={e=>setName(e.target.value)} placeholder="Название цели" required/><input type="number" step="0.01" value={target} onChange={e=>setTarget(e.target.value)} placeholder="Цель, ₽" required/><button className="button primary wide">Создать</button></form></Card>{p.goals.map(g=><Card key={g.id} title={g.name}><div className="summary-line"><span>{rub(g.contributions?.reduce((s,x)=>s+n(x.amount),0)??0)} / {rub(g.target_amount)}</span><strong>{Math.round(pct(g))}%</strong></div><div className="progress"><span style={{width:`${Math.min(100,pct(g))}%`}}/></div><div className="goal-actions"><button className="button secondary" onClick={async()=>{const v=prompt('Сумма взноса');if(v){await post(`/finance/goals/${g.id}/contributions`,{amount:Number(v),contribution_date:today()});await p.onReload()}}}>＋ Внести</button><button className="button secondary" onClick={async()=>{const v=prompt('Новая цена');if(v){await post(`/finance/goals/${g.id}/prices`,{price:Number(v),recorded_at:new Date().toISOString()});await p.onReload()}}}>Цена</button></div>{g.price_history?.slice?.(0,5)?.map(pr=><small key={pr.id} className="history-row">{rub(n(pr.price))} · {new Date(pr.recorded_at).toLocaleDateString('ru-RU')}</small>)}</Card>)}</div>}
-function LargePanel(p:{goals:Goal[];onReload:()=>Promise<void>}){const [name,setName]=useState('');const [target,setTarget]=useState('');return <div className="stack"><Card title="Новая крупная покупка"><form className="form-grid" onSubmit={async e=>{e.preventDefault();await post('/finance/goals',{name,type:'LARGE_PURCHASE',target_amount:Number(target),priority:'HIGH',status:'PLANNED'});setName('');setTarget('');await p.onReload()}}><input value={name} onChange={e=>setName(e.target.value)} placeholder="Что купить" required/><input value={target} onChange={e=>setTarget(e.target.value)} type="number" step="0.01" placeholder="Стоимость, ₽" required/><button className="button primary wide">Добавить</button></form></Card>{p.goals.filter(g=>g.type==='LARGE_PURCHASE').map(g=><Card key={g.id} title={g.name}><div className="summary-line"><span>Накоплено</span><strong>{rub(pctAmount(g))} / {rub(g.target_amount)}</strong></div><div className="progress"><span style={{width:`${Math.min(100,pct(g))}%`}}/></div><button className="button secondary full" onClick={async()=>{const v=prompt('Сумма накопления');if(v){await post(`/finance/goals/${g.id}/contributions`,{amount:Number(v),contribution_date:today()});await p.onReload()}}}>＋ Внести сумму</button></Card>)}</div>}
-function CardsPanel(p:{cards:Card[];cashbacks:Cashback[];onReload:()=>Promise<void>}){const [name,setName]=useState('');const [bank,setBank]=useState('');const [rate,setRate]=useState('');const [merchant,setMerchant]=useState('');return <div className="stack"><Card title="Новая карта"><form className="form-grid" onSubmit={async e=>{e.preventDefault();await post('/finance/cards',{name,bank_name:bank,default_cashback_rate:Number(rate||0)});setName('');setBank('');setRate('');await p.onReload()}}><input value={name} onChange={e=>setName(e.target.value)} placeholder="Название карты" required/><input value={bank} onChange={e=>setBank(e.target.value)} placeholder="Банк"/><input value={rate} onChange={e=>setRate(e.target.value)} type="number" step="0.01" placeholder="Cashback %"/><button className="button primary wide">Добавить карту</button></form></Card><Card title="Карты">{p.cards.map(c=><div className="member-row" key={c.id}><div><strong>{c.name}</strong><small>{c.bank_name??''} · базовый cashback {c.default_cashback_rate}%</small></div><button className="danger" onClick={async()=>{await del(`/finance/cards/${c.id}`);await p.onReload()}}>×</button></div>)}</Card><Card title="Cashback предложения"><form className="form-stack" onSubmit={async e=>{e.preventDefault();await post('/finance/cashback',{merchant_name:merchant,cashback_rate:Number(rate||0)});setMerchant('');await p.onReload()}}><input value={merchant} onChange={e=>setMerchant(e.target.value)} placeholder="Магазин"/><input value={rate} onChange={e=>setRate(e.target.value)} type="number" step="0.01" placeholder="Cashback %"/><button className="button primary">Добавить предложение</button></form>{p.cashbacks.map(c=><div className="summary-line" key={c.id}><span>{c.merchant_name??c.category??'Без названия'}</span><strong>{c.cashback_rate}%</strong></div>)}</Card></div>}
-function ReceiptsPanel(p:{receipts:Receipt[];onReload:()=>Promise<void>}){const [file,setFile]=useState<File|null>(null);const [status,setStatus]=useState<string|null>(null);return <Card title="Фото чека"><input type="file" accept="image/*" onChange={e=>setFile(e.target.files?.[0]??null)}/><button className="button primary full" disabled={!file} onClick={async()=>{if(!file)return;const b=await fileToDataUrl(file);setStatus('Сохраняем чек…');await post('/finance/receipts',{file_name:file.name,mime_type:file.type,image_data:b});setStatus('Чек сохранён. OCR/AI запускается через серверный адаптер при наличии настроек.');await p.onReload()}}>{status??'Загрузить чек'}</button>{p.receipts.map(r=><div className="receipt-row" key={r.id}><div><strong>{r.file_name??'Чек'}</strong><small>{r.ocr_status}</small></div><span>{new Date(r.created_at).toLocaleDateString('ru-RU')}</span></div>)}</Card>}
-function CreditsPanel(p:{credits:Credit[]}){return <div className="stack">{p.credits.map(c=><Card key={c.id} title={c.name}><div className="credit-summary"><div><small>Остаток</small><strong>{rub(n(c.principal))}</strong></div><div><small>Ставка</small><strong>{c.annual_rate}%</strong></div><div><small>Платёж</small><strong>{rub(n(c.standard_payment))}</strong></div></div><div className="credit-list">{(c.payment_schedule??[]).slice(0,12).map((r:any,i:number)=><div className="credit-row" key={i}><span>Месяц {r.from_month===r.to_month?r.from_month:`${r.from_month}–${r.to_month}`}</span><strong>{rub(n(r.amount))}</strong></div>)}</div><button className="button secondary full">Показать ещё</button></Card>)}</div>}
+  return <div className="app-shell">
+    {/* TOPBAR */}
+    <header className="topbar">
+      <div>
+        <div className="eyebrow">Семья • Москва • Teal v07</div>
+        <h1>Family Hub</h1>
+      </div>
+      <div className="topbar-right">
+        <span className="badge-pill">Demo v07</span>
+        <div className="user-badge">М</div>
+      </div>
+    </header>
 
-function FormModal(p:{title:string;fields:{name:string;label:string;defaultValue:string}[];onClose:()=>void;onSave:(d:any)=>void}){const [data,setData]=useState<Record<string,string>>(()=>Object.fromEntries(p.fields.map(f=>[f.name,f.defaultValue])));return <div className="modal-backdrop"><div className="modal-sheet"><div className="modal-head"><h2>{p.title}</h2><button onClick={p.onClose}>×</button></div><div className="form-stack">{p.fields.map(f=><label key={f.name}>{f.label}<input value={data[f.name]??''} onChange={e=>setData({...data,[f.name]:e.target.value})}/></label>)}<div className="modal-actions"><button className="button secondary" onClick={p.onClose}>Отмена</button><button className="button primary" onClick={()=>p.onSave(data)}>Сохранить</button></div></div></div></div>}
-function fileToDataUrl(f:File){return new Promise<string>((resolve,reject)=>{const r=new FileReader();r.onload=()=>resolve(String(r.result));r.onerror=reject;r.readAsDataURL(f)})}
-function pctVal(v:number){return Math.min(100,Math.max(0,v))}
-function SectionTitle(p:{title:string;subtitle?:string;action?:ReactNode}){return <div className="section-title"><div><h2>{p.title}</h2>{p.subtitle&&<p>{p.subtitle}</p>}</div>{p.action}</div>}
-function Card(p:{title:string;children:ReactNode;actions?:ReactNode}){return <section className="card"><div className="card-head"><h3>{p.title}</h3>{p.actions}</div>{p.children}</section>}
-function Metric(p:{title:string;value:number}){return <div className="metric"><small>{p.title}</small><strong>{rub(p.value)}</strong></div>}
-function pctAmountDummy(){return 0}
+    <main className="page">
+      {section==='home' && <HomeView onGo={setSection} totalExpense={totalExpense} />}
+      {section==='calendar' && <CalendarV07 />}
+      {section==='lists' && <ListsV07 />}
+      {section==='finance' && <FinanceV07 
+        fTab={fTab} setFTab={setFTab}
+        totalExpense={totalExpense} ranked={ranked} donutData={donutData}
+        selectedCat={selectedCat} setSelectedCat={setSelectedCat}
+        receiptItems={receiptItems} setReceiptItems={setReceiptItems}
+        showReceiptConfirm={showReceiptConfirm} setShowReceiptConfirm={setShowReceiptConfirm}
+        monthlyPlan={monthlyPlan} setMonthlyPlan={setMonthlyPlan}
+      />}
+      {section==='family' && <FamilyV07 />}
+    </main>
+
+    <nav className="bottom-nav">
+      <Nav active={section==='home'} label="Главная" icon="⌂" onClick={()=>setSection('home')} />
+      <Nav active={section==='calendar'} label="Календарь" icon="▦" onClick={()=>setSection('calendar')} />
+      <Nav active={section==='lists'} label="Списки" icon="☷" onClick={()=>setSection('lists')} />
+      <Nav active={section==='finance'} label="Финансы" icon="₽" onClick={()=>setSection('finance')} />
+      <Nav active={section==='family'} label="Семья" icon="👨‍👩‍👧" onClick={()=>setSection('family')} />
+    </nav>
+  </div>
+}
+
+function Nav(p:{active:boolean; label:string; icon:string; onClick:()=>void}){
+  return <button className={p.active?'nav-item active':'nav-item'} onClick={p.onClick}>
+    <span style={{fontSize:18}}>{p.icon}</span><small>{p.label}</small>
+  </button>
+}
+
+// ---------- HOME ----------
+function HomeView(p:{onGo:(s:Section)=>void; totalExpense:number}){
+  return <div className="stack">
+    <SectionTitle title="Сегодня" subtitle="Сентябрь 2026 • графики вверху, детали ниже — как ты просила" />
+    <div className="grid-2">
+      <div className="card">
+        <div className="kicker">Быстрый старт</div>
+        <h3 style={{margin:'0 0 10px',fontSize:16}}>Семейный хаб v07</h3>
+        <p className="muted" style={{fontSize:13,lineHeight:1.5}}>Нажми «Финансы» → увидишь CoinKeeper-кружки, кольцевую диаграмму и живой чек с редактированием.</p>
+        <button className="button primary full" style={{marginTop:12}} onClick={()=>p.onGo('finance')}>Открыть финансы →</button>
+      </div>
+      <div className="card">
+        <div className="kicker">Баланс семьи</div>
+        <div className="grid-3" style={{gap:8}}>
+          <div className="metric balance"><small>Баланс</small><strong style={{color:'#0F766E'}}>+10 527 ₽</strong></div>
+          <div className="metric"><small>Расходы</small><strong>{shortRub(p.totalExpense)}</strong></div>
+          <div className="metric"><small>В планах</small><strong>24 956 ₽</strong></div>
+        </div>
+        <div className="chart-wrap" style={{marginTop:12,marginBottom:0,padding:12}}>
+          <div className="chart-wrap-head"><strong>Тренд 6 мес</strong><small>доходы vs расходы</small></div>
+          <MiniTrend />
+        </div>
+      </div>
+    </div>
+  </div>
+}
+
+// ---------- FINANCE — MODERN ANALYSIS (Teal, approved 24.09) ----------
+function FinanceV07(p:{
+  fTab:FinanceTab; setFTab:(t:FinanceTab)=>void;
+  totalExpense:number; ranked:Cat[]; donutData:Cat[];
+  selectedCat:string|null; setSelectedCat:(s:string|null)=>void;
+  receiptItems:any[]; setReceiptItems:(a:any[])=>void;
+  showReceiptConfirm:boolean; setShowReceiptConfirm:(b:boolean)=>void;
+  monthlyPlan:number; setMonthlyPlan:(n:number)=>void;
+}){
+  const [activeCat,setActiveCat]=useState<string|null>(null)
+  const [showAll,setShowAll]=useState(false)
+  const [showLimits,setShowLimits]=useState(true)
+  const [selectedMonth,setSelectedMonth]=useState('sep')
+  const [quickFilter,setQuickFilter]=useState<'all'|'over'|'food'|'home'>('all')
+  const [period,setPeriod]=useState<'month'|'3m'|'6m'|'year'>('month')
+  const [apiData,setApiData]=useState<any>(null)
+  const [loading,setLoading]=useState(false)
+  const [apiError,setApiError]=useState<string|null>(null)
+  const [refreshKey,setRefreshKey]=useState(0)
+  const [addModal,setAddModal]=useState<null|{type:'EXPENSE'|'INCOME', catId?:string}>(null)
+  const [catList,setCatList]=useState<any[]>([])
+  const [formAmount,setFormAmount]=useState('')
+  const [formCat,setFormCat]=useState('')
+  const [formDate,setFormDate]=useState(new Date().toISOString().slice(0,10))
+  const [formDesc,setFormDesc]=useState('')
+  const [savingTx,setSavingTx]=useState(false)
+
+  useEffect(()=>{
+    apiGet('/finance/categories').then(j=> setCatList(j.data||[])).catch(()=>{})
+  },[])
+
+  useEffect(()=>{
+    let cancelled=false
+    const year=2026, month=9
+    const q = period==='month' ? `?period=month&year=${year}&month=${month}` : `?period=${period}`
+    setLoading(true); setApiError(null)
+    apiGet(`/finance/analytics${q}`).then(j=>{ if(!cancelled){ setApiData(j.data) } }).catch(e=>{ if(!cancelled) setApiError(String(e.message).slice(0,120)) }).finally(()=>{ if(!cancelled) setLoading(false) })
+    return ()=>{cancelled=true}
+  },[period, refreshKey])
+
+  const openAdd = (type:'EXPENSE'|'INCOME', catId?:string)=>{
+    const catName = catId ? (catList.find((c:any)=>c.id===catId)?.name || CATS.find(c=>c.id===catId)?.name || '') : ''
+    setFormCat(catName)
+    setFormAmount('')
+    setFormDesc('')
+    setFormDate(new Date().toISOString().slice(0,10))
+    setAddModal({type, catId})
+  }
+  const submitAdd = async ()=>{
+    const amount = parseFloat(formAmount.replace(',','.'))
+    if(!amount || amount<=0){ alert('Введите сумму'); return }
+    if(!formCat){ alert('Выберите категорию'); return }
+    setSavingTx(true)
+    try{
+      const catObj = catList.find((c:any)=>c.name===formCat) || CATS.find(c=>c.name===formCat)
+      const body:any = {
+        type: addModal!.type,
+        amount,
+        category: formCat,
+        category_id: catObj?.id,
+        occurred_on: formDate,
+        description: formDesc || undefined,
+      }
+      await apiPost('/finances', body)
+      setAddModal(null)
+      setRefreshKey(k=>k+1)
+      // also refresh categories if new one? not needed
+    }catch(e:any){
+      alert('Ошибка: '+String(e.message||e).slice(0,150))
+    }finally{ setSavingTx(false) }
+  }
+
+  const displayTotal: number = apiData?.total_expense ?? p.totalExpense
+  const displayIncome: number = apiData?.total_income ?? 173571
+  const displayBalance: number = apiData?.balance ?? (displayIncome - displayTotal)
+  // api ranked already has icon/color/amount/percent/limit
+  const displayRanked: any[] = apiData?.ranked ?? p.ranked.map((c:any)=>({ ...c, percent: displayTotal? Math.round(c.amount/displayTotal*100):0 }))
+  const displayDonut: any[] = apiData?.donut ?? p.donutData
+  const displayTrend: any[] | null = apiData?.trend ?? null
+
+  const filteredRanked = useMemo(()=>{
+    let d=[...displayRanked]
+    if(quickFilter==='over') d=d.filter((c:any)=>c.limit_amount!==null && c.limit_amount!==undefined ? c.amount>c.limit_amount : (c.budget && c.amount>c.budget))
+    if(quickFilter==='food') d=d.filter((c:any)=>['products','eating_out'].includes(c.id))
+    if(quickFilter==='home') d=d.filter((c:any)=>['home','services'].includes(c.id))
+    return d
+  },[displayRanked, quickFilter])
+  const visibleRanked = showAll ? filteredRanked : filteredRanked.slice(0,8)
+  const trendNotes:Record<string,string> = {
+    apr:'Апрель: доходы 120k, расходы 95k. Спокойный месяц.',
+    may:'Май: +12% к апрелю.',
+    jun:'Июнь: пик доходов 165k.',
+    jul:'Июль: расходы почти догнали доходы (145k).',
+    aug:'Август: расходы упали на 20% — экономия.',
+    sep:'Сентябрь: +32% расходов к августу из-за Покупок. Теп 6 мес вверху.'
+  }
+  const activeCatObj = activeCat ? displayRanked.find((c:any)=>c.id===activeCat) || displayDonut.find((c:any)=>c.id===activeCat) : null
+  const donutCenter = activeCatObj ? rub(activeCatObj.amount) : rub(displayTotal)
+  const donutSub = activeCatObj ? `${Math.round(activeCatObj.amount/displayTotal*100)}% • тап сброс` : 'тап по сегменту — фильтр'
+
+  return <div className="stack">
+    <SectionTitle title="Финансы" subtitle="Вверху графики, ниже детали • современный анализ" action={<span className="pill live">● LIVE v07 • Teal</span>} />
+    <div className="finance-tabs">
+      {[
+        ['overview','Обзор'],
+        ['categories','Категории'],
+        ['receipts','Чеки'],
+        ['stocks','Запасы'],
+        ['large','Крупные'],
+        ['credits','Кредиты'],
+        ['budget','Бюджет'],
+      ].map(([k,l])=><button key={k} className={p.fTab===k?'finance-tab active':'finance-tab'} onClick={()=>p.setFTab(k as FinanceTab)}>{l}</button>)}
+    </div>
+
+    {p.fTab==='overview' && <>
+      {/* TOP METRICS — live from API */}
+      <div className="grid-3">
+        <div className="metric"><small>Доходы</small><strong style={{color:'#0D9A6E'}}>{rub(displayIncome)}</strong><small style={{fontSize:11}}>Работа + кешбэк {loading?'• загрузка…':''}</small></div>
+        <div className="metric"><small>Расходы</small><strong style={{color:'#E11D48'}}>{rub(displayTotal)}</strong><small style={{fontSize:11}}>{displayRanked.length} категорий {apiError?'• мок':''}</small></div>
+        <div className="metric balance"><small>Баланс</small><strong style={{color: displayBalance>=0?'#0F766E':'#E11D48'}}>{(displayBalance>=0?'+':'')+rub(displayBalance)}</strong><small style={{fontSize:11, color:'#0F766E'}}>{displayIncome? Math.round(displayBalance/displayIncome*100)+'% от доходов':''}</small></div>
+      </div>
+      {apiError && <div style={{padding:'8px 10px',background:'#FFE4E6',border:'1px solid #FECDD3',borderRadius:10,fontSize:12,color:'#9F1239'}}>API недоступен — показываю мок. {apiError.slice(0,80)}</div>}
+
+      <div className="segmented" style={{marginBottom:0}}>
+        <button className={period==='month'?'active':''} onClick={()=>setPeriod('month')}>Месяц</button>
+        <button className={period==='3m'?'active':''} onClick={()=>setPeriod('3m')}>3 мес</button>
+        <button className={period==='6m'?'active':''} onClick={()=>setPeriod('6m')}>6 мес</button>
+        <button className={period==='year'?'active':''} onClick={()=>setPeriod('year')}>Год</button>
+      </div>
+
+      {/* DONUT ON TOP — live */}
+      <div className="card" style={{padding:0, overflow:'hidden'}}>
+        <div style={{padding:14, paddingBottom:0}}>
+          <div className="chart-wrap-head">
+            <strong>Аналитика расходов</strong><small>{loading?'загрузка…':'сентябрь 2026 • графики вверху'}</small>
+            <div style={{display:'flex',gap:6}}>
+              <select className="select" style={{padding:'7px 10px',border:'1px solid #D8DDE5',borderRadius:10,background:'#fff',fontSize:12,fontWeight:600}} value={activeCat||'all'} onChange={e=>setActiveCat(e.target.value==='all'?null:e.target.value)}><option value="all">Все категории</option>{displayDonut.map((c:any)=><option key={c.id} value={c.id}>{c.name}</option>)}</select>
+            </div>
+          </div>
+        </div>
+        <div className="chart-wrap" style={{margin:0, border:0, borderRadius:0, borderTop:'1px solid var(--border)'}}>
+          <div style={{display:'grid', gridTemplateColumns:'1.1fr 1fr', gap:16, alignItems:'center'}}>
+            <div style={{display:'grid',placeItems:'center',position:'relative',cursor:'pointer'}} onClick={()=>setActiveCat(null)}>
+              <DonutChart data={displayDonut} total={displayTotal} activeCat={activeCat} onSelect={setActiveCat} />
+              <div style={{position:'absolute',textAlign:'center',pointerEvents:'none'}}>
+                <div style={{fontSize:10,color:'var(--muted)',fontWeight:700,letterSpacing:'.06em',textTransform:'uppercase'}}>Расходы</div>
+                <div style={{fontSize:15,fontWeight:800,letterSpacing:'-.02em'}}>{donutCenter}</div>
+                <div style={{fontSize:11,color:'var(--muted)',fontWeight:600}}>{donutSub}</div>
+              </div>
+            </div>
+            <div>
+              <div style={{fontSize:12,fontWeight:700,marginBottom:8}}>Топ-5 • тап — фильтр</div>
+              {displayDonut.slice(0,5).map((c:any)=>{
+                const pct=Math.round(c.amount/displayTotal*100)
+                const isActive=activeCat===c.id
+                return <div key={c.id} className="legend-item" onClick={()=>setActiveCat(isActive?null:c.id)} style={{display:'flex',alignItems:'center',gap:6,padding:'4px 6px',borderRadius:8,background:isActive?'var(--primary-soft)':'transparent',cursor:'pointer',border:isActive?'1px solid var(--primary-soft-b)':'1px solid transparent'}}>
+                  <span className="legend-dot" style={{background:c.color,width:10,height:10,borderRadius:'50%',flex:'0 0 auto'}} />
+                  <strong style={{fontSize:12}}>{c.name}</strong>
+                  <span style={{marginLeft:'auto',color:'var(--muted)',fontSize:12}}>{rub(c.amount)} · {pct}%</span>
+                </div>
+              })}
+              {displayDonut.find((c:any)=>c.id==='other') && <div className="legend-item" onClick={()=>setActiveCat(activeCat==='other'?null:'other')} style={{display:'flex',alignItems:'center',gap:6,padding:'4px 6px',borderRadius:8,background:activeCat==='other'?'var(--primary-soft)':'transparent',cursor:'pointer',marginTop:4}}><span className="legend-dot" style={{background:'#9CA3AF',width:10,height:10,borderRadius:'50%'}} />Остальные <span style={{marginLeft:'auto',color:'var(--muted)',fontSize:12}}>{rub(displayDonut.find((c:any)=>c.id==='other')!.amount)} · {Math.round(displayDonut.find((c:any)=>c.id==='other')!.amount/displayTotal*100)}%</span></div>}
+            </div>
+          </div>
+          {activeCat && <div style={{display:'flex',gap:8,marginTop:12,flexWrap:'wrap'}}><span className="pill live">● Фильтр: <b>{displayDonut.find((c:any)=>c.id===activeCat)?.name || displayRanked.find((c:any)=>c.id===activeCat)?.name}</b> <button onClick={()=>setActiveCat(null)} style={{border:0,background:'none',cursor:'pointer',fontWeight:700,color:'var(--primary)',marginLeft:4}}>✕ сброс</button></span><span className="pill">{displayRanked.find((c:any)=>c.id===activeCat)?.amount ? rub(displayRanked.find((c:any)=>c.id===activeCat)!.amount)+' • '+Math.round(displayRanked.find((c:any)=>c.id===activeCat)!.amount/displayTotal*100)+'%':''}</span></div>}
+        </div>
+        <div style={{padding:12, display:'flex', gap:8}}>
+          <button className="button primary" style={{flex:1}} onClick={()=>openAdd('EXPENSE')}>＋ Расход</button>
+          <button className="button secondary" style={{flex:1}} onClick={()=>openAdd('INCOME')}>＋ Доход</button>
+          <button className="button ghost" style={{flex:1}} onClick={()=>p.setFTab('receipts')}>📷 Чек → N</button>
+        </div>
+      </div>
+
+      {addModal && <div className="modal-backdrop" onClick={()=>setAddModal(null)} style={{position:'fixed',inset:0,background:'rgba(15,23,42,.42)',backdropFilter:'blur(4px)',zIndex:40,display:'flex',alignItems:'flex-end'}} onMouseDown={e=>e.target===e.currentTarget&&setAddModal(null)}>
+        <div className="modal-sheet" onClick={e=>e.stopPropagation()} style={{width:'100%',maxWidth:640,margin:'0 auto',background:'#fff',borderRadius:'22px 22px 0 0',padding:'18px 16px calc(18px + env(safe-area-inset-bottom))',boxShadow:'0 -10px 30px rgba(0,0,0,.16)',maxHeight:'92vh',overflow:'auto'}}>
+          <div className="modal-head" style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:14}}>
+            <h2 style={{margin:0,fontSize:19,fontWeight:800,fontFamily:'Manrope'}}>{addModal.type==='EXPENSE'?'Новый расход':'Новый доход'}</h2>
+            <button onClick={()=>setAddModal(null)} style={{border:0,background:'#F1F5F9',width:36,height:36,borderRadius:'50%',fontSize:20,cursor:'pointer',display:'grid',placeItems:'center'}}>×</button>
+          </div>
+          <div style={{display:'flex',flexDirection:'column',gap:12}}>
+            <div>
+              <label style={{fontSize:12,fontWeight:700,color:'var(--muted)'}}>Сумма, ₽</label>
+              <input type="number" inputMode="decimal" placeholder="0" value={formAmount} onChange={e=>setFormAmount(e.target.value)} style={{width:'100%',border:'1px solid #D8DDE5',borderRadius:12,padding:'14px 12px',fontSize:20,fontWeight:800}} autoFocus />
+            </div>
+            <div>
+              <label style={{fontSize:12,fontWeight:700,color:'var(--muted)'}}>Категория</label>
+              <select value={formCat} onChange={e=>setFormCat(e.target.value)} style={{width:'100%',border:'1px solid #D8DDE5',borderRadius:12,padding:'12px',background:'#fff',fontSize:14}}>
+                <option value="">— выберите —</option>
+                {(catList.length?catList:CATS).map((c:any)=><option key={c.id||c.name} value={c.name}>{c.icon?`${c.icon} `:''}{c.name}</option>)}
+              </select>
+              <div style={{display:'flex',gap:6,flexWrap:'wrap',marginTop:8}}>
+                {(catList.length?catList.slice(0,8):CATS.filter(c=>c.amount>0).slice(0,8)).map((c:any)=><button key={c.id||c.name} onClick={()=>setFormCat(c.name)} style={{padding:'6px 10px',borderRadius:999,border: formCat===c.name?'1px solid var(--primary)':'1px solid var(--border)',background: formCat===c.name?'var(--primary-soft)':'#fff',fontSize:12,fontWeight:600,cursor:'pointer'}}>{c.icon||'•'} {c.name}</button>)}
+              </div>
+            </div>
+            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
+              <div><label style={{fontSize:12,fontWeight:700,color:'var(--muted)'}}>Дата</label><input type="date" value={formDate} onChange={e=>setFormDate(e.target.value)} style={{width:'100%',border:'1px solid #D8DDE5',borderRadius:12,padding:'12px',background:'#fff'}}/></div>
+              <div><label style={{fontSize:12,fontWeight:700,color:'var(--muted)'}}>Заметка</label><input placeholder="Магнит" value={formDesc} onChange={e=>setFormDesc(e.target.value)} style={{width:'100%',border:'1px solid #D8DDE5',borderRadius:12,padding:'12px'}}/></div>
+            </div>
+            <button className="button primary" disabled={savingTx} onClick={submitAdd} style={{width:'100%',padding:'14px',fontSize:15}}>{savingTx?'Сохранение…': addModal.type==='EXPENSE'?'Создать расход':'Создать доход'}</button>
+            <p style={{fontSize:11,color:'var(--muted)',textAlign:'center',margin:0}}>Создаст транзакцию • POST /finances • попадёт в аналитику и тренд</p>
+          </div>
+        </div>
+      </div>}
+
+      {/* TREND on top — live */}
+      <div className="card">
+        <div className="chart-wrap-head"><strong>Динамика 6 месяцев</strong><small>тап по месяцу — drill-down {displayTrend?'• live':''}</small></div>
+        <TrendLarge selectedMonth={selectedMonth} onSelect={setSelectedMonth} data={displayTrend||undefined} />
+        <div className="note" style={{marginTop:10,padding:'10px 12px',background:'#F0FDFA',border:'1px solid #99F6E4',borderRadius:12,fontSize:12,lineHeight:1.5,color:'#115E59'}}>{trendNotes[selectedMonth]}</div>
+        <div style={{display:'flex', gap:8, marginTop:12,flexWrap:'wrap'}}>
+          <span className="pill" style={{borderColor:'#0F766E', color:'#0F766E'}}><span style={{display:'inline-block',width:8,height:8,background:'#0F766E',borderRadius:4,marginRight:6}}/>Доходы</span>
+          <span className="pill" style={{borderColor:'#F59E0B', color:'#8A4A00'}}><span style={{display:'inline-block',width:8,height:8,background:'#F59E0B',borderRadius:4,marginRight:6}}/>Расходы</span>
+          <span className="pill live">{selectedMonth==='sep'?'Сен':selectedMonth} — выбран</span>
+        </div>
+      </div>
+
+      {/* RANKED LIST — details below */}
+      <div className="card">
+        <div className="card-head"><h3>Рейтинг категорий</h3><div style={{display:'flex',gap:6}}><button className={showLimits?'pill live':'pill'} onClick={()=>setShowLimits(!showLimits)} style={{cursor:'pointer',border:'1px solid var(--border)'}}>лимиты {showLimits?'●':''}</button></div></div>
+        <div className="filter-row" style={{display:'flex',gap:8,overflow:'auto',padding:'4px 0',scrollbarWidth:'none'}}>
+          {[
+            ['all','Все'],
+            ['over','Перерасход'],
+            ['food','Еда'],
+            ['home','Дом'],
+          ].map(([k,l])=><button key={k} className={quickFilter===k?'filter-chip active':'filter-chip'} onClick={()=>setQuickFilter(k as any)} style={{whiteSpace:'nowrap',border:'1px solid var(--border)',background:quickFilter===k?'var(--primary)':'#fff',color:quickFilter===k?'#fff':'var(--text)',borderRadius:999,padding:'7px 12px',fontSize:12,fontWeight:600,cursor:'pointer'}}>{l}</button>)}
+        </div>
+        <div style={{marginTop:8}}>
+          {visibleRanked.map(c=>{
+            const pct = p.totalExpense ? Math.round(c.amount/p.totalExpense*100) : 0
+            const isActive = activeCat===c.id
+            const over = c.budget && c.amount>c.budget
+            const limitPos = c.budget ? Math.min(100, Math.round(c.budget / (c.amount/ pct *100) *100)) : null
+            return <div key={c.id} className="bar-row" onClick={()=>setActiveCat(isActive?null:c.id)} style={{padding:'11px 0',borderBottom:'1px solid #F1F1EF',cursor:'pointer',background:isActive?'var(--primary-soft-2)':'transparent',margin:'0 -14px',paddingLeft:14,paddingRight:14}}>
+              <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:10}}>
+                <div style={{display:'flex',alignItems:'center',gap:8}}>
+                  <span style={{width:10,height:10,borderRadius:'50%',background:c.color,flex:'0 0 auto'}} />
+                  <div>
+                    <div style={{display:'flex',alignItems:'center',gap:6}}><strong style={{fontSize:13}}>{c.name}</strong>{over && <span style={{fontSize:10,fontWeight:700,padding:'2px 6px',borderRadius:999,background:'#FFE4E6',color:'#9F1239',border:'1px solid #FECDD3'}}>! перерасход</span>}{c.amount>0 && pct>=5 && <span style={{fontSize:11,color:c.amount>c.budget?'#E11D48':'#8A94A6'}}>{pct>=10?'●':''}</span>}</div>
+                    {c.budget ? <div style={{fontSize:11,color: over?'#E11D48':'#8A94A6'}}>{rub(c.amount)} / {rub(c.budget)} {over?'· '+Math.round(c.amount/c.budget*100)+'%':''}</div> : <div style={{fontSize:11,color:'#8A94A6'}}>{rub(c.amount)} • {pct}%</div>}
+                  </div>
+                </div>
+                <div style={{display:'flex',alignItems:'center',gap:8}}>
+                  <span style={{fontWeight:800,fontSize:13,whiteSpace:'nowrap'}}>{rub(c.amount)}</span>
+                  <button onClick={(e)=>{e.stopPropagation(); openAdd('EXPENSE', c.id)}} title={`Добавить в ${c.name}`} style={{width:28,height:28,borderRadius:'50%',border:'1px solid var(--border)',background:'#fff',display:'grid',placeItems:'center',fontSize:16,lineHeight:1,cursor:'pointer',flex:'0 0 auto',boxShadow:'0 1px 4px rgba(0,0,0,.06)'}}>+</button>
+                </div>
+              </div>
+              <div style={{display:'flex',justifyContent:'space-between',marginTop:4}}><span style={{fontSize:11,color:'var(--muted)'}}>{pct}% от расходов</span>{over && <span style={{fontSize:11,color:'#E11D48',fontWeight:700}}>лимит превышен</span>}</div>
+              <div className="progress" style={{marginTop:6,position:'relative',height:8,background:'#EDF0F4',borderRadius:999,overflow:'hidden'}}><span style={{display:'block',height:'100%',width:`${Math.min(100,pct)}%`,background:c.color,borderRadius:999,opacity:isActive?1:.95}} />{showLimits && limitPos!==null && <span style={{position:'absolute',top:0,bottom:0,left:`${limitPos}%`,width:2,background:'#E11D48',opacity:.9}} />}</div>
+            </div>
+          ))}
+          {visibleRanked.length===0 && <div className="empty" style={{marginTop:10,padding:'18px',textAlign:'center',color:'var(--muted)',fontSize:13,border:'1px dashed var(--border)',borderRadius:12,background:'var(--surface-2)'}}>Нет категорий по фильтру</div>}
+        </div>
+        <button className="button secondary" style={{width:'100%',marginTop:12}} onClick={()=>setShowAll(!showAll)}>{showAll? 'Свернуть' : `Показать остальные ${Math.max(0,filteredRanked.length-8)}`}</button>
+        {activeCat && <div style={{marginTop:12,padding:12,background:'#fff',border:'1px solid var(--border)',borderRadius:12}}><div style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:8}}><strong style={{fontSize:13}}>{displayRanked.find((c:any)=>c.id===activeCat)?.name || displayDonut.find((c:any)=>c.id===activeCat)?.name} — фильтр</strong><button onClick={()=>setActiveCat(null)} style={{border:0,background:'none',color:'var(--primary)',fontWeight:700,cursor:'pointer',fontSize:12}}>сброс ✕</button></div><div style={{fontSize:12,color:'var(--muted)',marginTop:4}}>{activeCatObj? `${rub(activeCatObj.amount)} • ${Math.round(activeCatObj.amount/displayTotal*100)}% ${activeCatObj.budget||activeCatObj.limit_amount?`• лимит ${rub(activeCatObj.budget||activeCatObj.limit_amount)}`:''}`:''}</div></div>}
+        <div style={{display:'flex',gap:8,marginTop:10}}><span className="pill" style={{borderColor:'var(--primary)',color:'var(--primary)'}}>Тап по строке — фильтр</span><span className="pill" style={{borderColor:'#E9E6E1'}}>＋ — быстрый ввод</span></div>
+        <p className="muted" style={{fontSize:11,margin:'6px 0 0',lineHeight:1.4}}>Аналитика как в современных apps: donut + бары. Кружки — во вкладке «Категории».</p>
+      </div>
+      <button onClick={()=>openAdd('EXPENSE')} title="Быстрый ввод" style={{position:'fixed', bottom:88, right:16, width:56, height:56, borderRadius:'50%', background:'var(--primary)', color:'#fff', border:0, boxShadow:'0 6px 20px rgba(15,118,110,.35)', fontSize:28, display:'grid', placeItems:'center', zIndex:15, cursor:'pointer'}}>+</button>
+    </>}
+
+    {p.fTab==='categories' && <>
+      <div className="card" style={{padding:0}}>
+        <div style={{padding:16}} className="chart-wrap-head"><strong>Все категории (20)</strong><small>тап по кружку — сразу ввод</small></div>
+        <div style={{padding:'0 12px 16px'}}>
+          <CategoryGridAll selected={p.selectedCat} onSelect={(id)=>{ if(id) openAdd('EXPENSE', id); p.setSelectedCat(id) }} />
+        </div>
+        <div style={{padding:'10px 16px', background:'var(--surface-2)', borderTop:'1px solid var(--border)', fontSize:12, color:'var(--muted)', textAlign:'center'}}>Нажми кружок — откроется ввод с этой категорией • названия из CoinKeeper зафиксированы</div>
+      </div>
+
+      <div className="card">
+        <div className="chart-wrap-head"><strong>Ранжирование трат</strong><small>по убыванию — тот же список</small></div>
+        {[...CATS].sort((a,b)=>b.amount-a.amount).map(c=>{
+          const pct = p.totalExpense ? Math.round(c.amount/p.totalExpense*100) : 0
+          return <div key={c.id} className="bar-row" style={{padding:'11px 0',borderBottom:'1px solid #F1F1EF'}}>
+            <div style={{display:'flex',justifyContent:'space-between',gap:10,alignItems:'center'}}>
+              <div style={{display:'flex',alignItems:'center',gap:8}}>
+                <span style={{width:28,height:28,borderRadius:'50%',background:c.color,color:'#fff',display:'grid',placeItems:'center',fontSize:14}}>{c.icon}</span>
+                <div>
+                  <strong style={{fontSize:13}}>{c.name}</strong>
+                  {c.budget && <div style={{fontSize:11,color: c.amount>c.budget?'#E11D48':'#8A94A6'}}>{rub(c.amount)} / {rub(c.budget)} {c.amount>c.budget?'· перерасход!':''}</div>}
+                </div>
+              </div>
+              <span style={{fontWeight:700}}>{pct}%</span>
+            </div>
+            <div className="progress" style={{height:8,background:'#EDF0F4',borderRadius:999,overflow:'hidden',marginTop:6}}><span style={{display:'block',height:'100%',width:`${Math.min(100,pct)}%`, background:c.color,borderRadius:999}} /></div>
+          </div>
+        })}
+      </div>
+    </>}
+
+    {p.fTab==='receipts' && <ReceiptsTab items={p.receiptItems} setItems={p.setReceiptItems} show={p.showReceiptConfirm} setShow={p.setShowReceiptConfirm} />}
+
+    {p.fTab==='stocks' && <StocksTab />}
+
+    {p.fTab==='large' && <LargeTab monthly={p.monthlyPlan} setMonthly={p.setMonthlyPlan} />}
+
+    {p.fTab==='credits' && <CreditsTab />}
+
+    {p.fTab==='budget' && <BudgetTab ranked={p.ranked} />}
+  </div>
+}
+
+function DonutChart(p:{data:Cat[]; total:number; activeCat?:string|null; onSelect?:(id:string)=>void}){
+  const total = p.data.reduce((s,c)=>s+c.amount,0)
+  let acc = 0
+  const segs = p.data.map(c=>{
+    const pct = total? c.amount/total : 0
+    const start = acc
+    acc += pct
+    return { ...c, start, pct }
+  })
+  const r=52, circ=2*Math.PI*r
+  return <div style={{display:'grid',placeItems:'center',position:'relative'}}>
+    <svg width={140} height={140} viewBox="0 0 140 140" style={{transform:'rotate(-90deg)'}}>
+      <circle cx={70} cy={70} r={r} fill="none" stroke="#F1F5F9" strokeWidth={18} />
+      {segs.map(s=>{
+        const len = circ * s.pct
+        const offset = circ * s.start
+        const isActive = p.activeCat===s.id
+        const dim = p.activeCat && p.activeCat!==s.id
+        return <circle key={s.id} cx={70} cy={70} r={r} fill="none" stroke={s.color} strokeWidth={isActive?20:18} strokeDasharray={`${len} ${circ-len}`} strokeDashoffset={-offset} strokeLinecap="round" style={{transition:'.2s',opacity: dim? .25:1,cursor:'pointer'}} onClick={()=>p.onSelect?.(s.id)} />
+      })}
+    </svg>
+  </div>
+}
+
+function TrendLarge(p:{selectedMonth?:string; onSelect?:(m:string)=>void; data?:any[]}){
+  const fallback = [
+    {id:'apr', m:'Апр', income:120, expense:95},
+    {id:'may', m:'Май', income:140, expense:110},
+    {id:'jun', m:'Июн', income:165, expense:130},
+    {id:'jul', m:'Июл', income:150, expense:145},
+    {id:'aug', m:'Авг', income:180, expense:120},
+    {id:'sep', m:'Сен', income:173, expense:159},
+  ]
+  // Map API trend (label, income, expense in rub) -> normalized 0-100 for height
+  // API trend: [{label:'Апр', income:120000, expense:95000},...]
+  let months: any[] = fallback
+  let max = 180
+  if(p.data && p.data.length){
+    // Normalize to k₽ for bar height
+    const toK = (v:number)=> Math.round(v/1000)
+    months = p.data.map((d:any)=>({ id: d.label.toLowerCase().slice(0,3), m: d.label, income: toK(d.income), expense: toK(d.expense), raw: d }))
+    max = Math.max(...months.flatMap(m=>[m.income,m.expense])) || 180
+    if(max<10) max=180
+  }
+  const sel = p.selectedMonth || months[months.length-1]?.id || 'sep'
+  return <div className="trend-bars" style={{display:'flex',gap:6,height:110,padding:'8px 0'}}>
+    {months.map((x:any)=>{
+      const active = sel===x.id
+      return <div key={x.m} className="trend-col" onClick={()=>p.onSelect?.(x.id)} style={{flex:1,display:'flex',flexDirection:'column',alignItems:'center',gap:4,cursor:'pointer',opacity: active?1:.9,outline: active?'2px solid var(--primary)':'none',outlineOffset: active?2:0,borderRadius:8,padding: active?'2px':0}}>
+      <div style={{flex:1, display:'flex', gap:4, alignItems:'end', width:'100%', justifyContent:'center'}}>
+        <div className="trend-bar income" style={{height:`${Math.max(4, x.income/max*100)}%`, width:14, background: active?'var(--primary)':'#0F766E', borderRadius:6}} title={`Доход ${x.income}k`} />
+        <div className="trend-bar expense" style={{height:`${Math.max(4, x.expense/max*100)}%`, width:14, background: active?'#F59E0B':'#F59E0B', borderRadius:6}} title={`Расход ${x.expense}k`} />
+      </div>
+      <small style={{fontSize:10,color: active?'var(--primary)':'var(--muted)',fontWeight: active?700:600}}>{x.m}</small>
+    </div>
+    })}
+  </div>
+}
+function MiniTrend(){
+  const d=[40,55,70,62,85,78]
+  return <svg viewBox="0 0 100 30" width="100%" height={36} style={{display:'block'}}>
+    <polyline fill="none" stroke="#0F766E" strokeWidth={2} points={d.map((v,i)=>`${i*20},${30-v/3}`).join(' ')} strokeLinejoin="round" strokeLinecap="round" />
+    <polyline fill="none" stroke="#F59E0B" strokeWidth={2} opacity={.9} points="0,22 20,18 40,15 60,20 80,12 100,10" strokeLinejoin="round" strokeLinecap="round" />
+  </svg>
+}
+
+function CategoryGridAll(p:{selected:string|null; onSelect:(id:string|null)=>void}){
+  return <div className="category-grid">
+    {CATS.map(c=>{
+      const active = p.selected===c.id
+      return <button key={c.id} className="cat-card" onClick={()=>p.onSelect(active?null:c.id)} style={{opacity: c.amount===0? .9 : 1}}>
+        <div className="cat-icon" style={{background:c.color, boxShadow: active?`0 0 0 3px ${c.color}40, 0 6px 16px rgba(0,0,0,.12)`:'0 4px 12px rgba(0,0,0,.10)', transform: active? 'scale(1.05)':undefined}}>
+          {c.icon}
+          {c.amount>c.budget! && c.budget ? <span style={{position:'absolute',top:-4,right:-4,width:14,height:14,background:'#E11D48',borderRadius:'50%',border:'2px solid #fff',display:'grid',placeItems:'center',fontSize:8,color:'#fff'}}>!</span> : null}
+        </div>
+        <small style={{color: active? '#0F766E' : undefined, fontWeight: active? 800:600}}>{c.name}</small>
+        <b style={{color:c.color}}>{c.amount? shortRub(c.amount): '0 ₽'}</b>
+      </button>
+    })}
+  </div>
+}
+function CategoryGridRelevant(){
+  const top = [...CATS].filter(c=>c.amount>0).sort((a,b)=>b.amount-a.amount).slice(0,8)
+  return <div className="category-grid">
+    {top.map(c=><div key={c.id} className="cat-card">
+      <div className="cat-icon" style={{background:c.color}}>{c.icon}</div>
+      <small>{c.name}</small>
+      <b>{shortRub(c.amount)}</b>
+    </div>)}
+  </div>
+}
+
+// ---- RECEIPTS — live API with N-confirm ----
+function ReceiptsTab(p:{items:any[]; setItems:(a:any[])=>void; show:boolean; setShow:(b:boolean)=>void}){
+  const [receipt,setReceipt]=useState<any>(null)
+  const [uploading,setUploading]=useState(false)
+  const [saving,setSaving]=useState(false)
+  const [error,setError]=useState<string|null>(null)
+  const [confirming,setConfirming]=useState(false)
+
+  const total = p.items.reduce((s,it)=>s+it.price*it.qty,0)
+  const update = (id:string, field:string, val:any)=> {
+    const next=p.items.map(it=> it.id===id? {...it,[field]: val}:it)
+    p.setItems(next)
+    // autosave draft to API if receipt exists
+    if(receipt?.id){
+      setSaving(true)
+      apiPatch(`/finance/receipts/${receipt.id}`, {
+        merchant: receipt.merchant || 'Магнит',
+        total: next.reduce((s:any,it:any)=>s+it.price*it.qty,0),
+        items: next.map((it:any)=>({ name: it.name, qty: it.qty, price: it.price, category: it.cat }))
+      }).catch(e=>setError(String(e).slice(0,100))).finally(()=>setSaving(false))
+    }
+  }
+
+  const onFile = async (f:File)=>{
+    setUploading(true); setError(null)
+    try{
+      const b64 = await toBase64(f)
+      const j = await apiPost('/finance/receipts', { file_name: f.name, mime_type: f.type || 'image/jpeg', image_data: b64 })
+      const r = j.data
+      setReceipt(r)
+      // Populate items from review_payload or ai_result
+      const payload = r.review_payload || r.ai_result?.parsed || r.ai_result?.review_payload
+      if(payload?.items?.length){
+        const mapped = payload.items.map((it:any,i:number)=>({ id: String(Date.now()+i), name: it.name||it.title||'Товар', qty: Number(it.qty||1), price: Number(it.price||0), cat: it.category||'Продукты' }))
+        p.setItems(mapped)
+      }
+      p.setShow(true)
+    }catch(e:any){
+      setError(String(e.message||e).slice(0,150))
+      // fallback: show mock
+      p.setShow(true)
+    }finally{setUploading(false)}
+  }
+
+  const onConfirm = async ()=>{
+    if(!receipt?.id){
+      // mock confirm
+      alert(`Мок: создано ${p.items.length} транзакций на ${rub(total)} — без бэка. Загрузите фото для реального POST /receipts/{id}/confirm`)
+      return
+    }
+    setConfirming(true); setError(null)
+    try{
+      const payload = { merchant: receipt.merchant||'Магнит', total, date: new Date().toISOString().slice(0,10), items: p.items.map(it=>({ name: it.name, qty: it.qty, price: it.price, category: it.cat })) }
+      const j = await apiPost(`/finance/receipts/${receipt.id}/confirm`, payload)
+      alert(`Подтверждено! Создано ${j.data.created_count} транзакций на ${rub(j.data.total_amount)} • receipt ${receipt.id} → CONFIRMED`)
+      p.setShow(false)
+    }catch(e:any){
+      setError(String(e.message||e).slice(0,150))
+    }finally{setConfirming(false)}
+  }
+
+  return <div className="stack">
+    <div className="card">
+      <div className="chart-wrap" style={{marginBottom:12}}>
+        <div className="chart-wrap-head"><strong>Фото чека → ИИ → подтверждение</strong><small>live API • N расходов</small></div>
+        <div style={{display:'grid', gridTemplateColumns:'72px 1fr', gap:12, alignItems:'center'}}>
+          <div style={{width:72,height:72,borderRadius:12,background:'#FFF7ED',border:'1px solid #FED7AA',display:'grid',placeItems:'center',fontSize:28}}>🧾</div>
+          <div>
+            <div style={{fontWeight:700}}>{receipt? `Чек ${receipt.id.slice(0,8)} • ${receipt.ocr_status}` : 'Магнит • 12.09.2026 • демо'}</div>
+            <div style={{fontSize:12,color:'var(--muted)'}}>{receipt? `Файл: ${receipt.file_name||'—'} • review_payload ${receipt.review_payload?'готово':'—'}` : 'AI распознает 3 позиции • уверенность 92% (мок)'}</div>
+            <div className="pill live" style={{marginTop:6, display:'inline-flex'}}>● {receipt? receipt.ocr_status : 'PENDING → REVIEW'} {saving?'• сохранение…':''}</div>
+          </div>
+        </div>
+        {error && <div style={{marginTop:8,padding:'8px 10px',background:'#FFE4E6',border:'1px solid #FECDD3',borderRadius:10,fontSize:12,color:'#9F1239'}}>{error}</div>}
+        <div style={{marginTop:12,display:'flex',gap:8}}>
+          <label className="button primary" style={{flex:1,cursor:'pointer'}}>
+            {uploading?'Загрузка…':'📷 Выбрать фото чека'}
+            <input type="file" accept="image/*" capture="environment" style={{display:'none'}} onChange={e=>{ const f=e.target.files?.[0]; if(f) onFile(f) }} />
+          </label>
+          <button className="button secondary" style={{flex:1}} onClick={()=>{ setReceipt(null); p.setShow(false) }}>Сброс</button>
+        </div>
+      </div>
+
+      {!p.show ? <button className="button primary full" onClick={()=>p.setShow(true)}>📷 Открыть демо-таблицу (мок)</button> :
+      <>
+        <div className="card-head"><h3>Проверь распознавание</h3><span className="pill" style={{background:'#FEF3C7', color:'#92400E', borderColor:'#FDE68A'}}>{receipt?'live — можно редактировать':'мок — можно редактировать'}</span></div>
+        <div style={{overflow:'auto', border:'1px solid var(--border)', borderRadius:12}}>
+          <table className="receipt-table">
+            <thead><tr><th>Товар</th><th>Кол</th><th>Цена</th><th>Категория</th><th></th></tr></thead>
+            <tbody>
+              {p.items.map(it=><tr key={it.id}>
+                <td><input value={it.name} onChange={e=>update(it.id,'name',e.target.value)} style={{minWidth:120}} /></td>
+                <td><input type="number" value={it.qty} onChange={e=>update(it.id,'qty',Number(e.target.value))} style={{width:56}} /></td>
+                <td><input type="number" value={it.price} onChange={e=>update(it.id,'price',Number(e.target.value))} style={{width:90}} /></td>
+                <td>
+                  <select value={it.cat} onChange={e=>update(it.id,'cat',e.target.value)}>
+                    {CATS.map(c=><option key={c.id}>{c.name}</option>)}
+                  </select>
+                </td>
+                <td><button className="tiny danger" style={{borderColor:'#FECDD3'}} onClick={()=>p.setItems(p.items.filter(x=>x.id!==it.id))}>×</button></td>
+              </tr>)}
+            </tbody>
+          </table>
+        </div>
+        <div style={{display:'flex', gap:8, marginTop:12}}>
+          <button className="button secondary" style={{flex:1}} onClick={()=>p.setItems([...p.items,{id:String(Date.now()), name:'Новый товар', qty:1, price:0, cat:'Продукты'}])}>＋ Позиция</button>
+          <button className="button ghost" style={{flex:1}} onClick={()=>p.setShow(false)}>Отмена</button>
+        </div>
+        <div style={{marginTop:14, padding:14, background:'var(--surface-2)', border:'1px solid var(--border)', borderRadius:14, display:'flex', justifyContent:'space-between', alignItems:'center'}}>
+          <div><div style={{fontSize:12,color:'var(--muted)'}}>Итого к созданию</div><div style={{fontSize:18,fontWeight:800}}>{rub(total)} • {p.items.length} трат</div></div>
+          <div style={{fontSize:12, color: total>0 ? '#0D9A6E' : '#E11D48', fontWeight:700}}>{total>0?'совпадает ✓':'проверь суммы'}</div>
+        </div>
+        <button className="button primary full" style={{marginTop:12}} disabled={confirming||uploading} onClick={onConfirm}>{confirming?'Подтверждаю…':`Подтвердить и создать ${p.items.length} расхода${receipt?' • live':''}`}</button>
+        <p className="muted" style={{fontSize:12, textAlign:'center', margin:'8px 0 0'}}>Создаст N транзакций по категориям — {receipt?`POST /receipts/${receipt.id.slice(0,8)}/confirm`:'мок, загрузите фото для live'}</p>
+      </>}
+    </div>
+
+    <div className="card">
+      <div className="kicker">Как это будет работать</div>
+      <div style={{display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:10, textAlign:'center'}}>
+        {[
+          ['📷','Фото','Камера → сжатие → POST /receipts'],
+          ['🤖','ИИ','tesseract + OpenAI vision → черновик'],
+          ['✅','Ты','Редактируешь → Confirm → N трат'],
+        ].map(([ico,title,desc])=><div key={title} style={{padding:12, background:'var(--surface-2)', border:'1px solid var(--border)', borderRadius:12}}>
+          <div style={{fontSize:22}}>{ico}</div><div style={{fontWeight:700,fontSize:12,marginTop:4}}>{title}</div><div style={{fontSize:11,color:'var(--muted)',lineHeight:1.3}}>{desc}</div>
+        </div>)}
+      </div>
+    </div>
+  </div>
+}
+
+// ---- STOCKS ----
+function StocksTab(){
+  const items = [
+    { name:'Туалетная бумага Zewa', icon:'🧻', bought:'02.10', days:20, left:3, stock:'9 / 12 рулонов', pct:75 },
+    { name:'Шампунь Head&Shoulders', icon:'🧴', bought:'15.09', days:34, left:9, stock:'210 / 400 мл', pct:52 },
+    { name:'Корм для кота', icon:'🐱', bought:'28.09', days:18, left:12, stock:'1.2 / 2 кг', pct:60 },
+  ]
+  return <div className="stack">
+    <div className="card">
+      <div className="chart-wrap" style={{marginBottom:0}}>
+        <div className="chart-wrap-head"><strong>Прогноз расхода</strong><small>на сколько хватает</small></div>
+        <div style={{height:120, display:'flex', alignItems:'end', gap:8, padding:'8px 0'}}>
+          {items.map(it=><div key={it.name} style={{flex:1, textAlign:'center'}}>
+            <div style={{height:80, background:'#F1F5F9', borderRadius:10, overflow:'hidden', display:'flex', alignItems:'end'}}>
+              <div style={{height:`${it.pct}%`, background: it.left<=3? '#E11D48' : '#0F766E', width:'100%', transition:'.3s'}} />
+            </div>
+            <small style={{fontSize:10, color:'var(--muted)'}}>{it.left}дн</small>
+          </div>)}
+        </div>
+        <div style={{display:'flex', gap:6, marginTop:8, flexWrap:'wrap'}}>
+          {items.map(it=><span key={it.name} className="pill" style={{fontSize:11}}>{it.icon} {it.name.split(' ')[0]} · {it.left}дн</span>)}
+        </div>
+      </div>
+    </div>
+
+    <div className="card">
+      <div className="card-head"><h3>Нужно докупить на неделе</h3><span className="pill" style={{background:'#FFE4E6', color:'#9F1239', borderColor:'#FECDD3'}}>3 товара</span></div>
+      {items.filter(i=>i.left<=12).map(it=><div key={it.name} className="consumable-card">
+        <div className="consumable-icon">{it.icon}</div>
+        <div>
+          <div style={{fontWeight:700,fontSize:13}}>{it.name}</div>
+          <div className="meta"><small>Куплено {it.bought} • {it.stock} • хватит до {it.left} дн</small></div>
+          <div className="progress" style={{marginTop:6}}><span style={{width:`${it.pct}%`, background: it.left<=3? '#E11D48':'#0F766E'}} /></div>
+        </div>
+        <div style={{textAlign:'right'}}>
+          <div style={{fontSize:12,fontWeight:800, color: it.left<=3? '#E11D48':'#0F766E'}}>через {it.left} дн</div>
+          <button className="button primary small" style={{marginTop:6}} onClick={()=>alert('Купил — тут POST /consumables/:id/purchases + пересчет прогноза')}>＋ Купил</button>
+        </div>
+      </div>)}
+    </div>
+
+    <div className="card">
+      <div className="card-head"><h3>Все запасы</h3><button className="button primary small">＋ Товар</button></div>
+      <p className="muted" style={{fontSize:12}}>Тут будут все регулярные товары. После 2 покупок показываем «хватает на N дней» по формуле <code>дней между покупками / кол-во</code>.</p>
+    </div>
+  </div>
+}
+
+// ---- LARGE ----
+function LargeTab(p:{monthly:number; setMonthly:(n:number)=>void}){
+  const goals = [
+    { name:'iPad для сына', target:80000, saved:12000, priority:1, icon:'📱' },
+    { name:'Пылесос Dyson', target:35000, saved:8000, priority:2, icon:'🧹' },
+    { name:'Поездка в Сочи', target:120000, saved:0, priority:3, icon:'✈️' },
+  ]
+  return <div className="stack">
+    <div className="card">
+      <div className="chart-wrap" style={{marginBottom:12}}>
+        <div className="chart-wrap-head"><strong>План накоплений</strong><small>сколько откладывать</small></div>
+        <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', gap:12}}>
+          <div>
+            <div style={{fontSize:12,color:'var(--muted)'}}>Откладывать в месяц</div>
+            <div style={{fontSize:22,fontWeight:800}}>{rub(p.monthly)}</div>
+          </div>
+          <input type="range" min={2000} max={30000} step={1000} value={p.monthly} onChange={e=>p.setMonthly(Number(e.target.value))} className="plan-slider" style={{flex:1}} />
+        </div>
+        <div style={{display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:8, marginTop:12}}>
+          {goals.map(g=>{
+            const left = g.target-g.saved
+            const months = Math.ceil(left/p.monthly)
+            return <div key={g.name} style={{padding:10, background:'#F8FAFC', border:'1px solid var(--border)', borderRadius:12, textAlign:'center'}}>
+              <div style={{fontSize:18}}>{g.icon}</div>
+              <div style={{fontSize:11,fontWeight:700,marginTop:4}}>{g.name}</div>
+              <div style={{fontSize:12,color:'var(--muted)'}}>{months} мес</div>
+              <div style={{fontSize:11,color:'#0F766E',fontWeight:700}}>{rub(left)} left</div>
+            </div>
+          })}
+        </div>
+      </div>
+    </div>
+
+    {goals.map(g=>{
+      const pct = Math.round(g.saved/g.target*100)
+      const left = g.target-g.saved
+      const months = Math.ceil(left/p.monthly)
+      return <div key={g.name} className="card">
+        <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', gap:12}}>
+          <div style={{display:'flex', gap:10, alignItems:'center'}}>
+            <div className="priority-handle">☰</div>
+            <div>
+              <div style={{fontWeight:800, display:'flex', gap:6, alignItems:'center'}}><span>{g.icon}</span> {g.name} {g.priority===1 && <span className="pill live">★ Приоритет 1</span>}</div>
+              <small className="muted">{rub(g.saved)} / {rub(g.target)} · осталось {rub(left)}</small>
+            </div>
+          </div>
+          <div style={{textAlign:'right'}}>
+            <div style={{fontWeight:800}}>{pct}%</div>
+            <small style={{color:'var(--muted)'}}>{months} мес при {shortRub(p.monthly)}/мес</small>
+          </div>
+        </div>
+        <div className="progress" style={{marginTop:12}}><span style={{width:`${pct}%`}} /></div>
+        <div style={{display:'flex', gap:8, marginTop:12}}>
+          <button className="button secondary" style={{flex:1}} onClick={()=>alert('Внести — POST /finance/goals/:id/contributions')}>＋ Внести</button>
+          <button className="button ghost" style={{flex:1}}>Цена</button>
+        </div>
+      </div>
+    })}
+  </div>
+}
+
+// ---- CREDITS ----
+function CreditsTab(){
+  const schedule = [
+    {m:1, amount:12340}, {m:2, amount:12340}, {m:3, amount:12340}, {m:4, amount:12100}, {m:5, amount:11800}
+  ]
+  return <div className="stack">
+    <div className="card">
+      <div className="chart-wrap">
+        <div className="chart-wrap-head"><strong>Остаток долга</strong><small>ипотека · 3.5% · 240 мес</small></div>
+        <svg viewBox="0 0 300 90" width="100%" height={90} style={{display:'block'}}>
+          <defs><linearGradient id="g" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#0F766E" stopOpacity={.25}/><stop offset="100%" stopColor="#0F766E" stopOpacity={0}/></linearGradient></defs>
+          <path d="M0,70 L40,60 L80,52 L120,40 L160,28 L200,18 L240,10 L300,6 L300,90 L0,90 Z" fill="url(#g)" />
+          <polyline fill="none" stroke="#0F766E" strokeWidth={2.5} points="0,70 40,60 80,52 120,40 160,28 200,18 240,10 300,6" strokeLinejoin="round" strokeLinecap="round" />
+        </svg>
+        <div style={{display:'flex', justifyContent:'space-between', fontSize:11, color:'var(--muted)'}}><span>Сейчас 2.4M ₽</span><span>Через 5 лет 1.1M ₽</span></div>
+      </div>
+      <div className="credit-summary">
+        <div><small>Остаток</small><strong>2 400 000 ₽</strong></div>
+        <div><small>Ставка</small><strong>3.5%</strong></div>
+        <div><small>Платеж</small><strong>12 340 ₽</strong></div>
+      </div>
+      <div style={{display:'flex', gap:8}}>
+        <div className="pill live">TERM · уменьшить срок</div>
+        <div className="pill">PAYMENT · уменьшить платеж</div>
+      </div>
+    </div>
+
+    <div className="card">
+      <div className="card-head"><h3>Досрочное погашение</h3><span className="pill">банковский график</span></div>
+      <div className="form-grid">
+        <input type="date" defaultValue="2026-10-15" />
+        <input type="number" placeholder="Сумма" defaultValue={50000} />
+        <select className="wide"><option>Уменьшить срок (TERM)</option><option>Уменьшить платеж (PAYMENT)</option></select>
+      </div>
+      <button className="button primary full" style={{marginTop:10}} onClick={()=>alert('Добавит досрочку и пересчитает хвост графика — POST /credits/:id/prepayments')}>Добавить досрочку → пересчитать график</button>
+      <p className="muted" style={{fontSize:12,marginTop:8}}>График из банка хранится как есть, досрочки пересчитывают только будущие платежи. Можно менять тип досрочки и удалять.</p>
+    </div>
+
+    <div className="card">
+      <div className="card-head"><h3>График платежей</h3><button className="button secondary small">Показать ещё</button></div>
+      {schedule.map(r=><div key={r.m} className="credit-row"><span>Месяц {r.m}</span><strong>{rub(r.amount)}</strong></div>)}
+      <div style={{marginTop:10, padding:10, background:'#FFFBEB', border:'1px solid #FDE68A', borderRadius:12, fontSize:12}}>
+        💡 После досрочки 50 000 ₽ платёж {rub(12340)} → срок -6 мес (если TERM) или платёж 11 800 ₽ (если PAYMENT)
+      </div>
+    </div>
+  </div>
+}
+
+// ---- CALENDAR ----
+function CalendarV07(){
+  const [vis,setVis]=useState<'all'|'my'|'family'>('all')
+  return <div className="stack">
+    <SectionTitle title="Календарь" subtitle="Общий + личный слой • графики вверху" action={<div style={{display:'flex',gap:6}}><button className="button primary small">＋ Событие</button><button className="button secondary small">＋ Напоминание</button></div>} />
+    <div className="segmented" style={{marginBottom:0}}>
+      <button className={vis==='all'?'active':''} onClick={()=>setVis('all')}>Все</button>
+      <button className={vis==='my'?'active':''} onClick={()=>setVis('my')}>Мои 🔒</button>
+      <button className={vis==='family'?'active':''} onClick={()=>setVis('family')}>Семья 👥</button>
+    </div>
+
+    <div className="card">
+      <div className="chart-wrap" style={{marginBottom:12}}>
+        <div className="chart-wrap-head"><strong>Загруженность недели</strong><small>сентябрь 2026</small></div>
+        <div style={{display:'flex', gap:6, alignItems:'end', height:70}}>
+          {[2,4,1,5,3,2,0].map((v,i)=><div key={i} style={{flex:1, background: i===3? '#0F766E':'#CBD5E1', height:`${v*14+8}px`, borderRadius:8, opacity: v===0? .3:1}} />)}
+        </div>
+        <div style={{display:'flex', justifyContent:'space-between', fontSize:11, color:'var(--muted)', marginTop:6}}><span>Пн</span><span>Вт</span><span>Ср</span><span>Чт</span><span>Пт</span><span>Сб</span><span>Вс</span></div>
+      </div>
+
+      <div className="card-head"><h3>Сентябрь 2026</h3><div style={{display:'flex',gap:6}}><span className="pill live">👥 Семья</span><span className="pill">🔒 Только я</span></div></div>
+      <div className="calendar-grid">
+        {Array.from({length:30},(_,i)=>{
+          const day=i+1
+          const isToday=day===24
+          const hasEvent=[5,12,24].includes(day)
+          return <div key={day} className={`cal-day ${isToday?'today':''}`}>
+            <b>{day}</b>
+            {hasEvent && <div style={{display:'flex',gap:3}}><span className="cal-dot" />{day===24 && <span className="cal-dot" style={{background:'#F59E0B'}} />}</div>}
+            {hasEvent && <small style={{fontSize:8,lineHeight:1.1, color:'var(--muted)'}}>{day===5?'Врач 14:00':day===12?'Тренировка':'Посылка'}</small>}
+          </div>
+        })}
+      </div>
+      <div style={{marginTop:12, display:'flex', gap:8}}>
+        <span className="pill"><span style={{width:8,height:8,background:'#0F766E',borderRadius:4,display:'inline-block',marginRight:6}}/>Событие семьи</span>
+        <span className="pill"><span style={{width:8,height:8,background:'#F59E0B',borderRadius:4,display:'inline-block',marginRight:6}}/>Личное</span>
+      </div>
+    </div>
+
+    <div className="card">
+      <div className="card-head"><h3>Ближайшие</h3><small>Москва · Europe/Moscow</small></div>
+      <div className="calendar-row" style={{display:'flex',flexDirection:'column',alignItems:'flex-start',gap:4,padding:'12px 0',borderBottom:'1px solid #F1F1EF'}}>
+        <strong>Врач 14:00–15:00 • 👥 Семья</strong><small>05.09 • Поликлиника • Отвечает папа</small><small style={{color:'#0F766E'}}>Повторяется: FREQ=WEEKLY — в тесте строкой ок</small>
+      </div>
+      <div style={{padding:'12px 0',borderBottom:'1px solid #F1F1EF'}}>
+        <strong>Забрать посылку • 🔒 Только я</strong><small style={{display:'block', color:'var(--muted)', fontSize:12}}>12.09 • 18:00 • видит только создатель (решение 1-Б)</small>
+      </div>
+    </div>
+  </div>
+}
+
+function ListsV07(){
+  return <div className="stack">
+    <SectionTitle title="Списки" subtitle="Общие семейные списки" />
+    <div className="list-switcher"><button className="chip active">Продукты</button><button className="chip">Для дома</button><button className="chip">Аптечка</button></div>
+    <div className="card">
+      <div className="card-head"><h3>Продукты</h3><span className="pill">4 пункта</span></div>
+      <div style={{display:'flex',flexDirection:'column'}}>
+        {['Молоко','Хлеб','Яйца 10шт'].map(t=><div key={t} className="list-item-card"><button className="checkbox" />{t}<button className="tiny">✎</button></div>)}
+        <div className="list-item-card"><button className="checkbox checked">✓</button><span className="done">Бананы</span><button className="tiny danger">×</button></div>
+      </div>
+      <button className="button primary full" style={{marginTop:12}}>＋ Добавить пункт</button>
+    </div>
+  </div>
+}
+function FamilyV07(){
+  return <div className="stack">
+    <SectionTitle title="Семья" subtitle="Участники и приглашения" />
+    <div className="card"><div className="member-row"><div><strong>Мария</strong><small>@maria · Админ</small></div><span className="role-badge">Админ</span></div><div className="member-row"><div><strong>Папа</strong><small>Telegram ID</small></div><span className="role-badge" style={{background:'#EEF2F7',color:'var(--muted)',borderColor:'#E5E7EB'}}>Участник</span></div></div>
+  </div>
+}
+function BudgetTab(p:{ranked:Cat[]}){
+  return <div className="card">
+    <div className="chart-wrap">
+      <div className="chart-wrap-head"><strong>Бюджет сентября</strong><small>лимит vs факт</small></div>
+      <div style={{display:'flex', justifyContent:'space-between', alignItems:'end', gap:4, height:90}}>
+        {p.ranked.slice(0,5).map(c=>{
+          const pct = c.budget ? Math.min(100, c.amount/c.budget*100) : 0
+          return <div key={c.id} style={{flex:1, textAlign:'center'}}>
+            <div style={{height:70, background:'#F1F5F9', borderRadius:10, overflow:'hidden', display:'flex', alignItems:'end'}}>
+              <div style={{height:`${pct}%`, background: pct>90? '#E11D48':'#0F766E', width:'100%'}} />
+            </div>
+            <small style={{fontSize:9, color:'var(--muted)'}}>{c.name.slice(0,6)}</small>
+          </div>
+        })}
+      </div>
+    </div>
+    <div className="summary-line"><span>Лимит месяца</span><strong>60 000 ₽</strong></div>
+    <div className="summary-line"><span>Потрачено</span><strong style={{color:'#E11D48'}}>42 187 ₽</strong></div>
+    <div className="progress"><span style={{width:'70%', background:'#0F766E'}} /></div>
+  </div>
+}
+function SectionTitle(p:{title:string; subtitle?:string; action?:any}){
+  return <div className="section-title"><div><h2>{p.title}</h2>{p.subtitle && <p>{p.subtitle}</p>}</div>{p.action}</div>
+}
