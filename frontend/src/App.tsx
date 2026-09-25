@@ -136,28 +136,59 @@ function Nav(p:{active:boolean; label:string; icon:string; onClick:()=>void}){
   </button>
 }
 
-// ---------- HOME ----------
+// ---------- HOME — dashboard спека ----------
 function HomeView(p:{onGo:(s:Section)=>void; totalExpense:number}){
+  const todayEvents = [
+    { time:'14:00', title:'Врач', place:'Поликлиника', who:'Папа', type:'family' },
+    { time:'18:00', title:'Забрать посылку', place:'Пункт выдачи', who:'Мама', type:'private' },
+  ]
+  const recentTx = [
+    { amount: 1200, category:'Продукты', desc:'Магнит', author:'Мама', avatar:'М', color:'#EF4444' },
+    { amount: 450, category:'Еда вне дома', desc:'Кофе', author:'Папа', avatar:'П', color:'#F97316' },
+    { amount: 8000, category:'Работа', desc:'Доход', author:'Папа', avatar:'П', color:'#0EA5E9', income:true },
+  ]
   return <div className="stack">
-    <SectionTitle title="Сегодня" subtitle="Сентябрь 2026 • графики вверху, детали ниже — как ты просила" />
+    <SectionTitle title="Сегодня" subtitle={`${new Date().toLocaleDateString('ru-RU',{day:'numeric',month:'long',year:'numeric'})} • Europe/Moscow • графики вверху, детали ниже`} action={<span className="pill live">● LIVE • Teal</span>} />
     <div className="grid-2">
       <div className="card">
-        <div className="kicker">Быстрый старт</div>
-        <h3 style={{margin:'0 0 10px',fontSize:16}}>Семейный хаб v07</h3>
-        <p className="muted" style={{fontSize:13,lineHeight:1.5}}>Нажми «Финансы» → увидишь CoinKeeper-кружки, кольцевую диаграмму и живой чек с редактированием.</p>
-        <button className="button primary full" style={{marginTop:12}} onClick={()=>p.onGo('finance')}>Открыть финансы →</button>
+        <div className="card-head"><h3>Сегодня</h3><button className="button secondary small" onClick={()=>p.onGo('calendar')}>Календарь →</button></div>
+        {todayEvents.map(ev=> <div key={ev.title} style={{display:'flex',gap:10,padding:'10px 0',borderBottom:'1px solid #F1F1EF',alignItems:'center'}}>
+          <div style={{width:44,height:44,borderRadius:12,background: ev.type==='family'?'var(--primary-soft)':'#FFF7ED',border:'1px solid var(--border)',display:'grid',placeItems:'center',fontWeight:800,color: ev.type==='family'?'var(--primary)':'#92400E'}}>{ev.time.slice(0,2)}</div>
+          <div style={{flex:1}}><div style={{fontWeight:700,fontSize:13}}>{ev.time} — {ev.title} <span style={{fontWeight:600,fontSize:11,padding:'2px 6px',borderRadius:999,background: ev.type==='family'?'var(--primary-soft)':'#FFEDD5',color: ev.type==='family'?'var(--primary)':'#9A3412',border:'1px solid #E9E6E1'}}>{ev.type==='family'?'👥 Семья':'🔒 '+ev.who}</span></div><div style={{fontSize:12,color:'var(--muted)'}}>{ev.place} • отвечает {ev.who}</div></div>
+          <span className="pill" style={{fontSize:10}}>{ev.type==='family'?'общее':'личное'}</span>
+        </div>)}
+        <div style={{marginTop:10,display:'flex',gap:8}}><button className="button primary small" style={{flex:1}} onClick={()=>p.onGo('calendar')}>＋ Событие</button><button className="button secondary small" style={{flex:1}} onClick={()=>p.onGo('calendar')}>＋ Напоминание</button></div>
       </div>
       <div className="card">
-        <div className="kicker">Баланс семьи</div>
+        <div className="card-head"><h3>Баланс семьи</h3><span className="pill live">Teal • графики вверху</span></div>
         <div className="grid-3" style={{gap:8}}>
-          <div className="metric balance"><small>Баланс</small><strong style={{color:'#0F766E'}}>+10 527 ₽</strong></div>
-          <div className="metric"><small>Расходы</small><strong>{shortRub(p.totalExpense)}</strong></div>
-          <div className="metric"><small>В планах</small><strong>24 956 ₽</strong></div>
+          <div className="metric balance"><small>Баланс</small><strong style={{color:'#0F766E'}}>+10 527 ₽</strong><small style={{color:'#0F766E'}}>8% от доходов</small></div>
+          <div className="metric"><small>Расходы</small><strong>{shortRub(p.totalExpense)}</strong><small>20 категорий</small></div>
+          <div className="metric"><small>В планах</small><strong>24 956 ₽</strong><small>крупные + кредиты</small></div>
         </div>
         <div className="chart-wrap" style={{marginTop:12,marginBottom:0,padding:12}}>
           <div className="chart-wrap-head"><strong>Тренд 6 мес</strong><small>доходы vs расходы</small></div>
           <MiniTrend />
         </div>
+        <button className="button primary full" style={{marginTop:12}} onClick={()=>p.onGo('finance')}>Открыть финансы →</button>
+      </div>
+    </div>
+    <div className="grid-2">
+      <div className="card">
+        <div className="card-head"><h3>Списки • нужно докупить</h3><button className="button secondary small" onClick={()=>p.onGo('lists')}>Списки →</button></div>
+        {['Молоко','Хлеб','Яйца 10шт'].map(t=> <div key={t} className="list-item-card"><button className="checkbox" />{t}<span className="pill" style={{fontSize:10}}>Продукты</span></div>)}
+        <div className="list-item-card" style={{background:'#FFF7ED',borderRadius:10,padding:'8px 10px',marginTop:6}}><span style={{width:22,height:22,borderRadius:'50%',background:'#E11D48',color:'#fff',display:'grid',placeItems:'center',fontSize:10}}>!</span><strong style={{fontSize:12}}>Туал. бумага — через 3 дня</strong><button className="button primary small" onClick={()=>p.onGo('lists')}>Купил</button></div>
+      </div>
+      <div className="card">
+        <div className="card-head"><h3>Последние операции</h3><span className="pill">кто внёс</span></div>
+        {recentTx.map(tx=> <div key={tx.desc+tx.amount} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'10px 0',borderBottom:'1px solid #F1F1EF',gap:10}}>
+          <div style={{display:'flex',gap:10,alignItems:'center'}}>
+            <span style={{width:32,height:32,borderRadius:'50%',background:tx.color,color:'#fff',display:'grid',placeItems:'center',fontSize:14}}>{tx.category==='Продукты'?'🥫': tx.category==='Работа'?'🏢':'🥤'}</span>
+            <div><div style={{fontWeight:700,fontSize:13}}>{tx.desc} <span style={{fontWeight:600,color:'var(--muted)',fontSize:12}}>• {tx.category}</span></div><div style={{fontSize:11,color:'var(--muted)',display:'flex',alignItems:'center',gap:6}}><span style={{width:18,height:18,borderRadius:'50%',background:'var(--surface-2)',border:'1px solid var(--border)',display:'grid',placeItems:'center',fontSize:10,fontWeight:800}}>{tx.avatar}</span>{tx.author} • сегодня</div></div>
+          </div>
+          <strong style={{color: tx.income?'#0D9A6E':'#E11D48',fontSize:14}}>{tx.income?'+':''}{rub(tx.amount)}</strong>
+        </div>)}
+        <button className="button secondary full" style={{marginTop:12}} onClick={()=>p.onGo('finance')}>Все операции →</button>
       </div>
     </div>
   </div>
@@ -425,32 +456,38 @@ function FinanceV07(p:{
     </>}
 
     {p.fTab==='categories' && <>
-      <div className="card" style={{padding:0}}>
-        <div style={{padding:16}} className="chart-wrap-head"><strong>Все категории (20)</strong><small>тап по кружку — сразу ввод</small></div>
-        <div style={{padding:'0 12px 16px'}}>
-          <CategoryGridAll selected={p.selectedCat} onSelect={(id)=>{ if(id) openAdd('EXPENSE', id); p.setSelectedCat(id) }} />
-        </div>
-        <div style={{padding:'10px 16px', background:'var(--surface-2)', borderTop:'1px solid var(--border)', fontSize:12, color:'var(--muted)', textAlign:'center'}}>Нажми кружок — откроется ввод с этой категорией • названия из CoinKeeper зафиксированы</div>
-      </div>
-
       <div className="card">
-        <div className="chart-wrap-head"><strong>Ранжирование трат</strong><small>по убыванию — тот же список</small></div>
-        {[...CATS].sort((a,b)=>b.amount-a.amount).map(c=>{
-          const pct = p.totalExpense ? Math.round(c.amount/p.totalExpense*100) : 0
-          return <div key={c.id} className="bar-row" style={{padding:'11px 0',borderBottom:'1px solid #F1F1EF'}}>
-            <div style={{display:'flex',justifyContent:'space-between',gap:10,alignItems:'center'}}>
-              <div style={{display:'flex',alignItems:'center',gap:8}}>
-                <span style={{width:28,height:28,borderRadius:'50%',background:c.color,color:'#fff',display:'grid',placeItems:'center',fontSize:14}}>{c.icon}</span>
+        <div className="card-head"><h3>Все категории (20)</h3><span className="pill">названия из CoinKeeper • тап + для ввода</span></div>
+        <div style={{display:'flex',gap:8,marginBottom:12}}>
+          <input placeholder="Поиск категории…" style={{flex:1,border:'1px solid var(--border)',borderRadius:12,padding:'10px 12px',background:'#fff',fontSize:14}} onChange={e=>{ const v=e.target.value.toLowerCase(); const rows=document.querySelectorAll('#cat-list .bar-row'); rows.forEach((r:any)=>{ const name=r.dataset.name||''; r.style.display = name.includes(v)?'':'none' }) }} />
+          <button className="button secondary small" onClick={()=>{ const v=prompt('Новая категория'); if(v) alert('Создать: '+v+' — POST /finance/categories')}}>＋ Категория</button>
+        </div>
+        <div id="cat-list">
+        {displayRanked.map((c:any)=>{
+          const pct = displayTotal ? Math.round(c.amount/displayTotal*100) : 0
+          const isActive = activeCat===c.id
+          const over = c.limit_amount ? c.amount>c.limit_amount : (c.budget && c.amount>c.budget)
+          const limitVal = c.limit_amount || c.budget
+          const limitPos = limitVal ? Math.min(100, Math.round(limitVal / (c.amount/ pct *100) *100)) : null
+          return <div key={c.id} data-name={c.name.toLowerCase()} className="bar-row" onClick={()=>setActiveCat(isActive?null:c.id)} style={{padding:'12px 0',borderBottom:'1px solid #F1F1EF',cursor:'pointer',background:isActive?'var(--primary-soft-2)':'transparent',margin:'0 -14px',paddingLeft:14,paddingRight:14}}>
+            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:10}}>
+              <div style={{display:'flex',alignItems:'center',gap:10}}>
+                <span style={{width:32,height:32,borderRadius:10,background:c.color+'18',color:c.color,border:`1px solid ${c.color}30`,display:'grid',placeItems:'center',fontSize:16}}>{c.icon}</span>
                 <div>
-                  <strong style={{fontSize:13}}>{c.name}</strong>
-                  {c.budget && <div style={{fontSize:11,color: c.amount>c.budget?'#E11D48':'#8A94A6'}}>{rub(c.amount)} / {rub(c.budget)} {c.amount>c.budget?'· перерасход!':''}</div>}
+                  <div style={{display:'flex',alignItems:'center',gap:6}}><strong style={{fontSize:13.5}}>{c.name}</strong>{over && <span style={{fontSize:10,fontWeight:700,padding:'2px 6px',borderRadius:999,background:'#FFE4E6',color:'#9F1239',border:'1px solid #FECDD3'}}>! перерасход</span>}</div>
+                  <div style={{fontSize:12,color: over?'#E11D48':'var(--muted)'}}>{rub(c.amount)} • {pct}% {limitVal?`• лимит ${rub(limitVal)}`:''}</div>
                 </div>
               </div>
-              <span style={{fontWeight:700}}>{pct}%</span>
+              <div style={{display:'flex',alignItems:'center',gap:8}}>
+                <span style={{fontWeight:800,fontSize:13}}>{pct}%</span>
+                <button onClick={(e)=>{e.stopPropagation(); openAdd('EXPENSE', c.id)}} title={`Добавить в ${c.name}`} style={{width:32,height:32,borderRadius:'50%',border:'1px solid var(--border)',background:'#fff',display:'grid',placeItems:'center',fontSize:18,lineHeight:1,cursor:'pointer',boxShadow:'0 1px 4px rgba(0,0,0,.06)'}}>+</button>
+              </div>
             </div>
-            <div className="progress" style={{height:8,background:'#EDF0F4',borderRadius:999,overflow:'hidden',marginTop:6}}><span style={{display:'block',height:'100%',width:`${Math.min(100,pct)}%`, background:c.color,borderRadius:999}} /></div>
+            <div className="progress" style={{marginTop:8,position:'relative',height:8,background:'#EDF0F4',borderRadius:999,overflow:'hidden'}}><span style={{display:'block',height:'100%',width:`${Math.min(100,pct)}%`,background:c.color,borderRadius:999,opacity:isActive?1:.9}} />{showLimits && limitPos!==null && <span style={{position:'absolute',top:0,bottom:0,left:`${limitPos}%`,width:2,background:'#E11D48',opacity:.9}} />}</div>
           </div>
         })}
+        </div>
+        <p className="muted" style={{fontSize:11,margin:'10px 0 0'}}>Современный список — как в Spendee/Bankure. Без кружков, с барами и лимитами. Названия зафиксированы.</p>
       </div>
     </>}
 
@@ -670,22 +707,8 @@ function ReceiptsTab(p:{items:any[]; setItems:(a:any[])=>void; show:boolean; set
           <div><div style={{fontSize:12,color:'var(--muted)'}}>Итого к созданию</div><div style={{fontSize:18,fontWeight:800}}>{rub(total)} • {p.items.length} трат</div></div>
           <div style={{fontSize:12, color: total>0 ? '#0D9A6E' : '#E11D48', fontWeight:700}}>{total>0?'совпадает ✓':'проверь суммы'}</div>
         </div>
-        <button className="button primary full" style={{marginTop:12}} disabled={confirming||uploading} onClick={onConfirm}>{confirming?'Подтверждаю…':`Подтвердить и создать ${p.items.length} расхода${receipt?' • live':''}`}</button>
-        <p className="muted" style={{fontSize:12, textAlign:'center', margin:'8px 0 0'}}>Создаст N транзакций по категориям — {receipt?`POST /receipts/${receipt.id.slice(0,8)}/confirm`:'мок, загрузите фото для live'}</p>
+        <button className="button primary full" style={{marginTop:12}} disabled={confirming||uploading} onClick={onConfirm}>{confirming?'Подтверждаю…':`Подтвердить • ${p.items.length} • ${rub(total)}`}</button>
       </>}
-    </div>
-
-    <div className="card">
-      <div className="kicker">Как это будет работать</div>
-      <div style={{display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:10, textAlign:'center'}}>
-        {[
-          ['📷','Фото','Камера → сжатие → POST /receipts'],
-          ['🤖','ИИ','tesseract + OpenAI vision → черновик'],
-          ['✅','Ты','Редактируешь → Confirm → N трат'],
-        ].map(([ico,title,desc])=><div key={title} style={{padding:12, background:'var(--surface-2)', border:'1px solid var(--border)', borderRadius:12}}>
-          <div style={{fontSize:22}}>{ico}</div><div style={{fontWeight:700,fontSize:12,marginTop:4}}>{title}</div><div style={{fontSize:11,color:'var(--muted)',lineHeight:1.3}}>{desc}</div>
-        </div>)}
-      </div>
     </div>
   </div>
 }
@@ -740,74 +763,95 @@ function StocksTab(){
 
 // ---- LARGE ----
 function LargeTab(p:{monthly:number; setMonthly:(n:number)=>void}){
-  const goals = [
-    { name:'iPad для сына', target:80000, saved:12000, priority:1, icon:'📱' },
-    { name:'Пылесос Dyson', target:35000, saved:8000, priority:2, icon:'🧹' },
-    { name:'Поездка в Сочи', target:120000, saved:0, priority:3, icon:'✈️' },
-  ]
+  const [goals,setGoals]=useState<any[]>([
+    { id:'1', name:'iPad для сына', target:80000, saved:12000, priority:1, icon:'📱' },
+    { id:'2', name:'Пылесос Dyson', target:35000, saved:8000, priority:2, icon:'🧹' },
+    { id:'3', name:'Поездка в Сочи', target:120000, saved:0, priority:3, icon:'✈️' },
+  ])
+  const [showAdd,setShowAdd]=useState<string|null>(null)
+  const [amount,setAmount]=useState('')
+  const [loading,setLoading]=useState(false)
+  useEffect(()=>{ apiGet('/finance/goals').then(j=>{ if(j.data?.length) setGoals(j.data.map((g:any)=>({ id:g.id, name:g.name, target:parseFloat(g.target_amount), saved: (g.contributions||[]).reduce((s:any,c:any)=>s+parseFloat(c.amount),0), priority: g.priority==='HIGH'?1: g.priority==='MEDIUM'?2:3, icon:'🎯' }))) }).catch(()=>{}) },[])
+  const addContribution = async (id:string)=>{
+    const v=parseFloat(amount.replace(',','.'))
+    if(!v||v<=0) return alert('Введите сумму')
+    setLoading(true)
+    try{ await apiPost(`/finance/goals/${id}/contributions`, {amount: v, contribution_date: new Date().toISOString().slice(0,10)}); setGoals(gs=>gs.map(g=> g.id===id? {...g, saved: g.saved+v}:g)); setShowAdd(null); setAmount('') }catch(e:any){ alert(String(e.message||e).slice(0,120)) }finally{ setLoading(false) }
+  }
   return <div className="stack">
     <div className="card">
-      <div className="chart-wrap" style={{marginBottom:12}}>
-        <div className="chart-wrap-head"><strong>План накоплений</strong><small>сколько откладывать</small></div>
+      <div className="chart-wrap" style={{marginBottom:0}}>
+        <div className="chart-wrap-head"><strong>План накоплений</strong><small>ползунок — feasibility</small></div>
         <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', gap:12}}>
-          <div>
-            <div style={{fontSize:12,color:'var(--muted)'}}>Откладывать в месяц</div>
-            <div style={{fontSize:22,fontWeight:800}}>{rub(p.monthly)}</div>
-          </div>
+          <div><div style={{fontSize:12,color:'var(--muted)'}}>В месяц</div><div style={{fontSize:22,fontWeight:800}}>{rub(p.monthly)}</div></div>
           <input type="range" min={2000} max={30000} step={1000} value={p.monthly} onChange={e=>p.setMonthly(Number(e.target.value))} className="plan-slider" style={{flex:1}} />
         </div>
         <div style={{display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:8, marginTop:12}}>
           {goals.map(g=>{
             const left = g.target-g.saved
             const months = Math.ceil(left/p.monthly)
-            return <div key={g.name} style={{padding:10, background:'#F8FAFC', border:'1px solid var(--border)', borderRadius:12, textAlign:'center'}}>
+            return <div key={g.id} style={{padding:10, background:'#F8FAFC', border:'1px solid var(--border)', borderRadius:12, textAlign:'center'}}>
               <div style={{fontSize:18}}>{g.icon}</div>
               <div style={{fontSize:11,fontWeight:700,marginTop:4}}>{g.name}</div>
               <div style={{fontSize:12,color:'var(--muted)'}}>{months} мес</div>
-              <div style={{fontSize:11,color:'#0F766E',fontWeight:700}}>{rub(left)} left</div>
+              <div style={{fontSize:11,color: months>12?'#E11D48':'#0F766E',fontWeight:700}}>{rub(left)}</div>
             </div>
           })}
         </div>
       </div>
     </div>
-
     {goals.map(g=>{
       const pct = Math.round(g.saved/g.target*100)
       const left = g.target-g.saved
       const months = Math.ceil(left/p.monthly)
-      return <div key={g.name} className="card">
+      return <div key={g.id} className="card">
         <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', gap:12}}>
           <div style={{display:'flex', gap:10, alignItems:'center'}}>
-            <div className="priority-handle">☰</div>
+            <div className="priority-handle" style={{cursor:'grab'}}>☰</div>
             <div>
               <div style={{fontWeight:800, display:'flex', gap:6, alignItems:'center'}}><span>{g.icon}</span> {g.name} {g.priority===1 && <span className="pill live">★ Приоритет 1</span>}</div>
-              <small className="muted">{rub(g.saved)} / {rub(g.target)} · осталось {rub(left)}</small>
+              <small className="muted">{rub(g.saved)} / {rub(g.target)} • осталось {rub(left)}</small>
             </div>
           </div>
-          <div style={{textAlign:'right'}}>
-            <div style={{fontWeight:800}}>{pct}%</div>
-            <small style={{color:'var(--muted)'}}>{months} мес при {shortRub(p.monthly)}/мес</small>
-          </div>
+          <div style={{textAlign:'right'}}><div style={{fontWeight:800}}>{pct}%</div><small style={{color:'var(--muted)'}}>{months} мес при {shortRub(p.monthly)}/мес</small></div>
         </div>
         <div className="progress" style={{marginTop:12}}><span style={{width:`${pct}%`}} /></div>
-        <div style={{display:'flex', gap:8, marginTop:12}}>
-          <button className="button secondary" style={{flex:1}} onClick={()=>alert('Внести — POST /finance/goals/:id/contributions')}>＋ Внести</button>
-          <button className="button ghost" style={{flex:1}}>Цена</button>
-        </div>
+        {showAdd===g.id ? <div style={{marginTop:12,display:'flex',gap:8}}>
+          <input type="number" placeholder="Сумма" value={amount} onChange={e=>setAmount(e.target.value)} style={{flex:1,border:'1px solid var(--border)',borderRadius:10,padding:'10px 12px'}} autoFocus />
+          <button className="button primary" disabled={loading} onClick={()=>addContribution(g.id)}>{loading?'...':'Внести'}</button>
+          <button className="button secondary" onClick={()=>setShowAdd(null)}>Отмена</button>
+        </div> : <div style={{display:'flex', gap:8, marginTop:12}}>
+          <button className="button primary" style={{flex:1}} onClick={()=>setShowAdd(g.id)}>＋ Внести</button>
+          <button className="button ghost" style={{flex:1}} onClick={()=>{ const v=prompt('Новая цена'); if(v) apiPost(`/finance/goals/${g.id}/prices`,{price:parseFloat(v),recorded_at:new Date().toISOString()}).then(()=>alert('Цена обновлена')).catch(e=>alert(String(e).slice(0,80))) }}>Цена</button>
+        </div>}
       </div>
     })}
   </div>
 }
 
-// ---- CREDITS ----
+// ---- CREDITS — live ----
 function CreditsTab(){
+  const [credits,setCredits]=useState<any[]>([])
+  const [date,setDate]=useState('2026-10-15')
+  const [sum,setSum]=useState('50000')
+  const [mode,setMode]=useState<'TERM'|'PAYMENT'>('TERM')
+  const [saving,setSaving]=useState(false)
+  useEffect(()=>{ apiGet('/credits').then(j=> setCredits(j.data||[])).catch(()=>{}) },[])
   const schedule = [
     {m:1, amount:12340}, {m:2, amount:12340}, {m:3, amount:12340}, {m:4, amount:12100}, {m:5, amount:11800}
   ]
+  const submit = async ()=>{
+    const creditId = credits[0]?.id || 'demo'
+    if(creditId==='demo'){ alert('Демо: в реальности POST /credits/'+creditId+'/prepayments — график пересчитается'); return }
+    const amt=parseFloat(sum)
+    if(!amt) return alert('Введите сумму')
+    setSaving(true)
+    try{ await apiPost(`/credits/${creditId}/prepayments`, {amount: amt, prepayment_date: date, recalculation_mode: mode}); alert('Досрочка добавлена'); const j=await apiGet('/credits'); setCredits(j.data||[]) }catch(e:any){ alert(String(e.message||e).slice(0,120)) }finally{ setSaving(false) }
+  }
   return <div className="stack">
     <div className="card">
       <div className="chart-wrap">
-        <div className="chart-wrap-head"><strong>Остаток долга</strong><small>ипотека · 3.5% · 240 мес</small></div>
+        <div className="chart-wrap-head"><strong>Остаток долга</strong><small>график вверху</small></div>
         <svg viewBox="0 0 300 90" width="100%" height={90} style={{display:'block'}}>
           <defs><linearGradient id="g" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#0F766E" stopOpacity={.25}/><stop offset="100%" stopColor="#0F766E" stopOpacity={0}/></linearGradient></defs>
           <path d="M0,70 L40,60 L80,52 L120,40 L160,28 L200,18 L240,10 L300,6 L300,90 L0,90 Z" fill="url(#g)" />
@@ -821,28 +865,22 @@ function CreditsTab(){
         <div><small>Платеж</small><strong>12 340 ₽</strong></div>
       </div>
       <div style={{display:'flex', gap:8}}>
-        <div className="pill live">TERM · уменьшить срок</div>
-        <div className="pill">PAYMENT · уменьшить платеж</div>
+        <div className="pill live">TERM · срок</div>
+        <div className="pill">PAYMENT · платёж</div>
       </div>
     </div>
-
     <div className="card">
-      <div className="card-head"><h3>Досрочное погашение</h3><span className="pill">банковский график</span></div>
+      <div className="card-head"><h3>Досрочное погашение</h3><span className="pill">live</span></div>
       <div className="form-grid">
-        <input type="date" defaultValue="2026-10-15" />
-        <input type="number" placeholder="Сумма" defaultValue={50000} />
-        <select className="wide"><option>Уменьшить срок (TERM)</option><option>Уменьшить платеж (PAYMENT)</option></select>
+        <input type="date" value={date} onChange={e=>setDate(e.target.value)} />
+        <input type="number" placeholder="Сумма" value={sum} onChange={e=>setSum(e.target.value)} />
+        <select className="wide" value={mode} onChange={e=>setMode(e.target.value as any)}><option value="TERM">Уменьшить срок (TERM)</option><option value="PAYMENT">Уменьшить платеж (PAYMENT)</option></select>
       </div>
-      <button className="button primary full" style={{marginTop:10}} onClick={()=>alert('Добавит досрочку и пересчитает хвост графика — POST /credits/:id/prepayments')}>Добавить досрочку → пересчитать график</button>
-      <p className="muted" style={{fontSize:12,marginTop:8}}>График из банка хранится как есть, досрочки пересчитывают только будущие платежи. Можно менять тип досрочки и удалять.</p>
+      <button className="button primary full" style={{marginTop:10}} disabled={saving} onClick={submit}>{saving?'Сохранение…':'Добавить досрочку → пересчитать график'}</button>
     </div>
-
     <div className="card">
       <div className="card-head"><h3>График платежей</h3><button className="button secondary small">Показать ещё</button></div>
       {schedule.map(r=><div key={r.m} className="credit-row"><span>Месяц {r.m}</span><strong>{rub(r.amount)}</strong></div>)}
-      <div style={{marginTop:10, padding:10, background:'#FFFBEB', border:'1px solid #FDE68A', borderRadius:12, fontSize:12}}>
-        💡 После досрочки 50 000 ₽ платёж {rub(12340)} → срок -6 мес (если TERM) или платёж 11 800 ₽ (если PAYMENT)
-      </div>
     </div>
   </div>
 }
