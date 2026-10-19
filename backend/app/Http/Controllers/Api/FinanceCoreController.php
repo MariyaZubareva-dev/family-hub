@@ -304,7 +304,7 @@ class FinanceCoreController extends FinanceBaseController
     }
 
     public function uploadReceipt(Request $request): JsonResponse {
-        $m=$this->adminMembership($request);
+        $m=$this->viewMembership($request);
         $d=$request->validate(['file_name'=>'nullable|string|max:255','mime_type'=>'nullable|string|max:80','image_data'=>'required|string','merchant'=>'nullable|string|max:255','total'=>'nullable|numeric','occurred_on'=>'nullable|date','items'=>'nullable|array']);
         $id=(string)Str::ulid();
         // Prepare review_payload from initial items if provided (manual)
@@ -327,8 +327,9 @@ class FinanceCoreController extends FinanceBaseController
     }
 
     public function updateReceipt(Request $request, string $receipt): JsonResponse {
-        $m=$this->adminMembership($request);
+        $m=$this->viewMembership($request);
         $row = $this->ownedRow('receipts',$receipt,$m->family_id);
+        abort_unless($m->role==='ADMIN'||$row->uploaded_by===$m->user_id,403);
         // Prevent editing after confirmed
         $status = $row->ocr_status ?? '';
         if ($status === 'CONFIRMED') abort(409, 'Чек уже подтверждён, редактирование запрещено');
@@ -373,8 +374,9 @@ class FinanceCoreController extends FinanceBaseController
     }
 
     public function confirmReceipt(Request $request, string $receipt): JsonResponse {
-        $m=$this->adminMembership($request);
+        $m=$this->viewMembership($request);
         $row = $this->ownedRow('receipts',$receipt,$m->family_id);
+        abort_unless($m->role==='ADMIN'||$row->uploaded_by===$m->user_id,403);
         $status = $row->ocr_status ?? '';
         if ($status === 'CONFIRMED') {
             return response()->json(['message'=>'Чек уже подтверждён','data'=>(array)$row], 409);

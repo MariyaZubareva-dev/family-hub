@@ -6,6 +6,7 @@ use App\Jobs\TelegramNotificationJob;
 use App\Models\Event;
 use App\Models\Reminder;
 use App\Models\FamilyMember;
+use App\Models\PlannedPurchase;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
@@ -18,59 +19,57 @@ class TelegramNotificationService
         'EVENT_CANCELLED',
         'AI_READY_FOR_REVIEW',
         'BUDGET_WARNING',
+        'PURCHASE_DUE',
     ];
 
     public static function notifyEventCreated(Event $event): void
     {
-        self::dispatchForEvent($event, 'EVENT_CHANGED', "➕ Новое событие: {$event->title}\n{$event->start_at->format('d.m.Y H:i')} · {$event->timezone}" . ($event->location ? "\n📍 {$event->location}" : ''));
+        self::dispatchForEvent($event, 'EVENT_CHANGED', "➕ Новое событие: " . e($event->title) . "\n{$event->start_at->format('d.m.Y H:i')} · " . e($event->timezone) . ($event->location ? "\n📍 " . e($event->location) : ''));
     }
 
     public static function notifyEventChanged(Event $event): void
     {
-        self::dispatchForEvent($event, 'EVENT_CHANGED', "✏️ Событие изменено: {$event->title}\n{$event->start_at->format('d.m.Y H:i')} · {$event->timezone}");
+        self::dispatchForEvent($event, 'EVENT_CHANGED', "✏️ Событие изменено: " . e($event->title) . "\n{$event->start_at->format('d.m.Y H:i')} · " . e($event->timezone));
     }
 
     public static function notifyEventCancelled(Event $event): void
     {
-        self::dispatchForEvent($event, 'EVENT_CANCELLED', "❌ Событие отменено: {$event->title}\n{$event->start_at->format('d.m.Y H:i')}");
+        self::dispatchForEvent($event, 'EVENT_CANCELLED', "❌ Событие отменено: " . e($event->title) . "\n{$event->start_at->format('d.m.Y H:i')}");
     }
 
     public static function notifyReminderDue(Reminder $reminder): void
     {
-        $member = $reminder->responsibleMember;
-        if (!$member) return;
-        $key = "reminder:{$reminder->id}:{$reminder->scheduled_at->toIso8601String()}";
-        $text = "🔔 Напоминание: {$reminder->title}" . ($reminder->description ? "\n{$reminder->description}" : '') . "\n⏰ {$reminder->scheduled_at->format('d.m.Y H:i')} · {$reminder->timezone}";
-        self::dispatch(
-            familyId: $reminder->family_id,
-            recipientMemberId: $member->id,
-            type: 'REMINDER',
-            key: $key,
-            text: $text,
-            payload: ['reminder_id' => $reminder->id],
-            scheduledAt: $reminder->scheduled_at,
-            notifiable: $reminder,
-        );
-        // Also queue a reminder_notifications row for spec compliance
-        try {
-            DB::table('reminder_notifications')->updateOrInsert(
-                ['reminder_id' => $reminder->id, 'scheduled_at' => $reminder->scheduled_at, 'notification_type' => 'REMINDER'],
-                ['id' => (string) Str::ulid(), 'recipient_member_id' => $member->id, 'status' => 'PENDING', 'created_at' => now(), 'updated_at' => now()]
-            );
-        } catch (\Throwable $e) {}
+        $recipients = FamilyMember::where('family_id', $reminder->family_id)->where('status', 'ACTIVE')->get();
+        $text = "🔔 Напоминание: " . e($reminder->title) . ($reminder->description ? "\n" . e($reminder->description) : '') . "\n⏰ {$reminder->scheduled_at->format('d.m.Y H:i')} · " . e($reminder->timezone);
+        foreach ($recipients as $member) {
+            $key = "reminder:{$reminder->id}:{$reminder->scheduled_at->toIso8601String()}:{$member->id}";
+            self::dispatch($reminder->family_id, $member->id, 'REMINDER', $key, $text, ['reminder_id' => $reminder->id], $reminder->scheduled_at, $reminder);
+        }
+    }
+
+    public static function notifyPlannedPurchaseDue(PlannedPurchase $purchase): void
+    {
+        $due = $purchase->due_date?->toDateString();
+        if (!$due) return;
+        $text = "🛒 Скоро покупка: " . e($purchase->name) . "\nОриентировочная дата: " . $purchase->due_date->format('d.m.Y');
+        if ($purchase->estimated_amount) $text .= "\nПлановая сумма: " . number_format((float) $purchase->estimated_amount, 2, ',', ' ') . ' ₽';
+        foreach (FamilyMember::where('family_id', $purchase->family_id)->where('status', 'ACTIVE')->get() as $member) {
+            $key = "purchase_due:{$purchase->id}:{$due}:{$member->id}";
+            self::dispatch($purchase->family_id, $member->id, 'PURCHASE_DUE', $key, $text, ['planned_purchase_id' => $purchase->id], now(), $purchase);
+        }
     }
 
     public static function notifyEventReminder(Event $event, FamilyMember $recipient): void
     {
         $key = "event_reminder:{$event->id}:{$event->start_at->toIso8601String()}:{$recipient->id}";
-        $text = "⏰ Скоро событие: {$event->title}\n{$event->start_at->format('d.m.Y H:i')} · {$event->timezone}" . ($event->location ? "\n📍 {$event->location}" : '');
+        $text = "⏰ Скоро событие: " . e($event->title) . "\n{$event->start_at->format('d.m.Y H:i')} · " . e($event->timezone) . ($event->location ? "\n📍 " . e($event->location) : '');
         self::dispatch($event->family_id, $recipient->id, 'EVENT_REMINDER', $key, $text, ['event_id' => $event->id], $event->start_at, $event);
     }
 
     public static function notifyBudgetWarning(string $familyId, string $recipientMemberId, string $categoryName, float $spent, float $limit, float $percent): void
     {
         $key = "budget_warning:{$familyId}:" . now()->format('Y-m') . ":{$categoryName}";
-        $text = "⚠️ Бюджет: категория «{$categoryName}» — потрачено " . number_format($spent, 2, ',', ' ') . " ₽ из " . number_format($limit, 2, ',', ' ') . " ₽ ({$percent}%).";
+        $text = "⚠️ Бюджет: категория «" . e($categoryName) . "» — потрачено " . number_format($spent, 2, ',', ' ') . " ₽ из " . number_format($limit, 2, ',', ' ') . " ₽ ({$percent}%).";
         self::dispatch($familyId, $recipientMemberId, 'BUDGET_WARNING', $key, $text, ['category' => $categoryName, 'spent' => $spent, 'limit' => $limit], now());
     }
 
@@ -83,12 +82,7 @@ class TelegramNotificationService
 
     private static function dispatchForEvent(Event $event, string $type, string $text): void
     {
-        $event->loadMissing(['participants', 'responsibleMember']);
-        $recipients = $event->participants->isNotEmpty() ? $event->participants : collect([$event->responsibleMember])->filter();
-        if ($recipients->isEmpty()) {
-            // fallback to all active family members
-            $recipients = FamilyMember::where('family_id', $event->family_id)->where('status', 'ACTIVE')->get();
-        }
+        $recipients = FamilyMember::where('family_id', $event->family_id)->where('status', 'ACTIVE')->get();
         foreach ($recipients as $member) {
             $key = strtolower($type) . ":{$event->id}:{$event->updated_at->toIso8601String()}:{$member->id}";
             self::dispatch($event->family_id, $member->id, $type, $key, $text, ['event_id' => $event->id], now(), $event);
@@ -124,6 +118,6 @@ class TelegramNotificationService
             text: $text,
             payload: $payload,
             scheduledAt: $scheduledAt instanceof \DateTimeInterface ? $scheduledAt->toIso8601String() : null,
-        ))->onQueue('notifications');
+        ))->onQueue('notifications')->afterCommit();
     }
 }

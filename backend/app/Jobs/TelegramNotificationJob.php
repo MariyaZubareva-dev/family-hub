@@ -104,10 +104,9 @@ class TelegramNotificationJob implements ShouldQueue
         $base = rtrim((string) config('app.url', env('APP_URL', '')), '/');
         if ($base === '') return null;
         return match ($this->notificationType) {
-            'EVENT_REMINDER', 'EVENT_CHANGED', 'EVENT_CANCELLED' => $base . '/calendar',
-            'REMINDER' => $base . '/calendar',
-            'AI_READY_FOR_REVIEW' => $base . '/finance',
-            'BUDGET_WARNING' => $base . '/finance',
+            'EVENT_REMINDER', 'EVENT_CHANGED', 'EVENT_CANCELLED', 'REMINDER' => $base . '/?section=calendar',
+            'AI_READY_FOR_REVIEW', 'BUDGET_WARNING' => $base . '/?section=finance',
+            'PURCHASE_DUE' => $base . '/?section=lists',
             default => $base,
         };
     }

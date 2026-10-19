@@ -150,16 +150,33 @@ class CreditController extends BaseApiController
         $data = $request->validate([
             'amount' => ['required', 'numeric', 'gt:0'],
             'paid_on' => ['required', 'date', 'after_or_equal:' . $credit->start_date, 'before_or_equal:today'],
+            'recalculation_mode' => ['sometimes', 'in:TERM,PAYMENT'],
             'comment' => ['nullable', 'string', 'max:255'],
         ]);
 
         $prepayment = CreditPrepayment::create([
             ...$data,
+            'recalculation_mode' => $data['recalculation_mode'] ?? $credit->recalculation_mode,
             'credit_id' => $credit->id,
             'created_by' => $membership->user_id,
         ]);
 
         return response()->json(['data' => $prepayment], 201);
+    }
+
+    public function updatePrepayment(Request $request, CreditPrepayment $prepayment): JsonResponse
+    {
+        $credit = $prepayment->credit;
+        $membership = $this->membership($request, $credit->family_id);
+        $this->assertAdmin($membership);
+        $data = $request->validate([
+            'amount' => ['sometimes', 'numeric', 'gt:0'],
+            'paid_on' => ['sometimes', 'date', 'after_or_equal:' . $credit->start_date, 'before_or_equal:today'],
+            'recalculation_mode' => ['sometimes', 'in:TERM,PAYMENT'],
+            'comment' => ['sometimes', 'nullable', 'string', 'max:255'],
+        ]);
+        $prepayment->update($data);
+        return response()->json(['data' => $prepayment->fresh()]);
     }
 
     public function destroyPrepayment(Request $request, CreditPrepayment $prepayment): JsonResponse

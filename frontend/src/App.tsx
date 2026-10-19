@@ -74,15 +74,11 @@ type Section = 'home'|'calendar'|'lists'|'finance'|'family'
 type FinanceTab = 'overview'|'categories'|'receipts'|'stocks'|'large'|'credits'|'budget'
 
 export default function App(){
-  const [section,setSection]=useState<Section>('finance')
+  const [section,setSection]=useState<Section>(()=>{const target=new URLSearchParams(window.location.search).get('section');return ['home','calendar','lists','finance','family'].includes(target||'')?target as Section:'home'})
   const [fTab,setFTab]=useState<FinanceTab>('overview')
   const [selectedCat,setSelectedCat]=useState<string|null>(null)
-  const [receiptItems,setReceiptItems]=useState([
-    { id:'1', name:'Молоко 1л', qty:1, price:89, cat:'Продукты' },
-    { id:'2', name:'Хлеб Бородинский', qty:1, price:45, cat:'Продукты' },
-    { id:'3', name:'Сыр 200г', qty:1, price:210, cat:'Продукты' },
-  ])
-  const [showReceiptConfirm,setShowReceiptConfirm]=useState(true)
+  const [receiptItems,setReceiptItems]=useState<any[]>([])
+  const [showReceiptConfirm,setShowReceiptConfirm]=useState(false)
   const [monthlyPlan,setMonthlyPlan]=useState(10000)
 
   const totalExpense = useMemo(()=> CATS.reduce((s,c)=>s+c.amount,0),[])
@@ -96,12 +92,12 @@ export default function App(){
     {/* TOPBAR */}
     <header className="topbar">
       <div>
-        <div className="eyebrow">Семья • Москва • Teal v07</div>
+        <div className="eyebrow">Семейное пространство</div>
         <h1>Family Hub</h1>
       </div>
       <div className="topbar-right">
-        <span className="badge-pill">Demo v07</span>
-        <div className="user-badge">М</div>
+        <span className="badge-pill">Семейный кабинет</span>
+        <div className="user-badge">👨‍👩‍👧</div>
       </div>
     </header>
 
@@ -123,7 +119,7 @@ export default function App(){
     <nav className="bottom-nav">
       <Nav active={section==='home'} label="Главная" icon="⌂" onClick={()=>setSection('home')} />
       <Nav active={section==='calendar'} label="Календарь" icon="▦" onClick={()=>setSection('calendar')} />
-      <Nav active={section==='lists'} label="Списки" icon="☷" onClick={()=>setSection('lists')} />
+      <Nav active={section==='lists'} label="Покупки" icon="☷" onClick={()=>setSection('lists')} />
       <Nav active={section==='finance'} label="Финансы" icon="₽" onClick={()=>setSection('finance')} />
       <Nav active={section==='family'} label="Семья" icon="👨‍👩‍👧" onClick={()=>setSection('family')} />
     </nav>
@@ -138,63 +134,18 @@ function Nav(p:{active:boolean; label:string; icon:string; onClick:()=>void}){
 
 // ---------- HOME — dashboard спека ----------
 function HomeView(p:{onGo:(s:Section)=>void; totalExpense:number}){
-  const todayEvents = [
-    { time:'14:00', title:'Врач', place:'Поликлиника', who:'Папа', type:'family' },
-    { time:'18:00', title:'Забрать посылку', place:'Пункт выдачи', who:'Мама', type:'private' },
-  ]
-  const recentTx = [
-    { amount: 1200, category:'Продукты', desc:'Магнит', author:'Мама', avatar:'М', color:'#EF4444' },
-    { amount: 450, category:'Еда вне дома', desc:'Кофе', author:'Папа', avatar:'П', color:'#F97316' },
-    { amount: 8000, category:'Работа', desc:'Доход', author:'Папа', avatar:'П', color:'#0EA5E9', income:true },
-  ]
-  return <div className="stack">
-    <SectionTitle title="Сегодня" subtitle={`${new Date().toLocaleDateString('ru-RU',{day:'numeric',month:'long',year:'numeric'})} • Europe/Moscow • графики вверху, детали ниже`} action={<span className="pill live">● LIVE • Teal</span>} />
-    <div className="grid-2">
-      <div className="card">
-        <div className="card-head"><h3>Сегодня</h3><button className="button secondary small" onClick={()=>p.onGo('calendar')}>Календарь →</button></div>
-        {todayEvents.map(ev=> <div key={ev.title} style={{display:'flex',gap:10,padding:'10px 0',borderBottom:'1px solid #F1F1EF',alignItems:'center'}}>
-          <div style={{width:44,height:44,borderRadius:12,background: ev.type==='family'?'var(--primary-soft)':'#FFF7ED',border:'1px solid var(--border)',display:'grid',placeItems:'center',fontWeight:800,color: ev.type==='family'?'var(--primary)':'#92400E'}}>{ev.time.slice(0,2)}</div>
-          <div style={{flex:1}}><div style={{fontWeight:700,fontSize:13}}>{ev.time} — {ev.title} <span style={{fontWeight:600,fontSize:11,padding:'2px 6px',borderRadius:999,background: ev.type==='family'?'var(--primary-soft)':'#FFEDD5',color: ev.type==='family'?'var(--primary)':'#9A3412',border:'1px solid #E9E6E1'}}>{ev.type==='family'?'👥 Семья':'🔒 '+ev.who}</span></div><div style={{fontSize:12,color:'var(--muted)'}}>{ev.place} • отвечает {ev.who}</div></div>
-          <span className="pill" style={{fontSize:10}}>{ev.type==='family'?'общее':'личное'}</span>
-        </div>)}
-        <div style={{marginTop:10,display:'flex',gap:8}}><button className="button primary small" style={{flex:1}} onClick={()=>p.onGo('calendar')}>＋ Событие</button><button className="button secondary small" style={{flex:1}} onClick={()=>p.onGo('calendar')}>＋ Напоминание</button></div>
-      </div>
-      <div className="card">
-        <div className="card-head"><h3>Баланс семьи</h3><span className="pill live">Teal • графики вверху</span></div>
-        <div className="grid-3" style={{gap:8}}>
-          <div className="metric balance"><small>Баланс</small><strong style={{color:'#0F766E'}}>+10 527 ₽</strong><small style={{color:'#0F766E'}}>8% от доходов</small></div>
-          <div className="metric"><small>Расходы</small><strong>{shortRub(p.totalExpense)}</strong><small>20 категорий</small></div>
-          <div className="metric"><small>В планах</small><strong>24 956 ₽</strong><small>крупные + кредиты</small></div>
-        </div>
-        <div className="chart-wrap" style={{marginTop:12,marginBottom:0,padding:12}}>
-          <div className="chart-wrap-head"><strong>Тренд 6 мес</strong><small>доходы vs расходы</small></div>
-          <MiniTrend />
-        </div>
-        <button className="button primary full" style={{marginTop:12}} onClick={()=>p.onGo('finance')}>Открыть финансы →</button>
-      </div>
-    </div>
-    <div className="grid-2">
-      <div className="card">
-        <div className="card-head"><h3>Списки • нужно докупить</h3><button className="button secondary small" onClick={()=>p.onGo('lists')}>Списки →</button></div>
-        {['Молоко','Хлеб','Яйца 10шт'].map(t=> <div key={t} className="list-item-card"><button className="checkbox" />{t}<span className="pill" style={{fontSize:10}}>Продукты</span></div>)}
-        <div className="list-item-card" style={{background:'#FFF7ED',borderRadius:10,padding:'8px 10px',marginTop:6}}><span style={{width:22,height:22,borderRadius:'50%',background:'#E11D48',color:'#fff',display:'grid',placeItems:'center',fontSize:10}}>!</span><strong style={{fontSize:12}}>Туал. бумага — через 3 дня</strong><button className="button primary small" onClick={()=>p.onGo('lists')}>Купил</button></div>
-      </div>
-      <div className="card">
-        <div className="card-head"><h3>Последние операции</h3><span className="pill">кто внёс</span></div>
-        {recentTx.map(tx=> <div key={tx.desc+tx.amount} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'10px 0',borderBottom:'1px solid #F1F1EF',gap:10}}>
-          <div style={{display:'flex',gap:10,alignItems:'center'}}>
-            <span style={{width:32,height:32,borderRadius:'50%',background:tx.color,color:'#fff',display:'grid',placeItems:'center',fontSize:14}}>{tx.category==='Продукты'?'🥫': tx.category==='Работа'?'🏢':'🥤'}</span>
-            <div><div style={{fontWeight:700,fontSize:13}}>{tx.desc} <span style={{fontWeight:600,color:'var(--muted)',fontSize:12}}>• {tx.category}</span></div><div style={{fontSize:11,color:'var(--muted)',display:'flex',alignItems:'center',gap:6}}><span style={{width:18,height:18,borderRadius:'50%',background:'var(--surface-2)',border:'1px solid var(--border)',display:'grid',placeItems:'center',fontSize:10,fontWeight:800}}>{tx.avatar}</span>{tx.author} • сегодня</div></div>
-          </div>
-          <strong style={{color: tx.income?'#0D9A6E':'#E11D48',fontSize:14}}>{tx.income?'+':''}{rub(tx.amount)}</strong>
-        </div>)}
-        <button className="button secondary full" style={{marginTop:12}} onClick={()=>p.onGo('finance')}>Все операции →</button>
-      </div>
-    </div>
+  const [events,setEvents]=useState<any[]>([]);const [reminders,setReminders]=useState<any[]>([]);const [credits,setCredits]=useState<any[]>([]);const [analytics,setAnalytics]=useState<any>(null)
+  useEffect(()=>{const n=new Date();const q=`?period=month&year=${n.getFullYear()}&month=${n.getMonth()+1}`;Promise.allSettled([apiGet('/events'),apiGet('/reminders'),apiGet('/credits'),apiGet('/finance/analytics'+q)]).then(r=>{if(r[0].status==='fulfilled')setEvents(r[0].value.data||[]);if(r[1].status==='fulfilled')setReminders(r[1].value.data||[]);if(r[2].status==='fulfilled')setCredits(r[2].value.data||[]);if(r[3].status==='fulfilled')setAnalytics(r[3].value.data)})},[])
+  const soon=[...events.filter(x=>x.status==='SCHEDULED').map(x=>({...x,_at:new Date(x.start_at),_kind:'Событие'})),...reminders.filter(x=>x.status==='SCHEDULED').map(x=>({...x,_at:new Date(x.scheduled_at),_kind:'Напоминание'}))].filter(x=>x._at>=new Date()).sort((a,b)=>a._at-b._at).slice(0,5)
+  const cats=(analytics?.ranked||[]).slice(0,6);const max=Math.max(1,...cats.map((c:any)=>Number(c.amount)||0))
+  const next=credits.map(c=>{const [y,m,day]=String(c.first_payment_date).slice(0,10).split('-').map(Number);const first=new Date(y,m-1,day);const today=new Date();today.setHours(0,0,0,0);const addMonth=(n:number)=>{const ix=first.getFullYear()*12+first.getMonth()+n;const yr=Math.floor(ix/12);const mo=ix%12;return new Date(yr,mo,Math.min(first.getDate(),new Date(yr,mo+1,0).getDate()))};let idx=Math.max(0,(today.getFullYear()-first.getFullYear())*12+today.getMonth()-first.getMonth());let d=addMonth(idx);if(d<today){idx++;d=addMonth(idx)}const installment=idx+1;const part=(c.payment_schedule||[]).find((x:any)=>installment>=Number(x.from_month)&&installment<=Number(x.to_month));return {...c,_next:d,_nextAmount:Number(part?.amount??c.standard_payment)}}).sort((a,b)=>a._next-b._next).slice(0,4)
+  return <div className="stack"><SectionTitle title="Обзор семьи" subtitle={new Date().toLocaleDateString('ru-RU',{day:'numeric',month:'long',year:'numeric'})} />
+    <div className="grid-2"><div className="card"><div className="card-head"><h3>События и напоминания</h3><button className="button secondary small" onClick={()=>p.onGo('calendar')}>Календарь →</button></div>{soon.length?soon.map((x:any)=><div className="list-item-card" key={x._kind+x.id}><span className="pill">{x._kind}</span><strong style={{flex:1}}>{x.title}</strong><small>{x._at.toLocaleString('ru-RU',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'})}</small></div>):<p className="muted">Ближайших событий и напоминаний нет.</p>}<button className="button primary small" onClick={()=>p.onGo('calendar')}>＋ Добавить</button></div>
+      <div className="card"><div className="card-head"><h3>Бюджет за месяц</h3><button className="button secondary small" onClick={()=>p.onGo('finance')}>Финансы →</button></div><div className="grid-3"><div className="metric"><small>Доходы</small><strong>{rub(Number(analytics?.total_income)||0)}</strong></div><div className="metric"><small>Расходы</small><strong>{rub(Number(analytics?.total_expense)||0)}</strong></div><div className="metric balance"><small>Остаток</small><strong style={{color:(Number(analytics?.balance)||0)>=0?'#0F766E':'#E11D48'}}>{rub(Number(analytics?.balance)||0)}</strong></div></div>{cats.length?cats.map((c:any)=><div key={c.id||c.name} style={{marginTop:8}}><div className="summary-line"><span>{c.name}</span><b>{rub(Number(c.amount)||0)}</b></div><div className="progress"><span style={{width:`${Math.max(2,Number(c.amount)/max*100)}%`,background:c.color||'#0F766E'}} /></div></div>):<p className="muted">Расходы появятся после добавления операций.</p>}</div></div>
+    <div className="card"><div className="card-head"><h3>Ближайшие платежи по кредитам</h3><button className="button secondary small" onClick={()=>{p.onGo('finance')}}>Кредиты →</button></div>{next.length?next.map((c:any)=><div className="list-item-card" key={c.id}><strong style={{flex:1}}>{c.name||'Кредит'}</strong><span>{c._next.toLocaleDateString('ru-RU')}</span><b>{rub(Number(c._nextAmount)||0)}</b></div>):<p className="muted">Кредиты не добавлены.</p>}</div>
   </div>
 }
 
-// ---------- FINANCE — MODERN ANALYSIS (Teal, approved 24.09) ----------
 function FinanceV07(p:{
   fTab:FinanceTab; setFTab:(t:FinanceTab)=>void;
   totalExpense:number; ranked:Cat[]; donutData:Cat[];
@@ -227,7 +178,7 @@ function FinanceV07(p:{
 
   useEffect(()=>{
     let cancelled=false
-    const year=2026, month=9
+    const now=new Date(); const year=now.getFullYear(), month=now.getMonth()+1
     const q = period==='month' ? `?period=month&year=${year}&month=${month}` : `?period=${period}`
     setLoading(true); setApiError(null)
     apiGet(`/finance/analytics${q}`).then(j=>{ if(!cancelled){ setApiData(j.data) } }).catch(e=>{ if(!cancelled) setApiError(String(e.message).slice(0,120)) }).finally(()=>{ if(!cancelled) setLoading(false) })
@@ -266,12 +217,12 @@ function FinanceV07(p:{
     }finally{ setSavingTx(false) }
   }
 
-  const displayTotal: number = apiData?.total_expense ?? p.totalExpense
-  const displayIncome: number = apiData?.total_income ?? 173571
+  const displayTotal: number = apiData?.total_expense ?? 0
+  const displayIncome: number = apiData?.total_income ?? 0
   const displayBalance: number = apiData?.balance ?? (displayIncome - displayTotal)
   // api ranked already has icon/color/amount/percent/limit
-  const displayRanked: any[] = apiData?.ranked ?? p.ranked.map((c:any)=>({ ...c, percent: displayTotal? Math.round(c.amount/displayTotal*100):0 }))
-  const displayDonut: any[] = apiData?.donut ?? p.donutData
+  const displayRanked: any[] = apiData?.ranked ?? []
+  const displayDonut: any[] = apiData?.donut ?? displayRanked
   const displayTrend: any[] | null = apiData?.trend ?? null
 
   const filteredRanked = useMemo(()=>{
@@ -302,7 +253,6 @@ function FinanceV07(p:{
         ['categories','Категории'],
         ['receipts','Чеки'],
         ['stocks','Запасы'],
-        ['large','Крупные'],
         ['credits','Кредиты'],
         ['budget','Бюджет'],
       ].map(([k,l])=><button key={k} className={p.fTab===k?'finance-tab active':'finance-tab'} onClick={()=>p.setFTab(k as FinanceTab)}>{l}</button>)}
@@ -312,10 +262,10 @@ function FinanceV07(p:{
       {/* TOP METRICS — live from API */}
       <div className="grid-3">
         <div className="metric"><small>Доходы</small><strong style={{color:'#0D9A6E'}}>{rub(displayIncome)}</strong><small style={{fontSize:11}}>Работа + кешбэк {loading?'• загрузка…':''}</small></div>
-        <div className="metric"><small>Расходы</small><strong style={{color:'#E11D48'}}>{rub(displayTotal)}</strong><small style={{fontSize:11}}>{displayRanked.length} категорий {apiError?'• мок':''}</small></div>
+        <div className="metric"><small>Расходы</small><strong style={{color:'#E11D48'}}>{rub(displayTotal)}</strong><small style={{fontSize:11}}>{displayRanked.length} категорий</small></div>
         <div className="metric balance"><small>Баланс</small><strong style={{color: displayBalance>=0?'#0F766E':'#E11D48'}}>{(displayBalance>=0?'+':'')+rub(displayBalance)}</strong><small style={{fontSize:11, color:'#0F766E'}}>{displayIncome? Math.round(displayBalance/displayIncome*100)+'% от доходов':''}</small></div>
       </div>
-      {apiError && <div style={{padding:'8px 10px',background:'#FFE4E6',border:'1px solid #FECDD3',borderRadius:10,fontSize:12,color:'#9F1239'}}>API недоступен — показываю мок. {apiError.slice(0,80)}</div>}
+      {apiError && <div style={{padding:'8px 10px',background:'#FFE4E6',border:'1px solid #FECDD3',borderRadius:10,fontSize:12,color:'#9F1239'}}>Не удалось загрузить аналитику финансов. {apiError.slice(0,80)}</div>}
 
       <div className="segmented" style={{marginBottom:0}}>
         <button className={period==='month'?'active':''} onClick={()=>setPeriod('month')}>Месяц</button>
@@ -328,7 +278,7 @@ function FinanceV07(p:{
       <div className="card" style={{padding:0, overflow:'hidden'}}>
         <div style={{padding:14, paddingBottom:0}}>
           <div className="chart-wrap-head">
-            <strong>Аналитика расходов</strong><small>{loading?'загрузка…':'сентябрь 2026 • графики вверху'}</small>
+            <strong>Аналитика расходов</strong><small>{loading?'загрузка…':new Date().toLocaleDateString('ru-RU',{month:'long',year:'numeric'})}</small>
             <div style={{display:'flex',gap:6}}>
               <select className="select" style={{padding:'7px 10px',border:'1px solid #D8DDE5',borderRadius:10,background:'#fff',fontSize:12,fontWeight:600}} value={activeCat||'all'} onChange={e=>setActiveCat(e.target.value==='all'?null:e.target.value)}><option value="all">Все категории</option>{displayDonut.map((c:any)=><option key={c.id} value={c.id}>{c.name}</option>)}</select>
             </div>
@@ -423,7 +373,7 @@ function FinanceV07(p:{
         </div>
         <div style={{marginTop:8}}>
           {visibleRanked.map(c=>{
-            const pct = p.totalExpense ? Math.round(c.amount/p.totalExpense*100) : 0
+            const pct = displayTotal ? Math.round(c.amount/displayTotal*100) : 0
             const isActive = activeCat===c.id
             const over = c.budget && c.amount>c.budget
             const limitPos = c.budget ? Math.min(100, Math.round(c.budget / (c.amount/ pct *100) *100)) : null
@@ -491,15 +441,13 @@ function FinanceV07(p:{
       </div>
     </>}
 
-    {p.fTab==='receipts' && <ReceiptsTab items={p.receiptItems} setItems={p.setReceiptItems} show={p.showReceiptConfirm} setShow={p.setShowReceiptConfirm} />}
+    {p.fTab==='receipts' && <ReceiptsTab items={p.receiptItems} setItems={p.setReceiptItems} show={p.showReceiptConfirm} setShow={p.setShowReceiptConfirm} onDataChanged={()=>setRefreshKey(k=>k+1)} />}
 
     {p.fTab==='stocks' && <StocksTab />}
 
-    {p.fTab==='large' && <LargeTab monthly={p.monthlyPlan} setMonthly={p.setMonthlyPlan} />}
-
     {p.fTab==='credits' && <CreditsTab />}
 
-    {p.fTab==='budget' && <BudgetTab ranked={p.ranked} />}
+    {p.fTab==='budget' && <BudgetTab ranked={displayRanked} income={displayIncome} expense={displayTotal} />}
   </div>
 }
 
@@ -596,8 +544,10 @@ function CategoryGridRelevant(){
 }
 
 // ---- RECEIPTS — live API with N-confirm ----
-function ReceiptsTab(p:{items:any[]; setItems:(a:any[])=>void; show:boolean; setShow:(b:boolean)=>void}){
+function ReceiptsTab(p:{items:any[]; setItems:(a:any[])=>void; show:boolean; setShow:(b:boolean)=>void; onDataChanged?:()=>void}){
   const [receipt,setReceipt]=useState<any>(null)
+  const [receiptDate,setReceiptDate]=useState(new Date().toISOString().slice(0,10))
+  const [merchant,setMerchant]=useState('')
   const [uploading,setUploading]=useState(false)
   const [saving,setSaving]=useState(false)
   const [error,setError]=useState<string|null>(null)
@@ -611,8 +561,9 @@ function ReceiptsTab(p:{items:any[]; setItems:(a:any[])=>void; show:boolean; set
     if(receipt?.id){
       setSaving(true)
       apiPatch(`/finance/receipts/${receipt.id}`, {
-        merchant: receipt.merchant || 'Магнит',
+        merchant: merchant || undefined,
         total: next.reduce((s:any,it:any)=>s+it.price*it.qty,0),
+        date: receiptDate,
         items: next.map((it:any)=>({ name: it.name, qty: it.qty, price: it.price, category: it.cat }))
       }).catch(e=>setError(String(e).slice(0,100))).finally(()=>setSaving(false))
     }
@@ -627,30 +578,32 @@ function ReceiptsTab(p:{items:any[]; setItems:(a:any[])=>void; show:boolean; set
       setReceipt(r)
       // Populate items from review_payload or ai_result
       const payload = r.review_payload || r.ai_result?.parsed || r.ai_result?.review_payload
+      setReceiptDate(payload?.date || payload?.occurred_on || new Date().toISOString().slice(0,10))
+      setMerchant(payload?.merchant || '')
       if(payload?.items?.length){
-        const mapped = payload.items.map((it:any,i:number)=>({ id: String(Date.now()+i), name: it.name||it.title||'Товар', qty: Number(it.qty||1), price: Number(it.price||0), cat: it.category||'Продукты' }))
+        const mapped = payload.items.map((it:any,i:number)=>({ id: String(Date.now()+i), name: it.name||it.title||'Товар', qty: Number(it.qty||1), price: Number(it.price||0), cat: it.category||'Покупки' }))
         p.setItems(mapped)
+      } else {
+        p.setItems([])
       }
       p.setShow(true)
     }catch(e:any){
       setError(String(e.message||e).slice(0,150))
-      // fallback: show mock
-      p.setShow(true)
     }finally{setUploading(false)}
   }
 
   const onConfirm = async ()=>{
     if(!receipt?.id){
-      // mock confirm
-      alert(`Мок: создано ${p.items.length} транзакций на ${rub(total)} — без бэка. Загрузите фото для реального POST /receipts/{id}/confirm`)
+      setError('Сначала загрузите фотографию чека.');
       return
     }
     setConfirming(true); setError(null)
     try{
-      const payload = { merchant: receipt.merchant||'Магнит', total, date: new Date().toISOString().slice(0,10), items: p.items.map(it=>({ name: it.name, qty: it.qty, price: it.price, category: it.cat })) }
+      const payload = { merchant: merchant||undefined, total, date: receiptDate, items: p.items.map(it=>({ name: it.name, qty: it.qty, price: it.price, category: it.cat })) }
       const j = await apiPost(`/finance/receipts/${receipt.id}/confirm`, payload)
       alert(`Подтверждено! Создано ${j.data.created_count} транзакций на ${rub(j.data.total_amount)} • receipt ${receipt.id} → CONFIRMED`)
       p.setShow(false)
+      p.onDataChanged?.()
     }catch(e:any){
       setError(String(e.message||e).slice(0,150))
     }finally{setConfirming(false)}
@@ -663,9 +616,9 @@ function ReceiptsTab(p:{items:any[]; setItems:(a:any[])=>void; show:boolean; set
         <div style={{display:'grid', gridTemplateColumns:'72px 1fr', gap:12, alignItems:'center'}}>
           <div style={{width:72,height:72,borderRadius:12,background:'#FFF7ED',border:'1px solid #FED7AA',display:'grid',placeItems:'center',fontSize:28}}>🧾</div>
           <div>
-            <div style={{fontWeight:700}}>{receipt? `Чек ${receipt.id.slice(0,8)} • ${receipt.ocr_status}` : 'Магнит • 12.09.2026 • демо'}</div>
-            <div style={{fontSize:12,color:'var(--muted)'}}>{receipt? `Файл: ${receipt.file_name||'—'} • review_payload ${receipt.review_payload?'готово':'—'}` : 'AI распознает 3 позиции • уверенность 92% (мок)'}</div>
-            <div className="pill live" style={{marginTop:6, display:'inline-flex'}}>● {receipt? receipt.ocr_status : 'PENDING → REVIEW'} {saving?'• сохранение…':''}</div>
+            <div style={{fontWeight:700}}>{receipt? `Чек ${receipt.id.slice(0,8)} • ${receipt.ocr_status}` : 'Загрузите фото чека'}</div>
+            <div style={{fontSize:12,color:'var(--muted)'}}>{receipt? `Файл: ${receipt.file_name||'—'}` : 'ИИ распознает позиции, дату и суммы, если настроен ключ AI API.'}</div>
+            <div className="pill live" style={{marginTop:6, display:'inline-flex'}}>● {receipt? receipt.ocr_status : 'Ожидает загрузки'} {saving?'• сохранение…':''}</div>
           </div>
         </div>
         {error && <div style={{marginTop:8,padding:'8px 10px',background:'#FFE4E6',border:'1px solid #FECDD3',borderRadius:10,fontSize:12,color:'#9F1239'}}>{error}</div>}
@@ -678,9 +631,10 @@ function ReceiptsTab(p:{items:any[]; setItems:(a:any[])=>void; show:boolean; set
         </div>
       </div>
 
-      {!p.show ? <button className="button primary full" onClick={()=>p.setShow(true)}>📷 Открыть демо-таблицу (мок)</button> :
+      {!p.show ? <div className="muted">После загрузки чека здесь появятся распознанные позиции для проверки.</div> :
       <>
-        <div className="card-head"><h3>Проверь распознавание</h3><span className="pill" style={{background:'#FEF3C7', color:'#92400E', borderColor:'#FDE68A'}}>{receipt?'live — можно редактировать':'мок — можно редактировать'}</span></div>
+        <div className="card-head"><h3>Проверьте распознавание</h3><span className="pill" style={{background:'#FEF3C7', color:'#92400E', borderColor:'#FDE68A'}}>{receipt?.ocr_status||'ожидает'}</span></div>
+        <div style={{display:'flex',gap:8,marginBottom:10}}><input placeholder="Магазин" value={merchant} onChange={e=>setMerchant(e.target.value)} /><label>Дата покупки<input type="date" value={receiptDate} onChange={e=>setReceiptDate(e.target.value)} /></label></div>
         <div style={{overflow:'auto', border:'1px solid var(--border)', borderRadius:12}}>
           <table className="receipt-table">
             <thead><tr><th>Товар</th><th>Кол</th><th>Цена</th><th>Категория</th><th></th></tr></thead>
@@ -700,7 +654,7 @@ function ReceiptsTab(p:{items:any[]; setItems:(a:any[])=>void; show:boolean; set
           </table>
         </div>
         <div style={{display:'flex', gap:8, marginTop:12}}>
-          <button className="button secondary" style={{flex:1}} onClick={()=>p.setItems([...p.items,{id:String(Date.now()), name:'Новый товар', qty:1, price:0, cat:'Продукты'}])}>＋ Позиция</button>
+          <button className="button secondary" style={{flex:1}} onClick={()=>p.setItems([...p.items,{id:String(Date.now()), name:'Новый товар', qty:1, price:0, cat:'Покупки'}])}>＋ Позиция</button>
           <button className="button ghost" style={{flex:1}} onClick={()=>p.setShow(false)}>Отмена</button>
         </div>
         <div style={{marginTop:14, padding:14, background:'var(--surface-2)', border:'1px solid var(--border)', borderRadius:14, display:'flex', justifyContent:'space-between', alignItems:'center'}}>
@@ -831,150 +785,74 @@ function LargeTab(p:{monthly:number; setMonthly:(n:number)=>void}){
 
 // ---- CREDITS — live ----
 function CreditsTab(){
-  const [credits,setCredits]=useState<any[]>([])
-  const [date,setDate]=useState('2026-10-15')
-  const [sum,setSum]=useState('50000')
-  const [mode,setMode]=useState<'TERM'|'PAYMENT'>('TERM')
-  const [saving,setSaving]=useState(false)
-  useEffect(()=>{ apiGet('/credits').then(j=> setCredits(j.data||[])).catch(()=>{}) },[])
-  const schedule = [
-    {m:1, amount:12340}, {m:2, amount:12340}, {m:3, amount:12340}, {m:4, amount:12100}, {m:5, amount:11800}
-  ]
-  const submit = async ()=>{
-    const creditId = credits[0]?.id || 'demo'
-    if(creditId==='demo'){ alert('Демо: в реальности POST /credits/'+creditId+'/prepayments — график пересчитается'); return }
-    const amt=parseFloat(sum)
-    if(!amt) return alert('Введите сумму')
-    setSaving(true)
-    try{ await apiPost(`/credits/${creditId}/prepayments`, {amount: amt, prepayment_date: date, recalculation_mode: mode}); alert('Досрочка добавлена'); const j=await apiGet('/credits'); setCredits(j.data||[]) }catch(e:any){ alert(String(e.message||e).slice(0,120)) }finally{ setSaving(false) }
-  }
-  return <div className="stack">
-    <div className="card">
-      <div className="chart-wrap">
-        <div className="chart-wrap-head"><strong>Остаток долга</strong><small>график вверху</small></div>
-        <svg viewBox="0 0 300 90" width="100%" height={90} style={{display:'block'}}>
-          <defs><linearGradient id="g" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#0F766E" stopOpacity={.25}/><stop offset="100%" stopColor="#0F766E" stopOpacity={0}/></linearGradient></defs>
-          <path d="M0,70 L40,60 L80,52 L120,40 L160,28 L200,18 L240,10 L300,6 L300,90 L0,90 Z" fill="url(#g)" />
-          <polyline fill="none" stroke="#0F766E" strokeWidth={2.5} points="0,70 40,60 80,52 120,40 160,28 200,18 240,10 300,6" strokeLinejoin="round" strokeLinecap="round" />
-        </svg>
-        <div style={{display:'flex', justifyContent:'space-between', fontSize:11, color:'var(--muted)'}}><span>Сейчас 2.4M ₽</span><span>Через 5 лет 1.1M ₽</span></div>
-      </div>
-      <div className="credit-summary">
-        <div><small>Остаток</small><strong>2 400 000 ₽</strong></div>
-        <div><small>Ставка</small><strong>3.5%</strong></div>
-        <div><small>Платеж</small><strong>12 340 ₽</strong></div>
-      </div>
-      <div style={{display:'flex', gap:8}}>
-        <div className="pill live">TERM · срок</div>
-        <div className="pill">PAYMENT · платёж</div>
-      </div>
-    </div>
-    <div className="card">
-      <div className="card-head"><h3>Досрочное погашение</h3><span className="pill">live</span></div>
-      <div className="form-grid">
-        <input type="date" value={date} onChange={e=>setDate(e.target.value)} />
-        <input type="number" placeholder="Сумма" value={sum} onChange={e=>setSum(e.target.value)} />
-        <select className="wide" value={mode} onChange={e=>setMode(e.target.value as any)}><option value="TERM">Уменьшить срок (TERM)</option><option value="PAYMENT">Уменьшить платеж (PAYMENT)</option></select>
-      </div>
-      <button className="button primary full" style={{marginTop:10}} disabled={saving} onClick={submit}>{saving?'Сохранение…':'Добавить досрочку → пересчитать график'}</button>
-    </div>
-    <div className="card">
-      <div className="card-head"><h3>График платежей</h3><button className="button secondary small">Показать ещё</button></div>
-      {schedule.map(r=><div key={r.m} className="credit-row"><span>Месяц {r.m}</span><strong>{rub(r.amount)}</strong></div>)}
-    </div>
+  const [credits,setCredits]=useState<any[]>([]);const [date,setDate]=useState(new Date().toISOString().slice(0,10));const [sum,setSum]=useState('');const [mode,setMode]=useState<'TERM'|'PAYMENT'>('TERM');const [saving,setSaving]=useState(false);const [error,setError]=useState('')
+  const [selectedCredit,setSelectedCredit]=useState('')
+  const refresh=()=>apiGet('/credits').then(j=>setCredits(j.data||[])).catch(e=>setError(String(e.message||e).slice(0,140)))
+  useEffect(()=>{refresh()},[])
+  useEffect(()=>{if(!selectedCredit&&credits[0])setSelectedCredit(credits[0].id)},[credits,selectedCredit])
+  const submit=async()=>{const credit=credits.find(c=>c.id===selectedCredit)||credits[0];if(!credit){setError('Сначала добавьте кредит.');return}const amount=Number(sum);if(!amount||amount<=0){setError('Введите положительную сумму.');return}setSaving(true);setError('');try{await apiPost(`/credits/${credit.id}/prepayments`,{amount,paid_on:date,recalculation_mode:mode});setSum('');await refresh()}catch(e:any){setError(String(e.message||e).slice(0,160))}finally{setSaving(false)}}
+  const updateMode=async(id:string,value:'TERM'|'PAYMENT')=>{try{await apiPatch(`/credit-prepayments/${id}`,{recalculation_mode:value});await refresh()}catch(e:any){setError(String(e.message||e).slice(0,140))}}
+  const credit=credits.find(c=>c.id===selectedCredit)||credits[0]
+  return <div className="stack"><div className="card"><div className="card-head"><h3>Кредиты семьи</h3><button className="button secondary small" onClick={refresh}>Обновить</button></div>{error&&<p style={{color:'#B91C1C'}}>{error}</p>}
+    {credits.length?<div style={{overflowX:'auto'}}><table className="receipt-table"><thead><tr><th>Кредит</th><th>Сумма</th><th>Ставка</th><th>Ежемесячный платёж</th><th>Срок</th></tr></thead><tbody>{credits.map(c=><tr key={c.id}><td>{c.name||'Кредит'}</td><td>{rub(Number(c.principal))}</td><td>{Number(c.annual_rate)}%</td><td>{rub(Number(c.standard_payment))}</td><td>{Number(c.term_months)} мес.</td></tr>)}</tbody></table></div>:<p className="muted">Кредиты пока не добавлены.</p>}
+    {credit&&<div className="grid-3" style={{marginTop:12}}><div className="metric"><small>Сумма кредита</small><strong>{rub(Number(credit.principal))}</strong></div><div className="metric"><small>Первый платёж</small><strong>{new Date(credit.first_payment_date).toLocaleDateString('ru-RU')}</strong></div><div className="metric"><small>Стратегия по умолчанию</small><strong>{credit.recalculation_mode==='TERM'?'Срок':'Платёж'}</strong></div></div>}
+  </div>
+  <div className="card"><div className="card-head"><h3>Досрочное погашение</h3><span className="pill">Исторические даты доступны</span></div><div className="form-grid">{credits.length>1&&<select className="wide" value={selectedCredit} onChange={e=>setSelectedCredit(e.target.value)}>{credits.map(c=><option key={c.id} value={c.id}>{c.name||'Кредит'}</option>)}</select>}<label>Дата платежа<input type="date" max={new Date().toISOString().slice(0,10)} value={date} onChange={e=>setDate(e.target.value)} /></label><input type="number" min="0.01" placeholder="Сумма" value={sum} onChange={e=>setSum(e.target.value)} /><select className="wide" value={mode} onChange={e=>setMode(e.target.value as any)}><option value="TERM">Направить на уменьшение срока</option><option value="PAYMENT">Направить на уменьшение платежа</option></select></div><button className="button primary full" style={{marginTop:10}} disabled={saving||!credit} onClick={submit}>{saving?'Сохраняю…':'Добавить досрочный платёж'}</button>
+  </div>
+  {credit&&<div className="card"><div className="card-head"><h3>Досрочные платежи</h3><span className="pill">{credit.prepayments?.length||0}</span></div>{credit.prepayments?.length?credit.prepayments.map((pre:any)=><div className="list-item-card" key={pre.id}><b>{new Date(pre.paid_on).toLocaleDateString('ru-RU')}</b><strong>{rub(Number(pre.amount))}</strong><label style={{marginLeft:'auto'}}>Пересчёт<select value={pre.recalculation_mode||credit.recalculation_mode} onChange={e=>updateMode(pre.id,e.target.value as any)}><option value="TERM">Срок</option><option value="PAYMENT">Платёж</option></select></label></div>):<p className="muted">Досрочных платежей пока нет.</p>}</div>}
   </div>
 }
 
 // ---- CALENDAR ----
 function CalendarV07(){
-  const [vis,setVis]=useState<'all'|'my'|'family'>('all')
-  return <div className="stack">
-    <SectionTitle title="Календарь" subtitle="Общий + личный слой • графики вверху" action={<div style={{display:'flex',gap:6}}><button className="button primary small">＋ Событие</button><button className="button secondary small">＋ Напоминание</button></div>} />
-    <div className="segmented" style={{marginBottom:0}}>
-      <button className={vis==='all'?'active':''} onClick={()=>setVis('all')}>Все</button>
-      <button className={vis==='my'?'active':''} onClick={()=>setVis('my')}>Мои 🔒</button>
-      <button className={vis==='family'?'active':''} onClick={()=>setVis('family')}>Семья 👥</button>
-    </div>
-
-    <div className="card">
-      <div className="chart-wrap" style={{marginBottom:12}}>
-        <div className="chart-wrap-head"><strong>Загруженность недели</strong><small>сентябрь 2026</small></div>
-        <div style={{display:'flex', gap:6, alignItems:'end', height:70}}>
-          {[2,4,1,5,3,2,0].map((v,i)=><div key={i} style={{flex:1, background: i===3? '#0F766E':'#CBD5E1', height:`${v*14+8}px`, borderRadius:8, opacity: v===0? .3:1}} />)}
-        </div>
-        <div style={{display:'flex', justifyContent:'space-between', fontSize:11, color:'var(--muted)', marginTop:6}}><span>Пн</span><span>Вт</span><span>Ср</span><span>Чт</span><span>Пт</span><span>Сб</span><span>Вс</span></div>
-      </div>
-
-      <div className="card-head"><h3>Сентябрь 2026</h3><div style={{display:'flex',gap:6}}><span className="pill live">👥 Семья</span><span className="pill">🔒 Только я</span></div></div>
-      <div className="calendar-grid">
-        {Array.from({length:30},(_,i)=>{
-          const day=i+1
-          const isToday=day===24
-          const hasEvent=[5,12,24].includes(day)
-          return <div key={day} className={`cal-day ${isToday?'today':''}`}>
-            <b>{day}</b>
-            {hasEvent && <div style={{display:'flex',gap:3}}><span className="cal-dot" />{day===24 && <span className="cal-dot" style={{background:'#F59E0B'}} />}</div>}
-            {hasEvent && <small style={{fontSize:8,lineHeight:1.1, color:'var(--muted)'}}>{day===5?'Врач 14:00':day===12?'Тренировка':'Посылка'}</small>}
-          </div>
-        })}
-      </div>
-      <div style={{marginTop:12, display:'flex', gap:8}}>
-        <span className="pill"><span style={{width:8,height:8,background:'#0F766E',borderRadius:4,display:'inline-block',marginRight:6}}/>Событие семьи</span>
-        <span className="pill"><span style={{width:8,height:8,background:'#F59E0B',borderRadius:4,display:'inline-block',marginRight:6}}/>Личное</span>
-      </div>
-    </div>
-
-    <div className="card">
-      <div className="card-head"><h3>Ближайшие</h3><small>Москва · Europe/Moscow</small></div>
-      <div className="calendar-row" style={{display:'flex',flexDirection:'column',alignItems:'flex-start',gap:4,padding:'12px 0',borderBottom:'1px solid #F1F1EF'}}>
-        <strong>Врач 14:00–15:00 • 👥 Семья</strong><small>05.09 • Поликлиника • Отвечает папа</small><small style={{color:'#0F766E'}}>Повторяется: FREQ=WEEKLY — в тесте строкой ок</small>
-      </div>
-      <div style={{padding:'12px 0',borderBottom:'1px solid #F1F1EF'}}>
-        <strong>Забрать посылку • 🔒 Только я</strong><small style={{display:'block', color:'var(--muted)', fontSize:12}}>12.09 • 18:00 • видит только создатель (решение 1-Б)</small>
-      </div>
-    </div>
+  const [events,setEvents]=useState<any[]>([]);const [reminders,setReminders]=useState<any[]>([]);const [members,setMembers]=useState<any[]>([]);const [kind,setKind]=useState<'EVENT'|'REMINDER'>('EVENT');const [show,setShow]=useState(false);const [saving,setSaving]=useState(false);const [error,setError]=useState('');const [title,setTitle]=useState('');const [description,setDescription]=useState('');const [responsible,setResponsible]=useState('');const [month,setMonth]=useState(()=>new Date(new Date().getFullYear(),new Date().getMonth(),1));const [selectedDay,setSelectedDay]=useState('');const [when,setWhen]=useState(()=>{const d=new Date(Date.now()+3600000);return new Date(d.getTime()-d.getTimezoneOffset()*60000).toISOString().slice(0,16)})
+  const refresh=()=>Promise.all([apiGet('/events'),apiGet('/reminders'),apiGet('/family')]).then(([e,r,f])=>{setEvents(e.data||[]);setReminders(r.data||[]);const ms=f.data?.members||[];setMembers(ms);setResponsible(current=>current||ms[0]?.id||'')}).catch(e=>setError(String(e.message||e).slice(0,130)))
+  useEffect(()=>{refresh()},[])
+  const submit=async()=>{if(!title.trim()||!responsible){setError('Заполните название и выберите ответственного.');return}setSaving(true);setError('');try{const d=new Date(when);if(kind==='EVENT')await apiPost('/events',{title,description:description||undefined,start_at:d.toISOString(),end_at:new Date(d.getTime()+3600000).toISOString(),timezone:'Europe/Moscow',responsible_member_id:responsible,participant_member_ids:members.map(m=>m.id)});else await apiPost('/reminders',{title,description:description||undefined,scheduled_at:d.toISOString(),timezone:'Europe/Moscow',responsible_member_id:responsible});setTitle('');setDescription('');setShow(false);await refresh()}catch(e:any){setError(String(e.message||e).slice(0,150))}finally{setSaving(false)}}
+  const rows=[...events.filter(x=>x.status==='SCHEDULED').map(x=>({...x,_at:new Date(x.start_at),_kind:'Событие'})),...reminders.filter(x=>x.status==='SCHEDULED').map(x=>({...x,_at:new Date(x.scheduled_at),_kind:'Напоминание'}))].sort((a,b)=>a._at-b._at)
+  const key=(d:Date)=>`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`
+  const daysInMonth=new Date(month.getFullYear(),month.getMonth()+1,0).getDate();const firstOffset=(new Date(month.getFullYear(),month.getMonth(),1).getDay()+6)%7
+  const visibleRows=selectedDay?rows.filter(x=>key(x._at)===selectedDay):rows
+  return <div className="stack"><SectionTitle title="Семейный календарь" subtitle="События и напоминания видны всем активным участникам семьи." action={<div style={{display:'flex',gap:6}}><button className="button primary small" onClick={()=>{setKind('EVENT');setShow(true)}}>＋ Событие</button><button className="button secondary small" onClick={()=>{setKind('REMINDER');setShow(true)}}>＋ Напоминание</button></div>} />
+    {error&&<div className="card" style={{color:'#B91C1C'}}>{error}</div>}{show&&<div className="card"><h3>{kind==='EVENT'?'Новое событие':'Новое напоминание'}</h3><div style={{display:'grid',gap:10}}><input placeholder="Название" value={title} onChange={e=>setTitle(e.target.value)} /><textarea placeholder="Описание (необязательно)" value={description} onChange={e=>setDescription(e.target.value)} /><label>Дата и время<input type="datetime-local" value={when} onChange={e=>setWhen(e.target.value)} /></label><label>Ответственный<select value={responsible} onChange={e=>setResponsible(e.target.value)}>{members.map(m=><option key={m.id} value={m.id}>{m.user?.first_name||m.user?.username||'Участник'}</option>)}</select></label><div style={{display:'flex',gap:8}}><button className="button primary" disabled={saving} onClick={submit}>{saving?'Сохраняю…':'Сохранить'}</button><button className="button secondary" onClick={()=>setShow(false)}>Отмена</button></div></div></div>}
+    <div className="card"><div className="card-head"><button className="button secondary small" onClick={()=>{setMonth(new Date(month.getFullYear(),month.getMonth()-1,1));setSelectedDay('')}}>‹</button><h3>{month.toLocaleDateString('ru-RU',{month:'long',year:'numeric'})}</h3><button className="button secondary small" onClick={()=>{setMonth(new Date(month.getFullYear(),month.getMonth()+1,1));setSelectedDay('')}}>›</button></div><div style={{display:'grid',gridTemplateColumns:'repeat(7,1fr)',textAlign:'center',fontSize:11,color:'var(--muted)',marginBottom:6}}>{['Пн','Вт','Ср','Чт','Пт','Сб','Вс'].map(d=><span key={d}>{d}</span>)}</div><div className="calendar-grid">{Array.from({length:firstOffset},(_,i)=><div key={'blank'+i} />)}{Array.from({length:daysInMonth},(_,i)=>{const day=i+1;const date=new Date(month.getFullYear(),month.getMonth(),day);const dayKey=key(date);const count=rows.filter(x=>key(x._at)===dayKey).length;const today=key(new Date())===dayKey;return <div key={dayKey} className={`cal-day ${today?'today':''}`} onClick={()=>setSelectedDay(selectedDay===dayKey?'':dayKey)} style={{cursor:'pointer',outline:selectedDay===dayKey?'2px solid #0F766E':undefined}}><b>{day}</b>{count>0&&<div style={{display:'flex',gap:3,justifyContent:'center'}}><span className="cal-dot" />{count>1&&<small>{count}</small>}</div>}</div>})}</div><div style={{display:'flex',gap:8,marginTop:10}}><span className="pill"><i className="cal-dot" /> Запланировано: {rows.length}</span>{selectedDay&&<button className="button ghost small" onClick={()=>setSelectedDay('')}>Сбросить выбор даты</button>}</div></div>
+    <div className="card"><div className="card-head"><h3>{selectedDay?`План на ${new Date(`${selectedDay}T12:00:00`).toLocaleDateString('ru-RU',{day:'numeric',month:'long'})}`:'Предстоящие события и напоминания'}</h3><button className="button secondary small" onClick={refresh}>Обновить</button></div>{visibleRows.length?visibleRows.map((x:any)=><div className="list-item-card" key={x._kind+x.id}><span className="pill">{x._kind}</span><div style={{flex:1}}><strong>{x.title}</strong><small style={{display:'block',color:'var(--muted)'}}>{x.description||''} · создатель: {x.creator?.first_name||x.creator?.username||'участник'}</small></div><b>{x._at.toLocaleString('ru-RU',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'})}</b></div>):<p className="muted">На выбранную дату нет планов.</p>}</div>
   </div>
 }
 
 function ListsV07(){
-  return <div className="stack">
-    <SectionTitle title="Списки" subtitle="Общие семейные списки" />
-    <div className="list-switcher"><button className="chip active">Продукты</button><button className="chip">Для дома</button><button className="chip">Аптечка</button></div>
-    <div className="card">
-      <div className="card-head"><h3>Продукты</h3><span className="pill">4 пункта</span></div>
-      <div style={{display:'flex',flexDirection:'column'}}>
-        {['Молоко','Хлеб','Яйца 10шт'].map(t=><div key={t} className="list-item-card"><button className="checkbox" />{t}<button className="tiny">✎</button></div>)}
-        <div className="list-item-card"><button className="checkbox checked">✓</button><span className="done">Бананы</span><button className="tiny danger">×</button></div>
-      </div>
-      <button className="button primary full" style={{marginTop:12}}>＋ Добавить пункт</button>
-    </div>
+  const [items,setItems]=useState<any[]>([]);const [type,setType]=useState<'LARGE'|'RECURRING'>('LARGE');const [show,setShow]=useState(false);const [name,setName]=useState('');const [category,setCategory]=useState('');const [amount,setAmount]=useState('');const [due,setDue]=useState('');const [cadence,setCadence]=useState('3');const [error,setError]=useState('')
+  const refresh=()=>apiGet('/planned-purchases').then(j=>setItems(j.data||[])).catch(e=>setError(String(e.message||e).slice(0,140)))
+  useEffect(()=>{refresh()},[])
+  const add=async()=>{try{setError('');await apiPost('/planned-purchases',{type,name,category:category||undefined,estimated_amount:amount?Number(amount):undefined,due_date:due||undefined,cadence_months:type==='RECURRING'?Number(cadence):undefined,notify_days_before:7});setName('');setCategory('');setAmount('');setDue('');setShow(false);await refresh()}catch(e:any){setError(String(e.message||e).slice(0,150))}}
+  const mark=async(id:string)=>{try{await apiPost(`/planned-purchases/${id}/purchased`,{purchased_on:new Date().toISOString().slice(0,10)});await refresh()}catch(e:any){setError(String(e.message||e).slice(0,120))}}
+  const shown=items.filter(x=>x.type===type)
+  return <div className="stack"><SectionTitle title="Планируемые покупки" subtitle="Общий семейный план крупных и регулярных покупок." action={<button className="button primary small" onClick={()=>setShow(!show)}>＋ Добавить</button>} />{error&&<div className="card" style={{color:'#B91C1C'}}>{error}</div>}
+    <div className="segmented"><button className={type==='LARGE'?'active':''} onClick={()=>setType('LARGE')}>Крупные покупки и подарки</button><button className={type==='RECURRING'?'active':''} onClick={()=>setType('RECURRING')}>Регулярные покупки</button></div>
+    {show&&<div className="card"><h3>{type==='LARGE'?'Добавить покупку или подарок':'Добавить регулярную покупку'}</h3><div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(180px,1fr))',gap:10}}><input placeholder="Название" value={name} onChange={e=>setName(e.target.value)} /><input placeholder="Категория" value={category} onChange={e=>setCategory(e.target.value)} /><input type="number" min="0" placeholder="Сумма, ₽" value={amount} onChange={e=>setAmount(e.target.value)} /><label>Ориентировочная дата<input type="date" value={due} onChange={e=>setDue(e.target.value)} /></label>{type==='RECURRING'&&<label>Периодичность, месяцев<input type="number" min="1" max="120" value={cadence} onChange={e=>setCadence(e.target.value)} /></label>}</div><div style={{display:'flex',gap:8,marginTop:12}}><button className="button primary" onClick={add}>Сохранить</button><button className="button secondary" onClick={()=>setShow(false)}>Отмена</button></div></div>}
+    <div className="card"><div className="card-head"><h3>{type==='LARGE'?'Крупные покупки и подарки':'Регулярные покупки'}</h3><span className="pill">{shown.length}</span></div>{shown.length?shown.map(x=><div className="list-item-card" key={x.id}><div style={{flex:1}}><strong>{x.name}</strong><small style={{display:'block',color:'var(--muted)'}}>{x.category||'Без категории'}{x.cadence_months?` · каждые ${x.cadence_months} мес.`:''} · добавил(а): {x.creator?.first_name||x.creator?.username||'участник'}</small></div><b>{x.estimated_amount?rub(Number(x.estimated_amount)):'Сумма не задана'}</b><span>{x.due_date||'Дата не задана'}</span>{type==='RECURRING'&&<button className="button secondary small" onClick={()=>mark(x.id)}>Купили</button>}</div>):<p className="muted">Список пока пуст. Добавьте первую позицию.</p>}</div>
   </div>
 }
 function FamilyV07(){
+  const [family,setFamily]=useState<any>(null)
+  const [error,setError]=useState('')
+  useEffect(()=>{apiGet('/family').then(j=>setFamily(j.data)).catch(e=>setError(String(e.message||e).slice(0,120)))},[])
   return <div className="stack">
-    <SectionTitle title="Семья" subtitle="Участники и приглашения" />
-    <div className="card"><div className="member-row"><div><strong>Мария</strong><small>@maria · Админ</small></div><span className="role-badge">Админ</span></div><div className="member-row"><div><strong>Папа</strong><small>Telegram ID</small></div><span className="role-badge" style={{background:'#EEF2F7',color:'var(--muted)',borderColor:'#E5E7EB'}}>Участник</span></div></div>
+    <SectionTitle title={family?.name||'Семья'} subtitle="Участники и общий доступ" />
+    {error&&<div className="card" style={{color:'#B91C1C'}}>{error}</div>}
+    <div className="card">{(family?.members||[]).map((m:any)=><div className="member-row" key={m.id}><div><strong>{m.user?.first_name||m.user?.username||'Участник'}</strong><small>{m.user?.username?`@${String(m.user.username).replace(/^@/,'')} · `:''}{m.role==='ADMIN'?'Администратор':'Участник'}</small></div><span className="role-badge">{m.role==='ADMIN'?'Админ':'Участник'}</span></div>)}{!family?.members?.length&&!error&&<p className="muted">Загружаем состав семьи…</p>}</div>
   </div>
 }
-function BudgetTab(p:{ranked:Cat[]}){
-  return <div className="card">
-    <div className="chart-wrap">
-      <div className="chart-wrap-head"><strong>Бюджет сентября</strong><small>лимит vs факт</small></div>
-      <div style={{display:'flex', justifyContent:'space-between', alignItems:'end', gap:4, height:90}}>
-        {p.ranked.slice(0,5).map(c=>{
-          const pct = c.budget ? Math.min(100, c.amount/c.budget*100) : 0
-          return <div key={c.id} style={{flex:1, textAlign:'center'}}>
-            <div style={{height:70, background:'#F1F5F9', borderRadius:10, overflow:'hidden', display:'flex', alignItems:'end'}}>
-              <div style={{height:`${pct}%`, background: pct>90? '#E11D48':'#0F766E', width:'100%'}} />
-            </div>
-            <small style={{fontSize:9, color:'var(--muted)'}}>{c.name.slice(0,6)}</small>
-          </div>
-        })}
-      </div>
+function BudgetTab(p:{ranked:any[]; income:number; expense:number}){
+  const max=Math.max(1,p.income,p.expense)
+  const categoryMax=Math.max(1,...p.ranked.map(c=>Number(c.amount)||0))
+  return <div className="stack">
+    <div className="card"><div className="card-head"><h3>Доходы и расходы</h3><span className="pill">{p.expense>p.income?'Расходы выше доходов':'В пределах дохода'}</span></div>
+      <div className="summary-line"><span>Доход</span><strong style={{color:'#0F766E'}}>{rub(p.income)}</strong></div><div className="progress"><span style={{width:`${Math.max(2,p.income/max*100)}%`,background:'#0F766E'}} /></div>
+      <div className="summary-line"><span>Расход</span><strong style={{color:p.expense>p.income?'#E11D48':'#334155'}}>{rub(p.expense)}</strong></div><div className="progress"><span style={{width:`${Math.max(2,p.expense/max*100)}%`,background:p.expense>p.income?'#E11D48':'#F59E0B'}} /></div>
+      <p className="muted">Остаток за выбранный период: {rub(p.income-p.expense)}. Данные обновляются после внесения операции или подтверждения чека.</p>
     </div>
-    <div className="summary-line"><span>Лимит месяца</span><strong>60 000 ₽</strong></div>
-    <div className="summary-line"><span>Потрачено</span><strong style={{color:'#E11D48'}}>42 187 ₽</strong></div>
-    <div className="progress"><span style={{width:'70%', background:'#0F766E'}} /></div>
+    <div className="card"><div className="card-head"><h3>Расходы по категориям</h3></div>{p.ranked.length?p.ranked.slice(0,10).map(c=><div key={c.id||c.name} style={{marginTop:10}}><div className="summary-line"><span>{c.name}</span><strong>{rub(Number(c.amount)||0)}</strong></div><div className="progress"><span style={{width:`${Math.max(2,(Number(c.amount)||0)/categoryMax*100)}%`,background:c.color||'#0F766E'}} /></div></div>):<p className="muted">За этот период расходов пока нет.</p>}</div>
   </div>
 }
 function SectionTitle(p:{title:string; subtitle?:string; action?:any}){
