@@ -20,6 +20,7 @@ RUN apk add --no-cache \
     libzip-dev \
     oniguruma-dev \
     postgresql-dev \
+    su-exec \
     && docker-php-ext-install \
         intl \
         mbstring \
@@ -31,6 +32,9 @@ WORKDIR /var/www/html
 COPY --from=vendor /app/vendor ./vendor
 COPY . .
 
+COPY docker-entrypoint.sh /usr/local/bin/family-hub-entrypoint
+RUN chmod 755 /usr/local/bin/family-hub-entrypoint
+
 RUN mkdir -p \
         storage/framework/cache/data \
         storage/framework/sessions \
@@ -41,7 +45,7 @@ RUN mkdir -p \
         storage \
         bootstrap/cache
 
-USER www-data
+ENTRYPOINT ["/usr/local/bin/family-hub-entrypoint"]
 
 EXPOSE 9000
 
