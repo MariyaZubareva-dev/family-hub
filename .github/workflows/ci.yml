@@ -75,4 +75,5 @@ jobs:
       - run: docker build -t family-hub-backend-ci ./backend
       - run: docker build -t family-hub-frontend-ci ./frontend
       - run: docker build -f backend/Dockerfile.nginx -t family-hub-backend-nginx-ci .
-      - run: docker compose --env-file .env.production.example -f docker-compose.prod.yml config --quiet
+      - run: cp .env.production.example .env.production
+      - run: docker compose --env-file .env.production -f docker-compose.prod.yml config --quiet
