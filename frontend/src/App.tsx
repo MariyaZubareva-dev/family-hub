@@ -874,6 +874,7 @@ function FamilyV07(){
   const [loaded,setLoaded]=useState(false)
   const [busy,setBusy]=useState('')
   const [showInvite,setShowInvite]=useState(false)
+  const [expandedMemberId,setExpandedMemberId]=useState<string|null>(null)
   const [inviteTarget,setInviteTarget]=useState('')
   const [inviteName,setInviteName]=useState('')
   const [newFamilyName,setNewFamilyName]=useState('')
@@ -986,11 +987,12 @@ function FamilyV07(){
     </section>
     <section className="card family-members-card" aria-labelledby="family-members-title">
       <div className="card-head"><h3 id="family-members-title">Участники <span className="family-heading-count">{family.members?.length||0}</span></h3>{isAdmin&&<button className="family-text-button" onClick={()=>setShowInvite(v=>!v)}>{showInvite?'Закрыть':'＋ Пригласить'}</button>}</div>
-      {showInvite&&isAdmin&&<div className="family-invite-form"><label>Telegram ID или логин<input value={inviteTarget} onChange={e=>setInviteTarget(e.target.value)} placeholder="@username или 123456789" autoComplete="off"/></label><label>Имя <span className="muted">(необязательно)</span><input value={inviteName} onChange={e=>setInviteName(e.target.value)} placeholder="Имя участника" maxLength={255}/></label><button className="button primary full" onClick={invite} disabled={busy==='invite'}>{busy==='invite'?'Создаём…':'Создать приглашение'}</button></div>}
+      {showInvite&&isAdmin&&<div className="family-invite-form"><label><span>Telegram ID<br/>или логин</span><input value={inviteTarget} onChange={e=>setInviteTarget(e.target.value)} placeholder="@username / ID" autoComplete="off"/></label><label><span>Имя <span className="muted">(необязательно)</span></span><input value={inviteName} onChange={e=>setInviteName(e.target.value)} placeholder="Имя участника" maxLength={255}/></label><button className="button primary full" onClick={invite} disabled={busy==='invite'}>{busy==='invite'?'Создаём…':'Создать приглашение'}</button></div>}
       <div className="family-member-list">{family.members?.map((m:any)=><article className="family-member" key={m.id}>
         <div className="family-avatar">{m.user?.avatar_url?<img src={m.user.avatar_url} alt=""/>:initials(m)}</div>
         <div className="family-member-info"><div className="family-member-name-row"><strong title={m.user?.first_name||m.user?.username}>{m.user?.first_name||m.user?.username||'Участник'}{m.id===family.current_member_id&&<span className="family-you"> · вы</span>}</strong><span className={`family-role ${m.role==='ADMIN'?'admin':''}`} title={m.role==='ADMIN'?'Администратор':'Участник'}>{m.role==='ADMIN'?'Админ':'Участник'}</span></div><span title={m.user?.username?`@${m.user.username}`:''}>{m.user?.username?`@${String(m.user.username).replace(/^@/,'')}`:'Участник семьи'}</span></div>
-        {isAdmin&&m.id!==family.current_member_id&&<details className="family-member-menu"><summary aria-label={`Действия участника: ${m.user?.first_name||'участника'}`}>•••</summary><div className="family-member-actions"><label>Роль<select value={m.role} disabled={!!busy} onChange={e=>changeRole(m,e.target.value as 'ADMIN'|'USER')}><option value="USER">Участник</option><option value="ADMIN">Администратор</option></select></label><button className="tiny danger" onClick={()=>setConfirmMember(m)}>Удалить из семьи</button></div></details>}
+        {isAdmin&&m.id!==family.current_member_id&&<button className="family-member-menu" aria-label={`Действия участника: ${m.user?.first_name||'участника'}`} aria-expanded={expandedMemberId===m.id} aria-controls={`family-member-actions-${m.id}`} onClick={()=>setExpandedMemberId(v=>v===m.id?null:m.id)}>•••</button>}
+        {isAdmin&&m.id!==family.current_member_id&&expandedMemberId===m.id&&<div className="family-member-actions" id={`family-member-actions-${m.id}`}><label>Роль<select value={m.role} disabled={!!busy} onChange={e=>changeRole(m,e.target.value as 'ADMIN'|'USER')}><option value="USER">Участник</option><option value="ADMIN">Админ</option></select></label><button className="tiny danger" aria-label="Удалить из семьи" onClick={()=>setConfirmMember(m)}>Удалить</button></div>}
       </article>)}</div>
     </section>
     <section className="card family-access-card" aria-labelledby="family-access-title">

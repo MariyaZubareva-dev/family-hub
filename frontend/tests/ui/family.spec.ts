@@ -51,18 +51,32 @@ for (const width of [320, 393, 768]) {
     expect(Math.abs(measurements.roleY - measurements.nameY)).toBeLessThan(8)
     expect(measurements.membersHeight).toBeLessThan(280)
     await expect(page.getByRole('heading', { name: 'Общий доступ', exact: true })).toBeInViewport()
-    await page.getByLabel('Действия участника: Андрей', { exact: true }).click()
+    const trigger = page.getByLabel('Действия участника: Андрей', { exact: true })
+    const before = await trigger.boundingBox()
+    await trigger.click()
+    const after = await trigger.boundingBox()
+    expect(after!.y).toBeCloseTo(before!.y, 0)
+    await expect(trigger).toHaveAttribute('aria-expanded', 'true')
     await expect(page.getByRole('combobox', { name: 'Роль', exact: true })).toBeVisible()
     const inside = await page.evaluate(() => {
-      const menu = document.querySelector('.family-member-menu[open] .family-member-actions')!.getBoundingClientRect()
+      const menu = document.querySelector('.family-member-actions')!.getBoundingClientRect()
       const card = document.querySelector('.family-members-card')!.getBoundingClientRect()
-      return menu.bottom <= card.bottom && menu.right <= card.right && menu.left >= card.left
+      return menu.bottom <= card.bottom && menu.right <= card.right && menu.left >= card.left && menu.height <= 60
     })
     expect(inside).toBe(true)
-    if (width === 393) {
-      await page.getByLabel('Действия участника: Андрей', { exact: true }).click()
-      await page.screenshot({ path: 'test-results/family-393.png', fullPage: true })
-    }
+    await page.screenshot({ path: `test-results/family-actions-${width}.png`, fullPage: true })
+    await trigger.click()
+    await expect(page.getByRole('combobox', { name: 'Роль', exact: true })).toHaveCount(0)
+    await page.getByRole('button', { name: '＋ Пригласить', exact: true }).click()
+    const invite = page.locator('.family-invite-form')
+    await expect(invite.getByRole('textbox', { name: 'Telegram ID или логин' })).toBeVisible()
+    await expect(invite.getByRole('textbox', { name: 'Имя (необязательно)' })).toBeVisible()
+    const formBounds = await invite.boundingBox()
+    expect(formBounds!.height).toBeLessThanOrEqual(155)
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(width)
+    await invite.getByRole('textbox', { name: 'Telegram ID или логин' }).fill('@andrey')
+    await invite.getByRole('textbox', { name: 'Имя (необязательно)' }).fill('Андрей')
+    await page.screenshot({ path: `test-results/family-invite-${width}.png`, fullPage: true })
   })
 }
 
