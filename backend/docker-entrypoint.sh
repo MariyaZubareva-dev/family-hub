@@ -14,4 +14,7 @@ chown -R www-data:www-data \
     /var/www/html/storage \
     /var/www/html/bootstrap/cache
 
+if [ "${1##*/}" = "php-fpm" ]; then
+    exec "$@"
+fi
 exec su-exec www-data "$@"
