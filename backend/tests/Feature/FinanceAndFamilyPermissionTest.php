@@ -34,7 +34,7 @@ class FinanceAndFamilyPermissionTest extends TestCase
         $this->assertDatabaseHas('family_members', ['id' => $member->id, 'role' => 'ADMIN']);
     }
 
-    public function test_user_cannot_access_finance_core(): void
+    public function test_user_cannot_change_family_budget(): void
     {
         $admin = User::create(['telegram_user_id' => 10002, 'first_name' => 'Admin']);
         $user = User::create(['telegram_user_id' => 10003, 'first_name' => 'User']);
@@ -44,7 +44,7 @@ class FinanceAndFamilyPermissionTest extends TestCase
 
         $this->withoutMiddleware(TelegramAuthenticate::class)
             ->actingAs($user)
-            ->getJson('/api/v1/incomes')
+            ->postJson('/api/v1/finance/budgets/save', ['year' => 2026, 'month' => 10, 'total_limit' => 1000])
             ->assertForbidden();
     }
 
