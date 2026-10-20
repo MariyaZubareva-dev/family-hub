@@ -238,6 +238,7 @@ textarea{min-height:90px;resize:vertical}
 .family-role{display:inline-flex;flex:0 0 auto;align-items:center;justify-content:center;min-height:20px;padding:2px 6px;border-radius:6px;background:#F1F5F9;color:#64748B;font-size:9px;font-weight:500;line-height:1.2;white-space:nowrap;word-break:normal;overflow-wrap:normal}
 .family-role.admin{background:#E6F5F1;color:var(--primary)}
 /* Keep the action trigger on the member row when its controls are expanded. */
+.family-page .family-member{grid-template-rows:40px}
 .family-member-menu{width:36px;height:36px;min-width:0;justify-self:end;display:grid;place-items:center;padding:0;border:0;border-radius:9px;background:transparent;font:inherit;font-size:12px;font-weight:650;letter-spacing:1px;color:#64748B;cursor:pointer}
 .family-member-menu:hover,.family-member-menu[aria-expanded="true"]{background:var(--surface-2)}
 .family-member-actions{grid-column:1/-1;width:100%;padding:8px;border:1px solid var(--border);border-radius:10px;display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:8px;background:#FAFCFB}
