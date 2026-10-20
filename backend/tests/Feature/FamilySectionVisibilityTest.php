@@ -57,14 +57,14 @@ class FamilySectionVisibilityTest extends TestCase
             $this->getJson("/api/v1/{$resource}")->assertForbidden()->assertJsonPath('code', 'SECTION_HIDDEN');
             $this->postJson("/api/v1/{$resource}", [])->assertForbidden();
         }
-        $this->getJson('/api/v1/credits')->assertOk();
+        $this->getJson('/api/v1/finance/categories')->assertOk();
     }
 
     public function test_access_can_be_restored(): void
     {
         $this->member->update(['section_visibility' => ['finance' => false]]);
         $this->actingAs($this->admin)->patchJson("/api/v1/family/members/{$this->member->id}/visibility", ['visibility' => ['finance' => true]])->assertOk();
-        $this->actingAs($this->user)->getJson('/api/v1/credits')->assertOk();
+        $this->actingAs($this->user)->getJson('/api/v1/finance/categories')->assertOk();
     }
 
     public function test_member_cannot_grant_self_access_or_change_other_members(): void
@@ -88,7 +88,7 @@ class FamilySectionVisibilityTest extends TestCase
         $adminMember = $this->admin->familyMembers()->firstOrFail();
         $this->actingAs($this->admin)->patchJson("/api/v1/family/members/{$adminMember->id}/visibility", ['visibility' => ['finance' => false]])->assertStatus(422);
         $adminMember->update(['section_visibility' => ['finance' => false]]);
-        $this->getJson('/api/v1/credits')->assertOk();
+        $this->getJson('/api/v1/finance/categories')->assertOk();
     }
 
     public function test_visibility_payload_rejects_unknown_sections_and_non_booleans(): void
@@ -102,7 +102,7 @@ class FamilySectionVisibilityTest extends TestCase
         $this->actingAs($this->user)->getJson('/api/v1/me')->assertOk()->assertJsonPath('data.family.visibility', ['calendar' => true, 'shopping' => true, 'finance' => true]);
         $this->getJson('/api/v1/events')->assertOk();
         $this->getJson('/api/v1/planned-purchases')->assertOk();
-        $this->getJson('/api/v1/credits')->assertOk();
+        $this->getJson('/api/v1/finance/categories')->assertOk();
     }
 
     public function test_hidden_section_does_not_queue_notifications(): void
@@ -117,7 +117,7 @@ class FamilySectionVisibilityTest extends TestCase
     {
         TelegramNotificationService::notifyBudgetWarning($this->member->family_id, $this->member->id, 'Продукты', 90, 100, 90);
         Queue::assertPushed(TelegramNotificationJob::class);
-        $job = Queue::pushed(TelegramNotificationJob::class)->first()['job'];
+        $job = Queue::pushed(TelegramNotificationJob::class)->first();
         $this->member->update(['section_visibility' => ['finance' => false]]);
         $job->handle();
         Http::assertNothingSent();

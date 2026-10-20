@@ -962,8 +962,9 @@ function FamilyV07(){
   useEffect(()=>{
     if(!visibilitySection)return
     const dialog=document.querySelector<HTMLDialogElement>('#family-visibility-dialog')
+    const previousFocus=document.activeElement instanceof HTMLElement?document.activeElement:null
     dialog?.showModal()
-    return ()=>{dialog?.close()}
+    return ()=>{dialog?.close();window.requestAnimationFrame(()=>previousFocus?.focus())}
   },[visibilitySection])
   const initials=(member:any)=>`${member.user?.first_name?.[0]||''}${member.user?.last_name?.[0]||''}`.toUpperCase()||'👤'
   if(loading&&!family&&!error)return <div className="stack"><SectionTitle title="Семья" subtitle="Загружаем семейное пространство…"/><div className="card family-loading">Загружаем участников и приглашения…</div></div>
@@ -978,7 +979,7 @@ function FamilyV07(){
         <div className="family-hero-icon" aria-hidden="true">⌂</div>
         <div className="family-title-block">
           {editingName&&isAdmin?<><label className="family-name-edit"><span className="sr-only">Название семьи</span><input value={familyName} maxLength={120} onChange={e=>setFamilyName(e.target.value)} onKeyDown={e=>e.key==='Enter'&&saveFamilyName()}/></label><div className="family-inline-actions"><button className="button primary small" onClick={saveFamilyName} disabled={busy==='name'}>Сохранить</button><button className="button secondary small" onClick={()=>{setFamilyName(family.name);setEditingName(false)}}>Отмена</button></div></>:<h3>{family.name}</h3>}
-          <p>{family.members?.length||0} {pluralRu(family.members?.length||0,'участник','участника','участников')}{isAdmin&&invitations.length>0?` · ${invitations.length} приглашений`:''}</p>
+          <p>{family.members?.length||0} {pluralRu(family.members?.length||0,'участник','участника','участников')}{isAdmin&&invitations.length>0?` · ${invitations.length} ${pluralRu(invitations.length,'приглашение','приглашения','приглашений')}`:''}</p>
         </div>
         {isAdmin&&!editingName&&<button className="family-icon-button" onClick={()=>setEditingName(true)} aria-label="Изменить название" title="Изменить название">✎</button>}
       </div>
@@ -989,7 +990,7 @@ function FamilyV07(){
       <div className="family-member-list">{family.members?.map((m:any)=><article className="family-member" key={m.id}>
         <div className="family-avatar">{m.user?.avatar_url?<img src={m.user.avatar_url} alt=""/>:initials(m)}</div>
         <div className="family-member-info"><div className="family-member-name-row"><strong title={m.user?.first_name||m.user?.username}>{m.user?.first_name||m.user?.username||'Участник'}{m.id===family.current_member_id&&<span className="family-you"> · вы</span>}</strong><span className={`family-role ${m.role==='ADMIN'?'admin':''}`} title={m.role==='ADMIN'?'Администратор':'Участник'}>{m.role==='ADMIN'?'Админ':'Участник'}</span></div><span title={m.user?.username?`@${m.user.username}`:''}>{m.user?.username?`@${String(m.user.username).replace(/^@/,'')}`:'Участник семьи'}</span></div>
-        {isAdmin&&m.id!==family.current_member_id&&<details className="family-member-menu"><summary aria-label={`Действия для ${m.user?.first_name||'участника'}`}>•••</summary><div className="family-member-actions"><label>Роль<select value={m.role} disabled={!!busy} onChange={e=>changeRole(m,e.target.value as 'ADMIN'|'USER')}><option value="USER">Участник</option><option value="ADMIN">Администратор</option></select></label><button className="tiny danger" onClick={()=>setConfirmMember(m)}>Удалить из семьи</button></div></details>}
+        {isAdmin&&m.id!==family.current_member_id&&<details className="family-member-menu"><summary aria-label={`Действия участника: ${m.user?.first_name||'участника'}`}>•••</summary><div className="family-member-actions"><label>Роль<select value={m.role} disabled={!!busy} onChange={e=>changeRole(m,e.target.value as 'ADMIN'|'USER')}><option value="USER">Участник</option><option value="ADMIN">Администратор</option></select></label><button className="tiny danger" onClick={()=>setConfirmMember(m)}>Удалить из семьи</button></div></details>}
       </article>)}</div>
     </section>
     <section className="card family-access-card" aria-labelledby="family-access-title">

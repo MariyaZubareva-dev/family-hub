@@ -51,8 +51,8 @@ for (const width of [320, 393, 768]) {
     expect(Math.abs(measurements.roleY - measurements.nameY)).toBeLessThan(8)
     expect(measurements.membersHeight).toBeLessThan(280)
     await expect(page.getByRole('heading', { name: 'Общий доступ', exact: true })).toBeInViewport()
-    await page.getByLabel('Действия для Андрей', { exact: true }).click()
-    await expect(page.getByLabel('Роль', { exact: true })).toBeVisible()
+    await page.getByLabel('Действия участника: Андрей', { exact: true }).click()
+    await expect(page.getByRole('combobox', { name: 'Роль', exact: true })).toBeVisible()
     const inside = await page.evaluate(() => {
       const menu = document.querySelector('.family-member-menu[open] .family-member-actions')!.getBoundingClientRect()
       const card = document.querySelector('.family-members-card')!.getBoundingClientRect()
@@ -60,7 +60,7 @@ for (const width of [320, 393, 768]) {
     })
     expect(inside).toBe(true)
     if (width === 393) {
-      await page.getByLabel('Действия для Андрей', { exact: true }).click()
+      await page.getByLabel('Действия участника: Андрей', { exact: true }).click()
       await page.screenshot({ path: 'test-results/family-393.png', fullPage: true })
     }
   })
