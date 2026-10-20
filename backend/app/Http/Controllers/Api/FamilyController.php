@@ -6,6 +6,7 @@ use App\Models\Family;
 use App\Models\FamilyInvitation;
 use App\Models\FamilyMember;
 use App\Models\User;
+use App\Jobs\SendFamilyInvitation;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -33,12 +34,12 @@ class FamilyController extends BaseApiController
         $membership=$user->familyMembers()->where('status','ACTIVE')->first();
         $query=FamilyInvitation::where('status',FamilyInvitation::PENDING)->where(function($q)use($user){
             $q->where('telegram_user_id',$user->telegram_user_id);
-            if($user->username){ $q->orWhereRaw('LOWER(username)=?', [mb_strtolower(ltrim($user->username,'@'))]); }
+            if($user->username){ $q->orWhere(fn($match)=>$match->whereNull('telegram_user_id')->whereRaw('LOWER(username)=?', [mb_strtolower(ltrim($user->username,'@'))])); }
         });
         if($membership && $membership->role==='ADMIN'){
             $query=FamilyInvitation::where('family_id',$membership->family_id)->where('status',FamilyInvitation::PENDING);
         }
-        $items=$query->with(['inviter','family'])->latest()->get();
+        $items=$query->where(fn($q)=>$q->whereNull('expires_at')->orWhere('expires_at','>',now()))->with(['inviter','family'])->latest()->get();
         return response()->json(['data'=>$items]);
     }
 
@@ -52,7 +53,8 @@ class FamilyController extends BaseApiController
         ]);
         abort_unless(!empty($d['telegram_user_id']) || !empty($d['username']),422,'Укажите Telegram ID или логин.');
         $telegramId=$d['telegram_user_id']??null;
-        $username=$d['username']?ltrim(trim($d['username']),'@'):null;
+        $username=!empty($d['username'])?ltrim(trim($d['username']),'@'):null;
+        abort_unless($telegramId || $username,422,'Укажите Telegram ID или логин.');
         if($username){
             $known=User::whereRaw('LOWER(username)=?', [mb_strtolower($username)])->first();
             if($known) $telegramId=$known->telegram_user_id;
@@ -61,9 +63,10 @@ class FamilyController extends BaseApiController
             $hasActiveMember=FamilyMember::query()->where('family_id',$m->family_id)->whereHas('user',fn($q)=>$q->where('telegram_user_id',$telegramId))->where('status','ACTIVE')->exists();
             abort_if($hasActiveMember,409,'Пользователь уже состоит в семье.');
         }
-        $pending=FamilyInvitation::query()->where('family_id',$m->family_id)->where('status',FamilyInvitation::PENDING)->when($telegramId,fn($q)=>$q->where('telegram_user_id',$telegramId))->when(!$telegramId&&$username,fn($q)=>$q->whereRaw('LOWER(username)=?',[mb_strtolower($username)]))->first();
+        $pending=FamilyInvitation::query()->where('family_id',$m->family_id)->where('status',FamilyInvitation::PENDING)->where(fn($q)=>$q->whereNull('expires_at')->orWhere('expires_at','>',now()))->when($telegramId,fn($q)=>$q->where('telegram_user_id',$telegramId))->when(!$telegramId&&$username,fn($q)=>$q->whereRaw('LOWER(username)=?',[mb_strtolower($username)]))->first();
         abort_if($pending,409,'Такое приглашение уже отправлено.');
         $inv=FamilyInvitation::create(['family_id'=>$m->family_id,'telegram_user_id'=>$telegramId,'username'=>$username,'first_name'=>$d['first_name']??null,'status'=>FamilyInvitation::PENDING,'invited_by'=>$m->user_id,'expires_at'=>now()->addDays(14)]);
+        if($telegramId) SendFamilyInvitation::dispatch($inv->id)->onQueue('notifications')->afterCommit();
         return response()->json(['data'=>$inv->load(['inviter','family'])],201);
     }
 
@@ -82,7 +85,7 @@ class FamilyController extends BaseApiController
     {
         $username=$request->user()->username;
         $validId=$invitation->telegram_user_id && (int)$invitation->telegram_user_id===(int)$request->user()->telegram_user_id;
-        $validUsername=$username && $invitation->username && mb_strtolower(ltrim($username,'@'))===mb_strtolower(ltrim($invitation->username,'@'));
+        $validUsername=!$invitation->telegram_user_id && $username && $invitation->username && mb_strtolower(ltrim($username,'@'))===mb_strtolower(ltrim($invitation->username,'@'));
         abort_unless($validId||$validUsername,403);
         abort_unless($invitation->status===FamilyInvitation::PENDING,409,'Приглашение недействительно.');
         abort_if($invitation->expires_at && $invitation->expires_at->isPast(),409,'Срок приглашения истёк.');

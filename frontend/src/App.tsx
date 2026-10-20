@@ -3,7 +3,7 @@ import './styles.v07.css'
 
 // ---- API helpers (Telegram auth + local dev fallback) ----
 function getAuthHeaders(): Record<string,string> {
-  const h: Record<string,string> = { 'Content-Type': 'application/json' }
+  const h: Record<string,string> = { 'Content-Type': 'application/json', 'Accept': 'application/json' }
   const tg = (window as any).Telegram?.WebApp
   if (tg?.initData) h['X-Telegram-Init-Data'] = tg.initData
   else {
@@ -12,19 +12,30 @@ function getAuthHeaders(): Record<string,string> {
   }
   return h
 }
+async function apiError(response:Response):Promise<Error>{
+  const fallback=response.status===401?'Откройте Family Hub заново через Telegram.':response.status===403?'Этот раздел доступен после вступления в семью. Откройте раздел «Семья» и примите приглашение.':`Не удалось выполнить запрос (${response.status}). Попробуйте ещё раз.`
+  const body=await response.text()
+  try{
+    const data=JSON.parse(body)
+    const message=Object.values(data.errors||{}).flat()[0]||data.message
+    if(message==='Active family membership required.')return new Error(fallback)
+    if(typeof message==='string'&&message&&!/[<>]/.test(message))return new Error(message)
+  }catch{}
+  return new Error(fallback)
+}
 async function apiGet(path:string){
   const r = await fetch(`/api/v1${path}`, { headers: getAuthHeaders() })
-  if(!r.ok) throw new Error(await r.text())
+  if(!r.ok) throw await apiError(r)
   return r.json()
 }
 async function apiPost(path:string, body:any){
   const r = await fetch(`/api/v1${path}`, { method:'POST', headers: getAuthHeaders(), body: JSON.stringify(body) })
-  if(!r.ok) throw new Error(await r.text())
+  if(!r.ok) throw await apiError(r)
   return r.json()
 }
 async function apiPatch(path:string, body:any){
   const r = await fetch(`/api/v1${path}`, { method:'PATCH', headers: getAuthHeaders(), body: JSON.stringify(body) })
-  if(!r.ok) throw new Error(await r.text())
+  if(!r.ok) throw await apiError(r)
   return r.json()
 }
 function toBase64(file:File):Promise<string>{
@@ -80,6 +91,13 @@ export default function App(){
   const [receiptItems,setReceiptItems]=useState<any[]>([])
   const [showReceiptConfirm,setShowReceiptConfirm]=useState(false)
   const [monthlyPlan,setMonthlyPlan]=useState(10000)
+  useEffect(()=>{
+    // New users need to accept an invitation before opening shared sections.
+    if(new URLSearchParams(window.location.search).has('section'))return
+    let active=true
+    apiGet('/me').then(result=>{if(active&&!result.data?.family)setSection('family')}).catch(()=>{})
+    return ()=>{active=false}
+  },[])
 
   const totalExpense = useMemo(()=> CATS.reduce((s,c)=>s+c.amount,0),[])
   const sortedAll = useMemo(()=> [...CATS].filter(c=>c.amount>0).sort((a,b)=>b.amount-a.amount),[])
@@ -839,6 +857,7 @@ function FamilyV07(){
   const [error,setError]=useState('')
   const [notice,setNotice]=useState('')
   const [loading,setLoading]=useState(true)
+  const [loaded,setLoaded]=useState(false)
   const [busy,setBusy]=useState('')
   const [showInvite,setShowInvite]=useState(false)
   const [inviteTarget,setInviteTarget]=useState('')
@@ -852,16 +871,28 @@ function FamilyV07(){
   const refresh=async()=>{
     setLoading(true);setError('')
     try{
-      const result=await apiGet('/family')
-      setFamily(result.data);setFamilyName(result.data?.name||'')
-      if(result.data?.my_role==='ADMIN'){
-        const pending=await apiGet('/family/invitations')
-        setInvitations((pending.data||[]).filter((x:any)=>x.status==='PENDING'))
-      }else setInvitations([])
-    }catch(e:any){setFamily(null);setError(String(e.message||e).slice(0,180))}
+      const [me,pending]=await Promise.all([apiGet('/me'),apiGet('/family/invitations')])
+      setInvitations((pending.data||[]).filter((x:any)=>x.status==='PENDING'))
+      if(me.data?.family){
+        const result=await apiGet('/family')
+        setFamily(result.data);setFamilyName(result.data?.name||'')
+      }else{setFamily(null);setFamilyName('')}
+      setLoaded(true)
+    }catch(e:any){setError(String(e.message||e).slice(0,180))}
     finally{setLoading(false)}
   }
-  useEffect(()=>{refresh()},[])
+  useEffect(()=>{
+    refresh()
+    const onVisible=()=>{if(document.visibilityState==='visible')refresh()}
+    window.addEventListener('focus',onVisible)
+    document.addEventListener('visibilitychange',onVisible)
+    return ()=>{window.removeEventListener('focus',onVisible);document.removeEventListener('visibilitychange',onVisible)}
+  },[])
+  const acceptInvitation=async(invitation:any)=>{
+    setBusy(invitation.id);setError('')
+    try{await apiPost(`/family/invitations/${invitation.id}/accept`,{});await refresh();setNotice('Вы присоединились к семье. Общие разделы теперь доступны.')}
+    catch(e:any){setError(String(e.message||e).slice(0,180))}finally{setBusy('')}
+  }
   const createFamily=async()=>{
     const name=newFamilyName.trim()
     if(!name){setError('Введите название семьи.');return}
@@ -882,7 +913,7 @@ function FamilyV07(){
     const body:any={first_name:inviteName.trim()||undefined}
     if(/^\d+$/.test(raw))body.telegram_user_id=Number(raw);else body.username=raw
     setBusy('invite');setError('')
-    try{await apiPost('/family/invitations',body);setInviteTarget('');setInviteName('');setShowInvite(false);await refresh();setNotice('Приглашение создано. Скопируйте текст и отправьте его участнику в Telegram.')}
+    try{const result=await apiPost('/family/invitations',body);setInviteTarget('');setInviteName('');setShowInvite(false);await refresh();setNotice(result.data?.telegram_user_id?'Приглашение создано и поставлено в очередь бота. Оно также доступно участнику в разделе «Семья».':'Приглашение создано. Попросите участника открыть Family Hub через бота: приглашение появится в разделе «Семья».')}
     catch(e:any){setError(String(e.message||e).slice(0,180))}finally{setBusy('')}
   }
   const changeRole=async(member:any,role:'ADMIN'|'USER')=>{
@@ -894,12 +925,12 @@ function FamilyV07(){
   const removeMember=async()=>{
     if(!confirmMember)return
     setBusy(confirmMember.id);setError('')
-    try{const r=await fetch(`/api/v1/family/members/${confirmMember.id}`,{method:'DELETE',headers:getAuthHeaders()});if(!r.ok)throw new Error((await r.text())||`API error: ${r.status}`);setConfirmMember(null);await refresh()}
+    try{const r=await fetch(`/api/v1/family/members/${confirmMember.id}`,{method:'DELETE',headers:getAuthHeaders()});if(!r.ok)throw await apiError(r);setConfirmMember(null);await refresh()}
     catch(e:any){setError(String(e.message||e).slice(0,180))}finally{setBusy('')}
   }
   const cancelInvitation=async(invitation:any)=>{
     setBusy(invitation.id);setError('')
-    try{const r=await fetch(`/api/v1/family/invitations/${invitation.id}`,{method:'DELETE',headers:getAuthHeaders()});if(!r.ok)throw new Error((await r.text())||`API error: ${r.status}`);setConfirmInvitation(null);await refresh()}
+    try{const r=await fetch(`/api/v1/family/invitations/${invitation.id}`,{method:'DELETE',headers:getAuthHeaders()});if(!r.ok)throw await apiError(r);setConfirmInvitation(null);await refresh()}
     catch(e:any){setError(String(e.message||e).slice(0,180))}finally{setBusy('')}
   }
   const copyInvitation=async(invitation:any)=>{
@@ -909,7 +940,8 @@ function FamilyV07(){
   }
   const initials=(member:any)=>`${member.user?.first_name?.[0]||''}${member.user?.last_name?.[0]||''}`.toUpperCase()||'👤'
   if(loading&&!family&&!error)return <div className="stack"><SectionTitle title="Семья" subtitle="Загружаем семейное пространство…"/><div className="card family-loading">Загружаем участников и приглашения…</div></div>
-  if(!family)return <div className="stack"><SectionTitle title="Семья" subtitle="Создайте общее пространство для семейных событий, списков и бюджета." />{error&&<div className="family-alert" role="alert">{error}</div>}<div className="card family-create"><div className="family-hero-icon">👨‍👩‍👧</div><h3>Создайте семью</h3><p>После создания вы сможете пригласить близких и вести общие дела.</p><label>Название семьи<input value={newFamilyName} onChange={e=>setNewFamilyName(e.target.value)} onKeyDown={e=>e.key==='Enter'&&createFamily()} placeholder="Например, Семья Зубаревых" maxLength={120}/></label><button className="button primary full" disabled={busy==='create'} onClick={createFamily}>{busy==='create'?'Создаём…':'Создать семейное пространство'}</button></div></div>
+  if(!loaded&&!family)return <div className="stack"><SectionTitle title="Семья" subtitle="Не удалось загрузить семейное пространство."/><div className="family-alert" role="alert">{error}</div><button className="button secondary" onClick={refresh}>Попробовать ещё раз</button></div>
+  if(!family)return <div className="stack family-page"><SectionTitle title="Семья" subtitle="Примите приглашение близких или создайте своё семейное пространство." action={<button className="button secondary family-refresh" onClick={refresh} disabled={loading} aria-label="Обновить приглашения">↻ <span>Обновить</span></button>}/>{error&&<div className="family-alert" role="alert">{error}</div>}{invitations.length>0&&<section className="card family-incoming"><h3>Вас приглашают в семью</h3>{invitations.map(inv=><article className="family-invitation" key={inv.id}><div className="family-member-info"><strong>{inv.family?.name||'Семья'}</strong><span>Приглашает {inv.inviter?.first_name||inv.inviter?.username||'администратор семьи'}{inv.expires_at?` · до ${new Date(inv.expires_at).toLocaleDateString('ru-RU')}`:''}</span></div><button className="button primary" disabled={!!busy||loading} onClick={()=>acceptInvitation(inv)}>{busy===inv.id?'Присоединяемся…':'Принять приглашение'}</button></article>)}</section>}<div className="card family-create"><div className="family-hero-icon">👨‍👩‍👧</div><h3>{invitations.length?'Или создайте свою семью':'Создайте семью'}</h3><p>После создания вы сможете пригласить близких и вести общие дела.</p><label>Название семьи<input value={newFamilyName} onChange={e=>setNewFamilyName(e.target.value)} onKeyDown={e=>e.key==='Enter'&&createFamily()} placeholder="Например, Семья Зубаревых" maxLength={120}/></label><button className="button primary full" disabled={!!busy||loading} onClick={createFamily}>{busy==='create'?'Создаём…':'Создать семейное пространство'}</button></div></div>
   return <div className="stack family-page">
     <SectionTitle title="Семья" subtitle="Участники, приглашения и общий доступ" action={<button className="button secondary family-refresh" onClick={refresh} disabled={loading} aria-label="Обновить состав семьи">↻ <span>Обновить</span></button>} />
     {error&&<div className="family-alert" role="alert">{error}</div>}
