@@ -308,7 +308,7 @@ function FinanceV07(p:{
               <DonutChart data={displayDonut} total={displayTotal} activeCat={activeCat} onSelect={setActiveCat} />
               <div style={{position:'absolute',textAlign:'center',pointerEvents:'none'}}>
                 <div style={{fontSize:10,color:'var(--muted)',fontWeight:700,letterSpacing:'.06em',textTransform:'uppercase'}}>Расходы</div>
-                <div style={{fontSize:15,fontWeight:800,letterSpacing:'-.02em'}}>{donutCenter}</div>
+                <div style={{fontSize:15,fontWeight:650,letterSpacing:'-.02em'}}>{donutCenter}</div>
                 <div style={{fontSize:11,color:'var(--muted)',fontWeight:600}}>{donutSub}</div>
               </div>
             </div>
@@ -338,13 +338,13 @@ function FinanceV07(p:{
       {addModal && <div className="modal-backdrop" onClick={()=>setAddModal(null)} style={{position:'fixed',inset:0,background:'rgba(15,23,42,.42)',backdropFilter:'blur(4px)',zIndex:40,display:'flex',alignItems:'flex-end'}} onMouseDown={e=>e.target===e.currentTarget&&setAddModal(null)}>
         <div className="modal-sheet" onClick={e=>e.stopPropagation()} style={{width:'100%',maxWidth:640,margin:'0 auto',background:'#fff',borderRadius:'22px 22px 0 0',padding:'18px 16px calc(18px + env(safe-area-inset-bottom))',boxShadow:'0 -10px 30px rgba(0,0,0,.16)',maxHeight:'92vh',overflow:'auto'}}>
           <div className="modal-head" style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:14}}>
-            <h2 style={{margin:0,fontSize:19,fontWeight:800,fontFamily:'Manrope'}}>{addModal.type==='EXPENSE'?'Новый расход':'Новый доход'}</h2>
+            <h2 style={{margin:0,fontSize:19,fontWeight:650,fontFamily:'var(--font-display)'}}>{addModal.type==='EXPENSE'?'Новый расход':'Новый доход'}</h2>
             <button onClick={()=>setAddModal(null)} style={{border:0,background:'#F1F5F9',width:36,height:36,borderRadius:'50%',fontSize:20,cursor:'pointer',display:'grid',placeItems:'center'}}>×</button>
           </div>
           <div style={{display:'flex',flexDirection:'column',gap:12}}>
             <div>
               <label style={{fontSize:12,fontWeight:700,color:'var(--muted)'}}>Сумма, ₽</label>
-              <input type="number" inputMode="decimal" placeholder="0" value={formAmount} onChange={e=>setFormAmount(e.target.value)} style={{width:'100%',border:'1px solid #D8DDE5',borderRadius:12,padding:'14px 12px',fontSize:20,fontWeight:800}} autoFocus />
+              <input type="number" inputMode="decimal" placeholder="0" value={formAmount} onChange={e=>setFormAmount(e.target.value)} style={{width:'100%',border:'1px solid #D8DDE5',borderRadius:12,padding:'14px 12px',fontSize:20,fontWeight:650}} autoFocus />
             </div>
             <div>
               <label style={{fontSize:12,fontWeight:700,color:'var(--muted)'}}>Категория</label>
@@ -405,7 +405,7 @@ function FinanceV07(p:{
                   </div>
                 </div>
                 <div style={{display:'flex',alignItems:'center',gap:8}}>
-                  <span style={{fontWeight:800,fontSize:13,whiteSpace:'nowrap'}}>{rub(c.amount)}</span>
+                  <span style={{fontWeight:650,fontSize:13,whiteSpace:'nowrap'}}>{rub(c.amount)}</span>
                   <button onClick={(e)=>{e.stopPropagation(); openAdd('EXPENSE', c.id)}} title={`Добавить в ${c.name}`} style={{width:28,height:28,borderRadius:'50%',border:'1px solid var(--border)',background:'#fff',display:'grid',placeItems:'center',fontSize:16,lineHeight:1,cursor:'pointer',flex:'0 0 auto',boxShadow:'0 1px 4px rgba(0,0,0,.06)'}}>+</button>
                 </div>
               </div>
@@ -447,7 +447,7 @@ function FinanceV07(p:{
                 </div>
               </div>
               <div style={{display:'flex',alignItems:'center',gap:8}}>
-                <span style={{fontWeight:800,fontSize:13}}>{pct}%</span>
+                <span style={{fontWeight:650,fontSize:13}}>{pct}%</span>
                 <button onClick={(e)=>{e.stopPropagation(); openAdd('EXPENSE', c.id)}} title={`Добавить в ${c.name}`} style={{width:32,height:32,borderRadius:'50%',border:'1px solid var(--border)',background:'#fff',display:'grid',placeItems:'center',fontSize:18,lineHeight:1,cursor:'pointer',boxShadow:'0 1px 4px rgba(0,0,0,.06)'}}>+</button>
               </div>
             </div>
@@ -676,7 +676,7 @@ function ReceiptsTab(p:{items:any[]; setItems:(a:any[])=>void; show:boolean; set
           <button className="button ghost" style={{flex:1}} onClick={()=>p.setShow(false)}>Отмена</button>
         </div>
         <div style={{marginTop:14, padding:14, background:'var(--surface-2)', border:'1px solid var(--border)', borderRadius:14, display:'flex', justifyContent:'space-between', alignItems:'center'}}>
-          <div><div style={{fontSize:12,color:'var(--muted)'}}>Итого к созданию</div><div style={{fontSize:18,fontWeight:800}}>{rub(total)} • {p.items.length} трат</div></div>
+          <div><div style={{fontSize:12,color:'var(--muted)'}}>Итого к созданию</div><div style={{fontSize:18,fontWeight:650}}>{rub(total)} • {p.items.length} трат</div></div>
           <div style={{fontSize:12, color: total>0 ? '#0D9A6E' : '#E11D48', fontWeight:700}}>{total>0?'совпадает ✓':'проверь суммы'}</div>
         </div>
         <button className="button primary full" style={{marginTop:12}} disabled={confirming||uploading} onClick={onConfirm}>{confirming?'Подтверждаю…':`Подтвердить • ${p.items.length} • ${rub(total)}`}</button>
@@ -720,7 +720,7 @@ function StocksTab(){
           <div className="progress" style={{marginTop:6}}><span style={{width:`${it.pct}%`, background: it.left<=3? '#E11D48':'#0F766E'}} /></div>
         </div>
         <div style={{textAlign:'right'}}>
-          <div style={{fontSize:12,fontWeight:800, color: it.left<=3? '#E11D48':'#0F766E'}}>через {it.left} дн</div>
+          <div style={{fontSize:12,fontWeight:650, color: it.left<=3? '#E11D48':'#0F766E'}}>через {it.left} дн</div>
           <button className="button primary small" style={{marginTop:6}} onClick={()=>alert('Купил — тут POST /consumables/:id/purchases + пересчет прогноза')}>＋ Купил</button>
         </div>
       </div>)}
@@ -755,7 +755,7 @@ function LargeTab(p:{monthly:number; setMonthly:(n:number)=>void}){
       <div className="chart-wrap" style={{marginBottom:0}}>
         <div className="chart-wrap-head"><strong>План накоплений</strong><small>ползунок — feasibility</small></div>
         <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', gap:12}}>
-          <div><div style={{fontSize:12,color:'var(--muted)'}}>В месяц</div><div style={{fontSize:22,fontWeight:800}}>{rub(p.monthly)}</div></div>
+          <div><div style={{fontSize:12,color:'var(--muted)'}}>В месяц</div><div style={{fontSize:22,fontWeight:650}}>{rub(p.monthly)}</div></div>
           <input type="range" min={2000} max={30000} step={1000} value={p.monthly} onChange={e=>p.setMonthly(Number(e.target.value))} className="plan-slider" style={{flex:1}} />
         </div>
         <div style={{display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:8, marginTop:12}}>
@@ -781,11 +781,11 @@ function LargeTab(p:{monthly:number; setMonthly:(n:number)=>void}){
           <div style={{display:'flex', gap:10, alignItems:'center'}}>
             <div className="priority-handle" style={{cursor:'grab'}}>☰</div>
             <div>
-              <div style={{fontWeight:800, display:'flex', gap:6, alignItems:'center'}}><span>{g.icon}</span> {g.name} {g.priority===1 && <span className="pill live">★ Приоритет 1</span>}</div>
+              <div style={{fontWeight:650, display:'flex', gap:6, alignItems:'center'}}><span>{g.icon}</span> {g.name} {g.priority===1 && <span className="pill live">★ Приоритет 1</span>}</div>
               <small className="muted">{rub(g.saved)} / {rub(g.target)} • осталось {rub(left)}</small>
             </div>
           </div>
-          <div style={{textAlign:'right'}}><div style={{fontWeight:800}}>{pct}%</div><small style={{color:'var(--muted)'}}>{months} мес при {shortRub(p.monthly)}/мес</small></div>
+          <div style={{textAlign:'right'}}><div style={{fontWeight:650}}>{pct}%</div><small style={{color:'var(--muted)'}}>{months} мес при {shortRub(p.monthly)}/мес</small></div>
         </div>
         <div className="progress" style={{marginTop:12}}><span style={{width:`${pct}%`}} /></div>
         {showAdd===g.id ? <div style={{marginTop:12,display:'flex',gap:8}}>
