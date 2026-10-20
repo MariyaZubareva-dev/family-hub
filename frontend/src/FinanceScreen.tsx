@@ -48,7 +48,7 @@ function Help({text,label='Подсказка'}:{text:string;label?:string}) {
 function Modal({title,onClose,busy,children}:{title:string;onClose:()=>void;busy?:boolean;children:ReactNode}) {
   const ref=useRef<HTMLDialogElement>(null), id=useId()
   useEffect(()=>{const d=ref.current!;d.showModal();return()=>d.close()},[])
-  return <dialog className="finance-dialog" ref={ref} aria-labelledby={id} onCancel={e=>{e.preventDefault();if(!busy)onClose()}} onClick={e=>{if(e.target===e.currentTarget&&!busy)onClose()}}><section><div className="f-head"><h2 id={id}>{title}</h2><button type="button" className="f-icon" onClick={onClose} disabled={busy} aria-label="Закрыть">×</button></div>{children}</section></dialog>
+  return <dialog className="finance-dialog" ref={ref} aria-label={title} onCancel={e=>{e.preventDefault();if(!busy)onClose()}} onClick={e=>{if(e.target===e.currentTarget&&!busy)onClose()}}><section><div className="f-head"><h2 id={id}>{title}</h2><button type="button" className="f-icon" onClick={onClose} disabled={busy} aria-label="Закрыть">×</button></div>{children}</section></dialog>
 }
 function Message({text,error=false}:{text:string;error?:boolean}) { return text?<div className={error?'f-message f-error':'f-message'} role={error?'alert':'status'}>{text}</div>:null }
 function Empty({children}:{children:ReactNode}) { return <p className="f-empty">{children}</p> }
