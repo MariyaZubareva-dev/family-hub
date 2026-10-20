@@ -54,6 +54,12 @@ class TelegramNotificationJob implements ShouldQueue
         }
 
         $member = FamilyMember::with('user')->find($this->recipientMemberId);
+        $section = FamilyMember::notificationSection($this->notificationType);
+        if (!$member || $member->family_id !== $this->familyId || $member->status !== 'ACTIVE'
+            || ($section && !$member->canViewSection($section))) {
+            $this->failNotification('ACCESS_REVOKED', 'Recipient no longer has access to this section.');
+            return;
+        }
         $chatId = $member?->user?->telegram_user_id;
         if (!$chatId) {
             $this->failNotification('NO_CHAT_ID', 'Recipient has no telegram_user_id');

@@ -1,0 +1,103 @@
+import { expect, test, type Page } from '@playwright/test'
+
+const full = { calendar: true, shopping: true, finance: true }
+function fixture() {
+  return { id: 'f1', name: 'Наша семья', my_role: 'ADMIN', current_member_id: 'm1', my_visibility: { ...full }, members: [
+    { id: 'm1', role: 'ADMIN', visibility: { ...full }, user: { first_name: 'Мария', username: 'zubareva_life' } },
+    { id: 'm2', role: 'USER', visibility: { ...full }, user: { first_name: 'Андрей', username: 'atomrus1993' } },
+    { id: 'm3', role: 'USER', visibility: { ...full }, user: { first_name: 'Оченьдлинноеимяучастникасемьи', username: 'a_very_long_telegram_username_123456789' } },
+  ] }
+}
+async function mockApi(page: Page, family = fixture()) {
+  const requests: { path: string; body: any }[] = []
+  await page.route('**/api/v1/**', async route => {
+    const request = route.request()
+    const path = new URL(request.url()).pathname
+    let data: any = []
+    if (path.endsWith('/me')) data = { family: { id: family.id, role: family.my_role, visibility: family.my_visibility } }
+    else if (path.endsWith('/family/invitations')) data = []
+    else if (path.endsWith('/family')) data = family
+    else if (path.endsWith('/visibility') && request.method() === 'PATCH') {
+      const body = request.postDataJSON()
+      requests.push({ path, body })
+      const member = family.members.find(m => path.includes(`/${m.id}/`))!
+      Object.assign(member.visibility, body.visibility)
+      data = family
+    }
+    await route.fulfill({ json: { data } })
+  })
+  return requests
+}
+
+for (const width of [320, 393, 768]) {
+  test(`compact family fits ${width}px with roles next to names`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 852 })
+    await mockApi(page)
+    await page.goto('/?section=family')
+    await expect(page.getByRole('heading', { name: 'Участники 3' })).toBeVisible()
+    await page.evaluate(() => document.fonts.ready)
+    await expect(page.getByText('Семейный кабинет', { exact: true })).toHaveCount(0)
+    await expect(page.getByText('Семейное пространство', { exact: true })).toHaveCount(0)
+    await expect(page.getByRole('heading', { name: 'Family Hub', exact: true })).toHaveCount(1)
+    const measurements = await page.evaluate(() => {
+      const row = document.querySelector('.family-member-name-row')!
+      const name = row.querySelector('strong')!.getBoundingClientRect()
+      const role = row.querySelector('.family-role')!.getBoundingClientRect()
+      const members = document.querySelector('.family-members-card')!.getBoundingClientRect()
+      return { width: innerWidth, scroll: document.documentElement.scrollWidth, roleX: role.left, nameRight: name.right, roleY: role.top, nameY: name.top, membersHeight: members.height }
+    })
+    expect(measurements.scroll).toBeLessThanOrEqual(measurements.width)
+    expect(measurements.roleX).toBeGreaterThanOrEqual(measurements.nameRight)
+    expect(Math.abs(measurements.roleY - measurements.nameY)).toBeLessThan(8)
+    expect(measurements.membersHeight).toBeLessThan(280)
+    await expect(page.getByRole('heading', { name: 'Общий доступ', exact: true })).toBeInViewport()
+    await page.getByLabel('Действия для Андрей', { exact: true }).click()
+    await expect(page.getByLabel('Роль', { exact: true })).toBeVisible()
+    const inside = await page.evaluate(() => {
+      const menu = document.querySelector('.family-member-menu[open] .family-member-actions')!.getBoundingClientRect()
+      const card = document.querySelector('.family-members-card')!.getBoundingClientRect()
+      return menu.bottom <= card.bottom && menu.right <= card.right && menu.left >= card.left
+    })
+    expect(inside).toBe(true)
+    if (width === 393) {
+      await page.getByLabel('Действия для Андрей', { exact: true }).click()
+      await page.screenshot({ path: 'test-results/family-393.png', fullPage: true })
+    }
+  })
+}
+
+test('admin changes visibility for a member; admin toggle stays locked', async ({ page }) => {
+  await page.setViewportSize({ width: 393, height: 852 })
+  const requests = await mockApi(page)
+  await page.goto('/?section=family')
+  await page.getByRole('button', { name: 'Настроить видимость: Бюджет и кредиты' }).click()
+  const dialog = page.getByRole('dialog', { name: 'Бюджет и кредиты' })
+  await expect(dialog).toBeVisible()
+  const admin = dialog.getByRole('switch', { name: 'Мария: Бюджет и кредиты' })
+  await expect(admin).toBeChecked()
+  await expect(admin).toBeDisabled()
+  const member = dialog.getByRole('switch', { name: 'Андрей: Бюджет и кредиты' })
+  await member.click()
+  await expect(member).not.toBeChecked()
+  expect(requests).toEqual([{ path: '/api/v1/family/members/m2/visibility', body: { visibility: { finance: false } } }])
+  await page.keyboard.press('Escape')
+  await expect(dialog).toHaveCount(0)
+  await expect(page.getByRole('button', { name: 'Настроить видимость: Бюджет и кредиты' })).toBeFocused()
+})
+
+test('restricted sections are absent from navigation and overview', async ({ page }) => {
+  const family = fixture()
+  family.my_role = 'USER'
+  family.current_member_id = 'm2'
+  family.my_visibility = { calendar: false, shopping: true, finance: false }
+  await mockApi(page, family)
+  await page.goto('/?section=finance')
+  await expect(page.getByRole('heading', { name: 'Семья', exact: true })).toBeVisible()
+  const nav = page.getByRole('navigation', { name: 'Основная навигация' })
+  await expect(nav.getByRole('button', { name: 'Финансы' })).toHaveCount(0)
+  await expect(nav.getByRole('button', { name: 'Календарь' })).toHaveCount(0)
+  await expect(nav.getByRole('button', { name: 'Покупки' })).toBeVisible()
+  await nav.getByRole('button', { name: 'Главная' }).click()
+  await expect(page.getByRole('heading', { name: 'Бюджет за месяц' })).toHaveCount(0)
+  await expect(page.getByRole('heading', { name: 'События и напоминания' })).toHaveCount(0)
+})

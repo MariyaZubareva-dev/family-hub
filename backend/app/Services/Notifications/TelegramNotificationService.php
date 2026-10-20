@@ -91,6 +91,11 @@ class TelegramNotificationService
 
     private static function dispatch(string $familyId, string $recipientMemberId, string $type, string $key, string $text, array $payload, $scheduledAt, $notifiable = null): void
     {
+        $section = FamilyMember::notificationSection($type);
+        $member = FamilyMember::find($recipientMemberId);
+        if (!$member || $member->family_id !== $familyId || $member->status !== 'ACTIVE'
+            || ($section && !$member->canViewSection($section))) return;
+
         // ensure telegram_notifications row exists for idempotency + status tracking
         $exists = DB::table('telegram_notifications')->where('family_id', $familyId)->where('idempotency_key', $key)->exists();
         if (!$exists) {

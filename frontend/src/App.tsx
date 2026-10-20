@@ -78,10 +78,16 @@ const INCOMES: Cat[] = [
   { id:'invest_i', name:'Инвестиции', icon:'◎', color:'#0EA5E9', amount:26500, income:true },
 ]
 
+const pluralRu=(n:number,one:string,few:string,many:string)=>n%100>=11&&n%100<=14?many:n%10===1?one:n%10>=2&&n%10<=4?few:many
 const rub = (v:number)=> `${v.toLocaleString('ru-RU')} ₽`
 const shortRub = (v:number)=> v>=1000? `${(v/1000).toFixed(v>=10000?0:1)}k ₽` : `${v} ₽`
 
 type Section = 'home'|'calendar'|'lists'|'finance'|'family'
+type VisibilitySection = 'calendar'|'shopping'|'finance'
+type SectionVisibility = Record<VisibilitySection,boolean>
+const ALL_VISIBLE:SectionVisibility={calendar:true,shopping:true,finance:true}
+const SHARED_SECTIONS:{id:VisibilitySection;title:string;icon:string}[]=[{id:'calendar',title:'Календарь и напоминания',icon:'▦'},{id:'shopping',title:'Покупки и списки',icon:'☷'},{id:'finance',title:'Бюджет и кредиты',icon:'₽'}]
+const canOpenSection=(section:Section,v:SectionVisibility)=>section==='calendar'?v.calendar:section==='lists'?v.shopping:section==='finance'?v.finance:true
 type FinanceTab = 'overview'|'categories'|'receipts'|'stocks'|'large'|'credits'|'budget'
 
 export default function App(){
@@ -91,13 +97,25 @@ export default function App(){
   const [receiptItems,setReceiptItems]=useState<any[]>([])
   const [showReceiptConfirm,setShowReceiptConfirm]=useState(false)
   const [monthlyPlan,setMonthlyPlan]=useState(10000)
+  const [access,setAccess]=useState<SectionVisibility|null>(null)
+  const [accessError,setAccessError]=useState('')
   useEffect(()=>{
-    // New users need to accept an invitation before opening shared sections.
-    if(new URLSearchParams(window.location.search).has('section'))return
     let active=true
-    apiGet('/me').then(result=>{if(active&&!result.data?.family)setSection('family')}).catch(()=>{})
-    return ()=>{active=false}
+    const refreshAccess=()=>apiGet('/me').then(result=>{
+      if(!active)return
+      const v={...ALL_VISIBLE,...result.data?.family?.visibility}
+      setAccess(result.data?.family?v:{calendar:false,shopping:false,finance:false})
+      setAccessError('')
+      setSection(current=>!result.data?.family?'family':canOpenSection(current,v)?current:'family')
+    }).catch((e:any)=>{if(active)setAccessError(String(e.message||e))})
+    refreshAccess()
+    const onVisible=()=>{if(document.visibilityState==='visible')refreshAccess()}
+    window.addEventListener('focus',onVisible)
+    window.addEventListener('family-access-changed',refreshAccess)
+    document.addEventListener('visibilitychange',onVisible)
+    return ()=>{active=false;window.removeEventListener('focus',onVisible);window.removeEventListener('family-access-changed',refreshAccess);document.removeEventListener('visibilitychange',onVisible)}
   },[])
+
 
   const totalExpense = useMemo(()=> CATS.reduce((s,c)=>s+c.amount,0),[])
   const sortedAll = useMemo(()=> [...CATS].filter(c=>c.amount>0).sort((a,b)=>b.amount-a.amount),[])
@@ -109,21 +127,16 @@ export default function App(){
   return <div className="app-shell">
     {/* TOPBAR */}
     <header className="topbar">
-      <div>
-        <div className="eyebrow">Семейное пространство</div>
-        <h1>Family Hub</h1>
-      </div>
-      <div className="topbar-right">
-        <span className="badge-pill">Семейный кабинет</span>
-        <div className="user-badge">👨‍👩‍👧</div>
-      </div>
+      <h1>Family Hub</h1>
     </header>
 
     <main className="page">
-      {section==='home' && <HomeView onGo={setSection} totalExpense={totalExpense} />}
-      {section==='calendar' && <CalendarV07 />}
-      {section==='lists' && <ListsV07 />}
-      {section==='finance' && <FinanceV07 
+      {accessError&&<div className="family-alert" role="alert">{accessError}</div>}
+      {!access&&!accessError&&<div className="family-loading">Загружаем пространство…</div>}
+      {access&&section==='home' && <HomeView onGo={setSection} totalExpense={totalExpense} visibility={access} />}
+      {access?.calendar&&section==='calendar' && <CalendarV07 />}
+      {access?.shopping&&section==='lists' && <ListsV07 />}
+      {access?.finance&&section==='finance' && <FinanceV07
         fTab={fTab} setFTab={setFTab}
         totalExpense={totalExpense} ranked={ranked} donutData={donutData}
         selectedCat={selectedCat} setSelectedCat={setSelectedCat}
@@ -131,14 +144,14 @@ export default function App(){
         showReceiptConfirm={showReceiptConfirm} setShowReceiptConfirm={setShowReceiptConfirm}
         monthlyPlan={monthlyPlan} setMonthlyPlan={setMonthlyPlan}
       />}
-      {section==='family' && <FamilyV07 />}
+      {access&&section==='family' && <FamilyV07 />}
     </main>
 
-    <nav className="bottom-nav">
+    <nav className="bottom-nav" aria-label="Основная навигация" style={{gridTemplateColumns:`repeat(${2+Number(!!access?.calendar)+Number(!!access?.shopping)+Number(!!access?.finance)},minmax(0,1fr))`}}>
       <Nav active={section==='home'} label="Главная" icon="⌂" onClick={()=>setSection('home')} />
-      <Nav active={section==='calendar'} label="Календарь" icon="▦" onClick={()=>setSection('calendar')} />
-      <Nav active={section==='lists'} label="Покупки" icon="☷" onClick={()=>setSection('lists')} />
-      <Nav active={section==='finance'} label="Финансы" icon="₽" onClick={()=>setSection('finance')} />
+      {access?.calendar&&<Nav active={section==='calendar'} label="Календарь" icon="▦" onClick={()=>setSection('calendar')} />}
+      {access?.shopping&&<Nav active={section==='lists'} label="Покупки" icon="☷" onClick={()=>setSection('lists')} />}
+      {access?.finance&&<Nav active={section==='finance'} label="Финансы" icon="₽" onClick={()=>setSection('finance')} />}
       <Nav active={section==='family'} label="Семья" icon="👨‍👩‍👧" onClick={()=>setSection('family')} />
     </nav>
   </div>
@@ -151,16 +164,17 @@ function Nav(p:{active:boolean; label:string; icon:string; onClick:()=>void}){
 }
 
 // ---------- HOME — dashboard спека ----------
-function HomeView(p:{onGo:(s:Section)=>void; totalExpense:number}){
+function HomeView(p:{onGo:(s:Section)=>void; totalExpense:number;visibility:SectionVisibility}){
   const [events,setEvents]=useState<any[]>([]);const [reminders,setReminders]=useState<any[]>([]);const [credits,setCredits]=useState<any[]>([]);const [analytics,setAnalytics]=useState<any>(null)
-  useEffect(()=>{const n=new Date();const q=`?period=month&year=${n.getFullYear()}&month=${n.getMonth()+1}`;Promise.allSettled([apiGet('/events'),apiGet('/reminders'),apiGet('/credits'),apiGet('/finance/analytics'+q)]).then(r=>{if(r[0].status==='fulfilled')setEvents(r[0].value.data||[]);if(r[1].status==='fulfilled')setReminders(r[1].value.data||[]);if(r[2].status==='fulfilled')setCredits(r[2].value.data||[]);if(r[3].status==='fulfilled')setAnalytics(r[3].value.data)})},[])
+  useEffect(()=>{const n=new Date();const q=`?period=month&year=${n.getFullYear()}&month=${n.getMonth()+1}`;Promise.allSettled([p.visibility.calendar?apiGet('/events'):Promise.resolve({data:[]}),p.visibility.calendar?apiGet('/reminders'):Promise.resolve({data:[]}),p.visibility.finance?apiGet('/credits'):Promise.resolve({data:[]}),p.visibility.finance?apiGet('/finance/analytics'+q):Promise.resolve({data:null})]).then(r=>{if(r[0].status==='fulfilled')setEvents(r[0].value.data||[]);if(r[1].status==='fulfilled')setReminders(r[1].value.data||[]);if(r[2].status==='fulfilled')setCredits(r[2].value.data||[]);if(r[3].status==='fulfilled')setAnalytics(r[3].value.data)})},[p.visibility.calendar,p.visibility.finance])
   const soon=[...events.filter(x=>x.status==='SCHEDULED').map(x=>({...x,_at:new Date(x.start_at),_kind:'Событие'})),...reminders.filter(x=>x.status==='SCHEDULED').map(x=>({...x,_at:new Date(x.scheduled_at),_kind:'Напоминание'}))].filter(x=>x._at>=new Date()).sort((a,b)=>a._at-b._at).slice(0,5)
   const cats=(analytics?.ranked||[]).slice(0,6);const max=Math.max(1,...cats.map((c:any)=>Number(c.amount)||0))
   const next=credits.map(c=>{const [y,m,day]=String(c.first_payment_date).slice(0,10).split('-').map(Number);const first=new Date(y,m-1,day);const today=new Date();today.setHours(0,0,0,0);const addMonth=(n:number)=>{const ix=first.getFullYear()*12+first.getMonth()+n;const yr=Math.floor(ix/12);const mo=ix%12;return new Date(yr,mo,Math.min(first.getDate(),new Date(yr,mo+1,0).getDate()))};let idx=Math.max(0,(today.getFullYear()-first.getFullYear())*12+today.getMonth()-first.getMonth());let d=addMonth(idx);if(d<today){idx++;d=addMonth(idx)}const installment=idx+1;const part=(c.payment_schedule||[]).find((x:any)=>installment>=Number(x.from_month)&&installment<=Number(x.to_month));return {...c,_next:d,_nextAmount:Number(part?.amount??c.standard_payment)}}).sort((a,b)=>a._next-b._next).slice(0,4)
   return <div className="stack"><SectionTitle title="Обзор семьи" subtitle={new Date().toLocaleDateString('ru-RU',{day:'numeric',month:'long',year:'numeric'})} />
-    <div className="grid-2"><div className="card"><div className="card-head"><h3>События и напоминания</h3><button className="button secondary small" onClick={()=>p.onGo('calendar')}>Календарь →</button></div>{soon.length?soon.map((x:any)=><div className="list-item-card" key={x._kind+x.id}><span className="pill">{x._kind}</span><strong style={{flex:1}}>{x.title}</strong><small>{x._at.toLocaleString('ru-RU',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'})}</small></div>):<p className="muted">Ближайших событий и напоминаний нет.</p>}<button className="button primary small" onClick={()=>p.onGo('calendar')}>＋ Добавить</button></div>
-      <div className="card"><div className="card-head"><h3>Бюджет за месяц</h3><button className="button secondary small" onClick={()=>p.onGo('finance')}>Финансы →</button></div><div className="grid-3"><div className="metric"><small>Доходы</small><strong>{rub(Number(analytics?.total_income)||0)}</strong></div><div className="metric"><small>Расходы</small><strong>{rub(Number(analytics?.total_expense)||0)}</strong></div><div className="metric balance"><small>Остаток</small><strong style={{color:(Number(analytics?.balance)||0)>=0?'#0F766E':'#E11D48'}}>{rub(Number(analytics?.balance)||0)}</strong></div></div>{cats.length?cats.map((c:any)=><div key={c.id||c.name} style={{marginTop:8}}><div className="summary-line"><span>{c.name}</span><b>{rub(Number(c.amount)||0)}</b></div><div className="progress"><span style={{width:`${Math.max(2,Number(c.amount)/max*100)}%`,background:c.color||'#0F766E'}} /></div></div>):<p className="muted">Расходы появятся после добавления операций.</p>}</div></div>
-    <div className="card"><div className="card-head"><h3>Ближайшие платежи по кредитам</h3><button className="button secondary small" onClick={()=>{p.onGo('finance')}}>Кредиты →</button></div>{next.length?next.map((c:any)=><div className="list-item-card" key={c.id}><strong style={{flex:1}}>{c.name||'Кредит'}</strong><span>{c._next.toLocaleDateString('ru-RU')}</span><b>{rub(Number(c._nextAmount)||0)}</b></div>):<p className="muted">Кредиты не добавлены.</p>}</div>
+    <div className="grid-2">{p.visibility.calendar&&<div className="card"><div className="card-head"><h3>События и напоминания</h3><button className="button secondary small" onClick={()=>p.onGo('calendar')}>Календарь →</button></div>{soon.length?soon.map((x:any)=><div className="list-item-card" key={x._kind+x.id}><span className="pill">{x._kind}</span><strong style={{flex:1}}>{x.title}</strong><small>{x._at.toLocaleString('ru-RU',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'})}</small></div>):<p className="muted">Ближайших событий и напоминаний нет.</p>}<button className="button primary small" onClick={()=>p.onGo('calendar')}>＋ Добавить</button></div>}
+      {p.visibility.finance&&<div className="card"><div className="card-head"><h3>Бюджет за месяц</h3><button className="button secondary small" onClick={()=>p.onGo('finance')}>Финансы →</button></div><div className="grid-3"><div className="metric"><small>Доходы</small><strong>{rub(Number(analytics?.total_income)||0)}</strong></div><div className="metric"><small>Расходы</small><strong>{rub(Number(analytics?.total_expense)||0)}</strong></div><div className="metric balance"><small>Остаток</small><strong style={{color:(Number(analytics?.balance)||0)>=0?'#0F766E':'#E11D48'}}>{rub(Number(analytics?.balance)||0)}</strong></div></div>{cats.length?cats.map((c:any)=><div key={c.id||c.name} style={{marginTop:8}}><div className="summary-line"><span>{c.name}</span><b>{rub(Number(c.amount)||0)}</b></div><div className="progress"><span style={{width:`${Math.max(2,Number(c.amount)/max*100)}%`,background:c.color||'#0F766E'}} /></div></div>):<p className="muted">Расходы появятся после добавления операций.</p>}</div>}</div>
+    {p.visibility.finance&&<div className="card"><div className="card-head"><h3>Ближайшие платежи по кредитам</h3><button className="button secondary small" onClick={()=>{p.onGo('finance')}}>Кредиты →</button></div>{next.length?next.map((c:any)=><div className="list-item-card" key={c.id}><strong style={{flex:1}}>{c.name||'Кредит'}</strong><span>{c._next.toLocaleDateString('ru-RU')}</span><b>{rub(Number(c._nextAmount)||0)}</b></div>):<p className="muted">Кредиты не добавлены.</p>}</div>}
+    {!p.visibility.calendar&&!p.visibility.finance&&<div className="card"><p className="muted">Доступные разделы указаны в нижнем меню. Настройки видимости — в разделе «Семья».</p><button className="button secondary small" onClick={()=>p.onGo('family')}>Открыть семью</button></div>}
   </div>
 }
 
@@ -867,6 +881,8 @@ function FamilyV07(){
   const [editingName,setEditingName]=useState(false)
   const [confirmMember,setConfirmMember]=useState<any>(null)
   const [confirmInvitation,setConfirmInvitation]=useState<any>(null)
+  const [visibilitySection,setVisibilitySection]=useState<VisibilitySection|null>(null)
+  useEffect(()=>{if(!notice)return;const id=window.setTimeout(()=>setNotice(''),6000);return ()=>window.clearTimeout(id)},[notice])
   const isAdmin=family?.my_role==='ADMIN'
   const refresh=async()=>{
     setLoading(true);setError('')
@@ -890,14 +906,14 @@ function FamilyV07(){
   },[])
   const acceptInvitation=async(invitation:any)=>{
     setBusy(invitation.id);setError('')
-    try{await apiPost(`/family/invitations/${invitation.id}/accept`,{});await refresh();setNotice('Вы присоединились к семье. Общие разделы теперь доступны.')}
+    try{await apiPost(`/family/invitations/${invitation.id}/accept`,{});await refresh();window.dispatchEvent(new Event('family-access-changed'));setNotice('Вы присоединились к семье. Общие разделы теперь доступны.')}
     catch(e:any){setError(String(e.message||e).slice(0,180))}finally{setBusy('')}
   }
   const createFamily=async()=>{
     const name=newFamilyName.trim()
     if(!name){setError('Введите название семьи.');return}
     setBusy('create');setError('')
-    try{await apiPost('/families',{name});setNewFamilyName('');await refresh()}
+    try{await apiPost('/families',{name});setNewFamilyName('');await refresh();window.dispatchEvent(new Event('family-access-changed'))}
     catch(e:any){setError(String(e.message||e).slice(0,180))}finally{setBusy('')}
   }
   const saveFamilyName=async()=>{
@@ -938,28 +954,63 @@ function FamilyV07(){
     try{await navigator.clipboard.writeText(`Приглашение в семью «${family?.name}» для ${identity}. Откройте Family Hub и примите приглашение в разделе «Семья».`);setNotice('Текст приглашения скопирован. Отправьте его участнику в Telegram.')}
     catch{setError('Не удалось скопировать текст. Разрешите доступ к буферу обмена браузера.')}
   }
+  const setMemberVisibility=async(member:any,section:VisibilitySection,visible:boolean)=>{
+    setBusy(member.id);setError('')
+    try{const result=await apiPatch(`/family/members/${member.id}/visibility`,{visibility:{[section]:visible}});setFamily(result.data);window.dispatchEvent(new Event('family-access-changed'))}
+    catch(e:any){setError(String(e.message||e).slice(0,180))}finally{setBusy('')}
+  }
+  useEffect(()=>{
+    if(!visibilitySection)return
+    const dialog=document.querySelector<HTMLDialogElement>('#family-visibility-dialog')
+    dialog?.showModal()
+    return ()=>{dialog?.close()}
+  },[visibilitySection])
   const initials=(member:any)=>`${member.user?.first_name?.[0]||''}${member.user?.last_name?.[0]||''}`.toUpperCase()||'👤'
   if(loading&&!family&&!error)return <div className="stack"><SectionTitle title="Семья" subtitle="Загружаем семейное пространство…"/><div className="card family-loading">Загружаем участников и приглашения…</div></div>
   if(!loaded&&!family)return <div className="stack"><SectionTitle title="Семья" subtitle="Не удалось загрузить семейное пространство."/><div className="family-alert" role="alert">{error}</div><button className="button secondary" onClick={refresh}>Попробовать ещё раз</button></div>
   if(!family)return <div className="stack family-page"><SectionTitle title="Семья" subtitle="Примите приглашение близких или создайте своё семейное пространство." action={<button className="button secondary family-refresh" onClick={refresh} disabled={loading} aria-label="Обновить приглашения">↻ <span>Обновить</span></button>}/>{error&&<div className="family-alert" role="alert">{error}</div>}{invitations.length>0&&<section className="card family-incoming"><h3>Вас приглашают в семью</h3>{invitations.map(inv=><article className="family-invitation" key={inv.id}><div className="family-member-info"><strong>{inv.family?.name||'Семья'}</strong><span>Приглашает {inv.inviter?.first_name||inv.inviter?.username||'администратор семьи'}{inv.expires_at?` · до ${new Date(inv.expires_at).toLocaleDateString('ru-RU')}`:''}</span></div><button className="button primary" disabled={!!busy||loading} onClick={()=>acceptInvitation(inv)}>{busy===inv.id?'Присоединяемся…':'Принять приглашение'}</button></article>)}</section>}<div className="card family-create"><div className="family-hero-icon">👨‍👩‍👧</div><h3>{invitations.length?'Или создайте свою семью':'Создайте семью'}</h3><p>После создания вы сможете пригласить близких и вести общие дела.</p><label>Название семьи<input value={newFamilyName} onChange={e=>setNewFamilyName(e.target.value)} onKeyDown={e=>e.key==='Enter'&&createFamily()} placeholder="Например, Семья Зубаревых" maxLength={120}/></label><button className="button primary full" disabled={!!busy||loading} onClick={createFamily}>{busy==='create'?'Создаём…':'Создать семейное пространство'}</button></div></div>
   return <div className="stack family-page">
-    <SectionTitle title="Семья" subtitle="Участники, приглашения и общий доступ" action={<button className="button secondary family-refresh" onClick={refresh} disabled={loading} aria-label="Обновить состав семьи">↻ <span>Обновить</span></button>} />
+    <SectionTitle title="Семья" action={<button className="family-icon-button" onClick={refresh} disabled={loading} aria-label="Обновить состав семьи">↻</button>} />
     {error&&<div className="family-alert" role="alert">{error}</div>}
     {notice&&<div className="family-notice" role="status">{notice}<button onClick={()=>setNotice('')} aria-label="Закрыть уведомление">×</button></div>}
     <section className="card family-overview" aria-label="Информация о семье">
-      <div className="family-overview-main"><div className="family-hero-icon">👨‍👩‍👧</div><div className="family-title-block">{editingName&&isAdmin?<><label className="family-name-edit"><span className="sr-only">Название семьи</span><input value={familyName} maxLength={120} onChange={e=>setFamilyName(e.target.value)} onKeyDown={e=>e.key==='Enter'&&saveFamilyName()}/></label><div className="family-inline-actions"><button className="button primary small" onClick={saveFamilyName} disabled={busy==='name'}>{busy==='name'?'Сохраняю…':'Сохранить'}</button><button className="button secondary small" onClick={()=>{setFamilyName(family.name);setEditingName(false)}}>Отмена</button></div></>:<><h3>{family.name}</h3><p>Общее пространство семьи</p></>}</div>{isAdmin&&!editingName&&<button className="tiny family-edit-button" onClick={()=>setEditingName(true)}>Изменить название</button>}</div>
-      <div className="family-summary"><div><strong>{family.members?.length||0}</strong><span>участников</span></div><div><strong>{invitations.length}</strong><span>ожидают приглашения</span></div><div><strong>{isAdmin?'Администратор':'Участник'}</strong><span>ваша роль</span></div></div>
+      <div className="family-overview-main">
+        <div className="family-hero-icon" aria-hidden="true">⌂</div>
+        <div className="family-title-block">
+          {editingName&&isAdmin?<><label className="family-name-edit"><span className="sr-only">Название семьи</span><input value={familyName} maxLength={120} onChange={e=>setFamilyName(e.target.value)} onKeyDown={e=>e.key==='Enter'&&saveFamilyName()}/></label><div className="family-inline-actions"><button className="button primary small" onClick={saveFamilyName} disabled={busy==='name'}>Сохранить</button><button className="button secondary small" onClick={()=>{setFamilyName(family.name);setEditingName(false)}}>Отмена</button></div></>:<h3>{family.name}</h3>}
+          <p>{family.members?.length||0} {pluralRu(family.members?.length||0,'участник','участника','участников')}{isAdmin&&invitations.length>0?` · ${invitations.length} приглашений`:''}</p>
+        </div>
+        {isAdmin&&!editingName&&<button className="family-icon-button" onClick={()=>setEditingName(true)} aria-label="Изменить название" title="Изменить название">✎</button>}
+      </div>
     </section>
-    <div className="family-columns">
-      <section className="card family-members-card"><div className="card-head"><div><h3>Участники семьи</h3><small>Общие разделы доступны участникам</small></div>{isAdmin&&<button className="button primary small" onClick={()=>setShowInvite(v=>!v)}>{showInvite?'Закрыть':'＋ Пригласить'}</button>}</div>
-        {showInvite&&isAdmin&&<div className="family-invite-form"><div className="family-form-title"><strong>Пригласить участника</strong><span>Приглашение появится у него в Family Hub</span></div><label>Telegram ID или логин<input value={inviteTarget} onChange={e=>setInviteTarget(e.target.value)} placeholder="Например, @username или 123456789" autoComplete="off"/></label><label>Имя для приглашения <span className="muted">(необязательно)</span><input value={inviteName} onChange={e=>setInviteName(e.target.value)} placeholder="Имя участника" maxLength={255}/></label><button className="button primary full" onClick={invite} disabled={busy==='invite'}>{busy==='invite'?'Создаём…':'Создать приглашение'}</button></div>}
-        <div className="family-member-list">{family.members?.map((m:any)=><article className="family-member" key={m.id}><div className="family-avatar">{m.user?.avatar_url?<img src={m.user.avatar_url} alt=""/>:initials(m)}</div><div className="family-member-info"><strong>{m.user?.first_name||m.user?.username||'Участник'}</strong><span>{m.user?.username?`@${String(m.user.username).replace(/^@/,'')}`:'Участник семьи'}{m.joined_at?` · с ${new Date(m.joined_at).toLocaleDateString('ru-RU',{month:'short',year:'numeric'})}`:''}</span></div><span className={`family-role ${m.role==='ADMIN'?'admin':''}`}>{m.role==='ADMIN'?'Администратор':'Участник'}</span>{isAdmin&&m.id!==family.current_member_id&&<details className="family-member-menu"><summary aria-label={`Действия для ${m.user?.first_name||'участника'}`}>•••</summary><div className="family-member-actions"><label>Роль<select value={m.role} disabled={busy===m.id} onChange={e=>changeRole(m,e.target.value as 'ADMIN'|'USER')}><option value="USER">Участник</option><option value="ADMIN">Администратор</option></select></label><button className="tiny danger" onClick={()=>setConfirmMember(m)}>Удалить из семьи</button></div></details>}</article>)}{!family.members?.length&&<div className="empty">Пока в семье только вы. Пригласите близких.</div>}</div>
-      </section>
-      <section className="card family-access-card"><div className="card-head"><div><h3>Общий доступ</h3><small>Что доступно участникам семьи</small></div><span className="family-shared-icon">⌂</span></div><div className="family-access-list"><div><span>▦</span><div><strong>Календарь и напоминания</strong><small>Семейные события видны всем</small></div></div><div><span>☷</span><div><strong>Покупки и списки</strong><small>Общие планы и регулярные товары</small></div></div><div><span>₽</span><div><strong>Бюджет и кредиты</strong><small>Финансы семьи в одном месте</small></div></div></div><div className="family-access-note">Изменения в общих разделах сразу видны участникам с доступом к семье.</div></section>
-    </div>
-    {isAdmin&&<section className="card family-invitations-card"><div className="card-head"><div><h3>Приглашения</h3><small>Действуют 14 дней с момента создания</small></div><span className="pill">{invitations.length}</span></div>{invitations.length?invitations.map((inv:any)=><div className="family-invitation" key={inv.id}><div className="family-invite-avatar">✉</div><div className="family-member-info"><strong>{inv.first_name||(inv.username?`@${String(inv.username).replace(/^@/,'')}`:`Telegram ID ${inv.telegram_user_id}`)}</strong><span>{inv.username?`@${String(inv.username).replace(/^@/,'')} · `:''}Ожидает ответа{inv.expires_at?` · до ${new Date(inv.expires_at).toLocaleDateString('ru-RU')}`:''}</span></div><span className="family-pending">Ожидает</span><div className="family-invitation-actions"><button className="tiny" onClick={()=>copyInvitation(inv)}>Копировать приглашение</button><button className="tiny danger" disabled={busy===inv.id} onClick={()=>setConfirmInvitation(inv)}>{busy===inv.id?'…':'Отменить'}</button></div></div>):<div className="empty">Активных приглашений нет. Пригласите участника семьи.</div>}</section>}
-    {confirmMember&&<div className="modal-backdrop" role="presentation" onMouseDown={e=>e.target===e.currentTarget&&setConfirmMember(null)}><section className="modal-sheet family-confirm" role="dialog" aria-modal="true" aria-labelledby="family-remove-title"><div className="modal-head"><h2 id="family-remove-title">Удалить участника?</h2><button onClick={()=>setConfirmMember(null)} aria-label="Закрыть">×</button></div><p>Участник <strong>{confirmMember.user?.first_name||confirmMember.user?.username||'семьи'}</strong> потеряет доступ к общему пространству. Его данные семьи сохранятся.</p><div className="modal-actions"><button className="button secondary" onClick={()=>setConfirmMember(null)}>Оставить</button><button className="button primary family-danger-button" disabled={busy===confirmMember.id} onClick={removeMember}>{busy===confirmMember.id?'Удаляем…':'Удалить участника'}</button></div></section></div>}
-    {confirmInvitation&&<div className="modal-backdrop" role="presentation" onMouseDown={e=>e.target===e.currentTarget&&setConfirmInvitation(null)}><section className="modal-sheet family-confirm" role="dialog" aria-modal="true" aria-labelledby="family-invite-cancel-title"><div className="modal-head"><h2 id="family-invite-cancel-title">Отменить приглашение?</h2><button onClick={()=>setConfirmInvitation(null)} aria-label="Закрыть">×</button></div><p>Приглашение для <strong>{confirmInvitation.first_name||confirmInvitation.username||`Telegram ID ${confirmInvitation.telegram_user_id}`}</strong> перестанет действовать.</p><div className="modal-actions"><button className="button secondary" onClick={()=>setConfirmInvitation(null)}>Оставить</button><button className="button primary family-danger-button" disabled={busy===confirmInvitation.id} onClick={()=>cancelInvitation(confirmInvitation)}>{busy===confirmInvitation.id?'Отменяем…':'Отменить приглашение'}</button></div></section></div>}
+    <section className="card family-members-card" aria-labelledby="family-members-title">
+      <div className="card-head"><h3 id="family-members-title">Участники <span className="family-heading-count">{family.members?.length||0}</span></h3>{isAdmin&&<button className="family-text-button" onClick={()=>setShowInvite(v=>!v)}>{showInvite?'Закрыть':'＋ Пригласить'}</button>}</div>
+      {showInvite&&isAdmin&&<div className="family-invite-form"><label>Telegram ID или логин<input value={inviteTarget} onChange={e=>setInviteTarget(e.target.value)} placeholder="@username или 123456789" autoComplete="off"/></label><label>Имя <span className="muted">(необязательно)</span><input value={inviteName} onChange={e=>setInviteName(e.target.value)} placeholder="Имя участника" maxLength={255}/></label><button className="button primary full" onClick={invite} disabled={busy==='invite'}>{busy==='invite'?'Создаём…':'Создать приглашение'}</button></div>}
+      <div className="family-member-list">{family.members?.map((m:any)=><article className="family-member" key={m.id}>
+        <div className="family-avatar">{m.user?.avatar_url?<img src={m.user.avatar_url} alt=""/>:initials(m)}</div>
+        <div className="family-member-info"><div className="family-member-name-row"><strong title={m.user?.first_name||m.user?.username}>{m.user?.first_name||m.user?.username||'Участник'}{m.id===family.current_member_id&&<span className="family-you"> · вы</span>}</strong><span className={`family-role ${m.role==='ADMIN'?'admin':''}`} title={m.role==='ADMIN'?'Администратор':'Участник'}>{m.role==='ADMIN'?'Админ':'Участник'}</span></div><span title={m.user?.username?`@${m.user.username}`:''}>{m.user?.username?`@${String(m.user.username).replace(/^@/,'')}`:'Участник семьи'}</span></div>
+        {isAdmin&&m.id!==family.current_member_id&&<details className="family-member-menu"><summary aria-label={`Действия для ${m.user?.first_name||'участника'}`}>•••</summary><div className="family-member-actions"><label>Роль<select value={m.role} disabled={!!busy} onChange={e=>changeRole(m,e.target.value as 'ADMIN'|'USER')}><option value="USER">Участник</option><option value="ADMIN">Администратор</option></select></label><button className="tiny danger" onClick={()=>setConfirmMember(m)}>Удалить из семьи</button></div></details>}
+      </article>)}</div>
+    </section>
+    <section className="card family-access-card" aria-labelledby="family-access-title">
+      <div className="card-head"><h3 id="family-access-title">Общий доступ</h3><small>{isAdmin?'Видимость разделов':'Ваши разделы'}</small></div>
+      <div className="family-access-list">{SHARED_SECTIONS.map(section=>{
+        const visible=(family.members||[]).filter((m:any)=>m.visibility?.[section.id]!==false).length
+        const mine=family.my_visibility?.[section.id]!==false
+        return <div className="family-access-row" key={section.id}><span className="family-section-icon" aria-hidden="true">{section.icon}</span><div className="family-access-copy"><strong>{section.title}</strong><small>{isAdmin?`${visible} из ${family.members?.length||0} участников`:mine?'Доступен':'Скрыт администратором'}</small></div>{isAdmin&&<button className="family-icon-button" aria-label={`Настроить видимость: ${section.title}`} onClick={()=>setVisibilitySection(section.id)}>⚙</button>}</div>
+      })}</div>
+    </section>
+    {isAdmin&&invitations.length>0&&<details className="card family-invitations-card" open><summary className="family-invitations-summary">Приглашения <span className="family-heading-count">{invitations.length}</span></summary>{invitations.map((inv:any)=><div className="family-invitation" key={inv.id}><div className="family-member-info"><strong>{inv.first_name||(inv.username?`@${String(inv.username).replace(/^@/,'')}`:`Telegram ID ${inv.telegram_user_id}`)}</strong><span>Ожидает ответа{inv.expires_at?` · до ${new Date(inv.expires_at).toLocaleDateString('ru-RU')}`:''}</span></div><div className="family-invitation-actions"><button className="tiny" onClick={()=>copyInvitation(inv)}>Копировать</button><button className="tiny danger" disabled={busy===inv.id} onClick={()=>setConfirmInvitation(inv)}>Отменить</button></div></div>)}</details>}
+    {visibilitySection&&<dialog id="family-visibility-dialog" className="family-visibility-dialog" aria-labelledby="family-visibility-title" onCancel={()=>setVisibilitySection(null)} onClick={e=>{if(e.target===e.currentTarget)setVisibilitySection(null)}}>
+      <div className="modal-head"><h2 id="family-visibility-title">{SHARED_SECTIONS.find(s=>s.id===visibilitySection)?.title}</h2><button className="family-icon-button" onClick={()=>setVisibilitySection(null)} aria-label="Закрыть настройки видимости">×</button></div>
+      <p className="family-visibility-note">Кому виден раздел. Изменения сохраняются сразу.</p>
+      {family.members?.map((m:any)=><label className="family-visibility-member" key={m.id}><div className="family-avatar">{m.user?.avatar_url?<img src={m.user.avatar_url} alt=""/>:initials(m)}</div><span><strong>{m.user?.first_name||m.user?.username||'Участник'}</strong><small>{m.role==='ADMIN'?'Админ · полный доступ':busy===m.id?'Сохраняем…':'Участник'}</small></span><input type="checkbox" role="switch" aria-label={`${m.user?.first_name||m.user?.username||'Участник'}: ${SHARED_SECTIONS.find(s=>s.id===visibilitySection)?.title}`} checked={m.visibility?.[visibilitySection]!==false} disabled={m.role==='ADMIN'||!!busy} onChange={e=>setMemberVisibility(m,visibilitySection,e.target.checked)}/></label>)}
+      {error&&<div className="family-alert" role="alert">{error}</div>}
+      <p className="family-visibility-note">Администраторам доступны все разделы. Ограничить видимость можно для роли «Участник». Скрытые данные не показываются в приложении и не приходят в уведомлениях.</p>
+      <button className="button primary full" onClick={()=>setVisibilitySection(null)}>Готово</button>
+    </dialog>}
+    {confirmMember&&<div className="modal-backdrop" role="presentation" onMouseDown={e=>e.target===e.currentTarget&&setConfirmMember(null)}><section className="modal-sheet family-confirm" role="dialog" aria-modal="true" aria-labelledby="family-remove-title"><div className="modal-head"><h2 id="family-remove-title">Удалить участника?</h2><button onClick={()=>setConfirmMember(null)} aria-label="Закрыть">×</button></div><p><strong>{confirmMember.user?.first_name||confirmMember.user?.username||'Участник'}</strong> потеряет доступ к общему пространству. Данные семьи сохранятся.</p><div className="modal-actions"><button className="button secondary" onClick={()=>setConfirmMember(null)}>Оставить</button><button className="button primary family-danger-button" disabled={!!busy} onClick={removeMember}>{busy?'Удаляем…':'Удалить участника'}</button></div></section></div>}
+    {confirmInvitation&&<div className="modal-backdrop" role="presentation" onMouseDown={e=>e.target===e.currentTarget&&setConfirmInvitation(null)}><section className="modal-sheet family-confirm" role="dialog" aria-modal="true" aria-labelledby="family-invite-cancel-title"><div className="modal-head"><h2 id="family-invite-cancel-title">Отменить приглашение?</h2><button onClick={()=>setConfirmInvitation(null)} aria-label="Закрыть">×</button></div><p>Приглашение для <strong>{confirmInvitation.first_name||confirmInvitation.username||`Telegram ID ${confirmInvitation.telegram_user_id}`}</strong> перестанет действовать.</p><div className="modal-actions"><button className="button secondary" onClick={()=>setConfirmInvitation(null)}>Оставить</button><button className="button primary family-danger-button" disabled={!!busy} onClick={()=>cancelInvitation(confirmInvitation)}>Отменить приглашение</button></div></section></div>}
   </div>
 }
 function BudgetTab(p:{ranked:any[]; income:number; expense:number}){
