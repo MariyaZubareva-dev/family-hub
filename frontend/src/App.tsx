@@ -835,12 +835,99 @@ function ListsV07(){
 }
 function FamilyV07(){
   const [family,setFamily]=useState<any>(null)
+  const [invitations,setInvitations]=useState<any[]>([])
   const [error,setError]=useState('')
-  useEffect(()=>{apiGet('/family').then(j=>setFamily(j.data)).catch(e=>setError(String(e.message||e).slice(0,120)))},[])
-  return <div className="stack">
-    <SectionTitle title={family?.name||'Семья'} subtitle="Участники и общий доступ" />
-    {error&&<div className="card" style={{color:'#B91C1C'}}>{error}</div>}
-    <div className="card">{(family?.members||[]).map((m:any)=><div className="member-row" key={m.id}><div><strong>{m.user?.first_name||m.user?.username||'Участник'}</strong><small>{m.user?.username?`@${String(m.user.username).replace(/^@/,'')} · `:''}{m.role==='ADMIN'?'Администратор':'Участник'}</small></div><span className="role-badge">{m.role==='ADMIN'?'Админ':'Участник'}</span></div>)}{!family?.members?.length&&!error&&<p className="muted">Загружаем состав семьи…</p>}</div>
+  const [notice,setNotice]=useState('')
+  const [loading,setLoading]=useState(true)
+  const [busy,setBusy]=useState('')
+  const [showInvite,setShowInvite]=useState(false)
+  const [inviteTarget,setInviteTarget]=useState('')
+  const [inviteName,setInviteName]=useState('')
+  const [newFamilyName,setNewFamilyName]=useState('')
+  const [familyName,setFamilyName]=useState('')
+  const [editingName,setEditingName]=useState(false)
+  const [confirmMember,setConfirmMember]=useState<any>(null)
+  const [confirmInvitation,setConfirmInvitation]=useState<any>(null)
+  const isAdmin=family?.my_role==='ADMIN'
+  const refresh=async()=>{
+    setLoading(true);setError('')
+    try{
+      const result=await apiGet('/family')
+      setFamily(result.data);setFamilyName(result.data?.name||'')
+      if(result.data?.my_role==='ADMIN'){
+        const pending=await apiGet('/family/invitations')
+        setInvitations((pending.data||[]).filter((x:any)=>x.status==='PENDING'))
+      }else setInvitations([])
+    }catch(e:any){setFamily(null);setError(String(e.message||e).slice(0,180))}
+    finally{setLoading(false)}
+  }
+  useEffect(()=>{refresh()},[])
+  const createFamily=async()=>{
+    const name=newFamilyName.trim()
+    if(!name){setError('Введите название семьи.');return}
+    setBusy('create');setError('')
+    try{await apiPost('/families',{name});setNewFamilyName('');await refresh()}
+    catch(e:any){setError(String(e.message||e).slice(0,180))}finally{setBusy('')}
+  }
+  const saveFamilyName=async()=>{
+    const name=familyName.trim()
+    if(!name){setError('Название семьи не может быть пустым.');return}
+    setBusy('name');setError('')
+    try{const result=await apiPatch('/family',{name});setFamily(result.data);setFamilyName(result.data?.name||name);setEditingName(false)}
+    catch(e:any){setError(String(e.message||e).slice(0,180))}finally{setBusy('')}
+  }
+  const invite=async()=>{
+    const raw=inviteTarget.trim().replace(/^@/,'')
+    if(!raw){setError('Укажите Telegram ID или логин участника.');return}
+    const body:any={first_name:inviteName.trim()||undefined}
+    if(/^\d+$/.test(raw))body.telegram_user_id=Number(raw);else body.username=raw
+    setBusy('invite');setError('')
+    try{await apiPost('/family/invitations',body);setInviteTarget('');setInviteName('');setShowInvite(false);await refresh();setNotice('Приглашение создано. Скопируйте текст и отправьте его участнику в Telegram.')}
+    catch(e:any){setError(String(e.message||e).slice(0,180))}finally{setBusy('')}
+  }
+  const changeRole=async(member:any,role:'ADMIN'|'USER')=>{
+    if(member.role===role)return
+    setBusy(member.id);setError('')
+    try{await apiPatch(`/family/members/${member.id}`,{role});await refresh()}
+    catch(e:any){setError(String(e.message||e).slice(0,180));await refresh()}finally{setBusy('')}
+  }
+  const removeMember=async()=>{
+    if(!confirmMember)return
+    setBusy(confirmMember.id);setError('')
+    try{const r=await fetch(`/api/v1/family/members/${confirmMember.id}`,{method:'DELETE',headers:getAuthHeaders()});if(!r.ok)throw new Error((await r.text())||`API error: ${r.status}`);setConfirmMember(null);await refresh()}
+    catch(e:any){setError(String(e.message||e).slice(0,180))}finally{setBusy('')}
+  }
+  const cancelInvitation=async(invitation:any)=>{
+    setBusy(invitation.id);setError('')
+    try{const r=await fetch(`/api/v1/family/invitations/${invitation.id}`,{method:'DELETE',headers:getAuthHeaders()});if(!r.ok)throw new Error((await r.text())||`API error: ${r.status}`);setConfirmInvitation(null);await refresh()}
+    catch(e:any){setError(String(e.message||e).slice(0,180))}finally{setBusy('')}
+  }
+  const copyInvitation=async(invitation:any)=>{
+    const identity=invitation.username?`@${String(invitation.username).replace(/^@/,'')}`:`Telegram ID ${invitation.telegram_user_id}`
+    try{await navigator.clipboard.writeText(`Приглашение в семью «${family?.name}» для ${identity}. Откройте Family Hub и примите приглашение в разделе «Семья».`);setNotice('Текст приглашения скопирован. Отправьте его участнику в Telegram.')}
+    catch{setError('Не удалось скопировать текст. Разрешите доступ к буферу обмена браузера.')}
+  }
+  const initials=(member:any)=>`${member.user?.first_name?.[0]||''}${member.user?.last_name?.[0]||''}`.toUpperCase()||'👤'
+  if(loading&&!family&&!error)return <div className="stack"><SectionTitle title="Семья" subtitle="Загружаем семейное пространство…"/><div className="card family-loading">Загружаем участников и приглашения…</div></div>
+  if(!family)return <div className="stack"><SectionTitle title="Семья" subtitle="Создайте общее пространство для семейных событий, списков и бюджета." />{error&&<div className="family-alert" role="alert">{error}</div>}<div className="card family-create"><div className="family-hero-icon">👨‍👩‍👧</div><h3>Создайте семью</h3><p>После создания вы сможете пригласить близких и вести общие дела.</p><label>Название семьи<input value={newFamilyName} onChange={e=>setNewFamilyName(e.target.value)} onKeyDown={e=>e.key==='Enter'&&createFamily()} placeholder="Например, Семья Зубаревых" maxLength={120}/></label><button className="button primary full" disabled={busy==='create'} onClick={createFamily}>{busy==='create'?'Создаём…':'Создать семейное пространство'}</button></div></div>
+  return <div className="stack family-page">
+    <SectionTitle title="Семья" subtitle="Участники, приглашения и общий доступ" action={<button className="button secondary family-refresh" onClick={refresh} disabled={loading} aria-label="Обновить состав семьи">↻ <span>Обновить</span></button>} />
+    {error&&<div className="family-alert" role="alert">{error}</div>}
+    {notice&&<div className="family-notice" role="status">{notice}<button onClick={()=>setNotice('')} aria-label="Закрыть уведомление">×</button></div>}
+    <section className="card family-overview" aria-label="Информация о семье">
+      <div className="family-overview-main"><div className="family-hero-icon">👨‍👩‍👧</div><div className="family-title-block">{editingName&&isAdmin?<><label className="family-name-edit"><span className="sr-only">Название семьи</span><input value={familyName} maxLength={120} onChange={e=>setFamilyName(e.target.value)} onKeyDown={e=>e.key==='Enter'&&saveFamilyName()}/></label><div className="family-inline-actions"><button className="button primary small" onClick={saveFamilyName} disabled={busy==='name'}>{busy==='name'?'Сохраняю…':'Сохранить'}</button><button className="button secondary small" onClick={()=>{setFamilyName(family.name);setEditingName(false)}}>Отмена</button></div></>:<><h3>{family.name}</h3><p>Общее пространство семьи</p></>}</div>{isAdmin&&!editingName&&<button className="tiny family-edit-button" onClick={()=>setEditingName(true)}>Изменить название</button>}</div>
+      <div className="family-summary"><div><strong>{family.members?.length||0}</strong><span>участников</span></div><div><strong>{invitations.length}</strong><span>ожидают приглашения</span></div><div><strong>{isAdmin?'Администратор':'Участник'}</strong><span>ваша роль</span></div></div>
+    </section>
+    <div className="family-columns">
+      <section className="card family-members-card"><div className="card-head"><div><h3>Участники семьи</h3><small>Общие разделы доступны участникам</small></div>{isAdmin&&<button className="button primary small" onClick={()=>setShowInvite(v=>!v)}>{showInvite?'Закрыть':'＋ Пригласить'}</button>}</div>
+        {showInvite&&isAdmin&&<div className="family-invite-form"><div className="family-form-title"><strong>Пригласить участника</strong><span>Приглашение появится у него в Family Hub</span></div><label>Telegram ID или логин<input value={inviteTarget} onChange={e=>setInviteTarget(e.target.value)} placeholder="Например, @username или 123456789" autoComplete="off"/></label><label>Имя для приглашения <span className="muted">(необязательно)</span><input value={inviteName} onChange={e=>setInviteName(e.target.value)} placeholder="Имя участника" maxLength={255}/></label><button className="button primary full" onClick={invite} disabled={busy==='invite'}>{busy==='invite'?'Создаём…':'Создать приглашение'}</button></div>}
+        <div className="family-member-list">{family.members?.map((m:any)=><article className="family-member" key={m.id}><div className="family-avatar">{m.user?.avatar_url?<img src={m.user.avatar_url} alt=""/>:initials(m)}</div><div className="family-member-info"><strong>{m.user?.first_name||m.user?.username||'Участник'}</strong><span>{m.user?.username?`@${String(m.user.username).replace(/^@/,'')}`:'Участник семьи'}{m.joined_at?` · с ${new Date(m.joined_at).toLocaleDateString('ru-RU',{month:'short',year:'numeric'})}`:''}</span></div><span className={`family-role ${m.role==='ADMIN'?'admin':''}`}>{m.role==='ADMIN'?'Администратор':'Участник'}</span>{isAdmin&&m.id!==family.current_member_id&&<details className="family-member-menu"><summary aria-label={`Действия для ${m.user?.first_name||'участника'}`}>•••</summary><div className="family-member-actions"><label>Роль<select value={m.role} disabled={busy===m.id} onChange={e=>changeRole(m,e.target.value as 'ADMIN'|'USER')}><option value="USER">Участник</option><option value="ADMIN">Администратор</option></select></label><button className="tiny danger" onClick={()=>setConfirmMember(m)}>Удалить из семьи</button></div></details>}</article>)}{!family.members?.length&&<div className="empty">Пока в семье только вы. Пригласите близких.</div>}</div>
+      </section>
+      <section className="card family-access-card"><div className="card-head"><div><h3>Общий доступ</h3><small>Что доступно участникам семьи</small></div><span className="family-shared-icon">⌂</span></div><div className="family-access-list"><div><span>▦</span><div><strong>Календарь и напоминания</strong><small>Семейные события видны всем</small></div></div><div><span>☷</span><div><strong>Покупки и списки</strong><small>Общие планы и регулярные товары</small></div></div><div><span>₽</span><div><strong>Бюджет и кредиты</strong><small>Финансы семьи в одном месте</small></div></div></div><div className="family-access-note">Изменения в общих разделах сразу видны участникам с доступом к семье.</div></section>
+    </div>
+    {isAdmin&&<section className="card family-invitations-card"><div className="card-head"><div><h3>Приглашения</h3><small>Действуют 14 дней с момента создания</small></div><span className="pill">{invitations.length}</span></div>{invitations.length?invitations.map((inv:any)=><div className="family-invitation" key={inv.id}><div className="family-invite-avatar">✉</div><div className="family-member-info"><strong>{inv.first_name||(inv.username?`@${String(inv.username).replace(/^@/,'')}`:`Telegram ID ${inv.telegram_user_id}`)}</strong><span>{inv.username?`@${String(inv.username).replace(/^@/,'')} · `:''}Ожидает ответа{inv.expires_at?` · до ${new Date(inv.expires_at).toLocaleDateString('ru-RU')}`:''}</span></div><span className="family-pending">Ожидает</span><div className="family-invitation-actions"><button className="tiny" onClick={()=>copyInvitation(inv)}>Копировать приглашение</button><button className="tiny danger" disabled={busy===inv.id} onClick={()=>setConfirmInvitation(inv)}>{busy===inv.id?'…':'Отменить'}</button></div></div>):<div className="empty">Активных приглашений нет. Пригласите участника семьи.</div>}</section>}
+    {confirmMember&&<div className="modal-backdrop" role="presentation" onMouseDown={e=>e.target===e.currentTarget&&setConfirmMember(null)}><section className="modal-sheet family-confirm" role="dialog" aria-modal="true" aria-labelledby="family-remove-title"><div className="modal-head"><h2 id="family-remove-title">Удалить участника?</h2><button onClick={()=>setConfirmMember(null)} aria-label="Закрыть">×</button></div><p>Участник <strong>{confirmMember.user?.first_name||confirmMember.user?.username||'семьи'}</strong> потеряет доступ к общему пространству. Его данные семьи сохранятся.</p><div className="modal-actions"><button className="button secondary" onClick={()=>setConfirmMember(null)}>Оставить</button><button className="button primary family-danger-button" disabled={busy===confirmMember.id} onClick={removeMember}>{busy===confirmMember.id?'Удаляем…':'Удалить участника'}</button></div></section></div>}
+    {confirmInvitation&&<div className="modal-backdrop" role="presentation" onMouseDown={e=>e.target===e.currentTarget&&setConfirmInvitation(null)}><section className="modal-sheet family-confirm" role="dialog" aria-modal="true" aria-labelledby="family-invite-cancel-title"><div className="modal-head"><h2 id="family-invite-cancel-title">Отменить приглашение?</h2><button onClick={()=>setConfirmInvitation(null)} aria-label="Закрыть">×</button></div><p>Приглашение для <strong>{confirmInvitation.first_name||confirmInvitation.username||`Telegram ID ${confirmInvitation.telegram_user_id}`}</strong> перестанет действовать.</p><div className="modal-actions"><button className="button secondary" onClick={()=>setConfirmInvitation(null)}>Оставить</button><button className="button primary family-danger-button" disabled={busy===confirmInvitation.id} onClick={()=>cancelInvitation(confirmInvitation)}>{busy===confirmInvitation.id?'Отменяем…':'Отменить приглашение'}</button></div></section></div>}
   </div>
 }
 function BudgetTab(p:{ranked:any[]; income:number; expense:number}){

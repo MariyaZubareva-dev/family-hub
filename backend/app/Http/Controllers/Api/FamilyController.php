@@ -67,6 +67,17 @@ class FamilyController extends BaseApiController
         return response()->json(['data'=>$inv->load(['inviter','family'])],201);
     }
 
+    public function revokeInvitation(Request $request, FamilyInvitation $invitation): JsonResponse
+    {
+        $membership=$this->membership($request,$invitation->family_id);
+        $this->assertAdmin($membership);
+        abort_unless($invitation->family_id===$membership->family_id,404);
+        abort_unless($invitation->status===FamilyInvitation::PENDING,409,'Приглашение уже обработано.');
+        $invitation->update(['status'=>FamilyInvitation::REVOKED]);
+
+        return response()->json([],204);
+    }
+
     public function acceptInvitation(Request $request, FamilyInvitation $invitation): JsonResponse
     {
         $username=$request->user()->username;
@@ -93,5 +104,5 @@ class FamilyController extends BaseApiController
     public function leave(Request $request): JsonResponse { $member=$this->membership($request); DB::transaction(function()use($member){ $member=FamilyMember::whereKey($member->id)->lockForUpdate()->firstOrFail(); if($member->role==='ADMIN')$this->assertNotLastAdmin($member->family_id); $member->update(['status'=>'INACTIVE']); }); return response()->json([],204); }
     public function create(Request $request): JsonResponse { abort_if($request->user()->familyMembers()->where('status','ACTIVE')->exists(),409,'User already belongs to an active family.'); $d=$request->validate(['name'=>['required','string','max:120']]); $family=Family::create(['name'=>$d['name'],'status'=>'ACTIVE','created_by'=>$request->user()->id]); $member=FamilyMember::create(['family_id'=>$family->id,'user_id'=>$request->user()->id,'role'=>'ADMIN','status'=>'ACTIVE','joined_at'=>now()]); return response()->json(['data'=>$this->payload($family->load('members.user'),$member)],201); }
     private function assertNotLastAdmin(string $familyId): void { $admins=FamilyMember::where('family_id',$familyId)->where('status','ACTIVE')->where('role','ADMIN')->lockForUpdate()->count(); abort_if($admins<=1,422,'The last administrator cannot be removed or demoted.'); }
-    private function payload(Family $family,FamilyMember $m): array { return ['id'=>$family->id,'name'=>$family->name,'status'=>$family->status,'my_role'=>$m->role,'members'=>$family->members->where('status','ACTIVE')->values()->map(fn($x)=>['id'=>$x->id,'role'=>$x->role,'status'=>$x->status,'joined_at'=>$x->joined_at,'user'=>$x->user])]; }
+    private function payload(Family $family,FamilyMember $m): array { return ['id'=>$family->id,'name'=>$family->name,'status'=>$family->status,'my_role'=>$m->role,'current_member_id'=>$m->id,'members'=>$family->members->where('status','ACTIVE')->values()->map(fn($x)=>['id'=>$x->id,'role'=>$x->role,'status'=>$x->status,'joined_at'=>$x->joined_at,'user'=>$x->user])]; }
 }

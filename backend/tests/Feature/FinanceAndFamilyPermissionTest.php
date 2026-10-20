@@ -65,4 +65,44 @@ class FinanceAndFamilyPermissionTest extends TestCase
         $this->assertDatabaseHas('family_invitations', ['id' => $invitation['id'], 'status' => 'ACCEPTED']);
         $this->assertDatabaseHas('family_members', ['family_id' => $family->id, 'user_id' => $invitee->id, 'status' => 'ACTIVE']);
     }
+
+    public function test_family_admin_can_revoke_pending_invitation(): void
+    {
+        $admin = User::create(['telegram_user_id' => 10006, 'first_name' => 'Admin']);
+        $family = Family::create(['name' => 'Test family', 'created_by' => $admin->id]);
+        FamilyMember::create(['family_id' => $family->id, 'user_id' => $admin->id, 'role' => 'ADMIN', 'status' => 'ACTIVE']);
+        $invitation = $this->withoutMiddleware(TelegramAuthenticate::class)
+            ->actingAs($admin)
+            ->postJson('/api/v1/family/invitations', ['telegram_user_id' => 10007])
+            ->assertCreated()
+            ->json('data');
+
+        $this->withoutMiddleware(TelegramAuthenticate::class)
+            ->actingAs($admin)
+            ->deleteJson("/api/v1/family/invitations/{$invitation['id']}")
+            ->assertNoContent();
+
+        $this->assertDatabaseHas('family_invitations', ['id' => $invitation['id'], 'status' => 'REVOKED']);
+    }
+
+    public function test_family_member_cannot_revoke_invitation(): void
+    {
+        $admin = User::create(['telegram_user_id' => 10008, 'first_name' => 'Admin']);
+        $member = User::create(['telegram_user_id' => 10009, 'first_name' => 'Member']);
+        $family = Family::create(['name' => 'Test family', 'created_by' => $admin->id]);
+        FamilyMember::create(['family_id' => $family->id, 'user_id' => $admin->id, 'role' => 'ADMIN', 'status' => 'ACTIVE']);
+        FamilyMember::create(['family_id' => $family->id, 'user_id' => $member->id, 'role' => 'USER', 'status' => 'ACTIVE']);
+        $invitation = $this->withoutMiddleware(TelegramAuthenticate::class)
+            ->actingAs($admin)
+            ->postJson('/api/v1/family/invitations', ['telegram_user_id' => 10010])
+            ->assertCreated()
+            ->json('data');
+
+        $this->withoutMiddleware(TelegramAuthenticate::class)
+            ->actingAs($member)
+            ->deleteJson("/api/v1/family/invitations/{$invitation['id']}")
+            ->assertForbidden();
+
+        $this->assertDatabaseHas('family_invitations', ['id' => $invitation['id'], 'status' => 'PENDING']);
+    }
 }

@@ -190,3 +190,93 @@ textarea{min-height:90px;resize:vertical}
   .nav-item small{font-size:9.5px}
   .button{padding:10px 12px}
 }
+
+/* Family screen */
+.family-page{padding-bottom:8px}
+.family-refresh{min-height:44px}
+.family-overview{padding:20px;background:linear-gradient(135deg,#F0FDFA 0%,#FFFFFF 72%)}
+.family-overview-main{display:flex;align-items:center;gap:14px;min-width:0}
+.family-hero-icon{width:58px;height:58px;flex:0 0 58px;border-radius:18px;display:grid;place-items:center;background:#CCFBF1;font-size:28px}
+.family-title-block{flex:1;min-width:0}
+.family-title-block h3{margin:0;font-size:22px;font-weight:800;overflow-wrap:anywhere}
+.family-title-block p{margin:4px 0 0;color:var(--muted);font-size:13px}
+.family-edit-button{min-height:44px;white-space:nowrap}
+.family-summary{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin-top:20px;padding-top:16px;border-top:1px solid #DDEFEA}
+.family-summary>div{display:flex;flex-direction:column;gap:3px;min-width:0}
+.family-summary strong{font-size:16px;font-weight:800;overflow-wrap:anywhere}
+.family-summary span{font-size:11px;color:var(--muted)}
+.family-columns{display:grid;grid-template-columns:minmax(0,1.35fr) minmax(260px,.85fr);gap:14px;align-items:start}
+.family-members-card .card-head{align-items:center}
+.family-member-list{display:flex;flex-direction:column}
+.family-member{display:flex;align-items:center;gap:11px;min-height:72px;padding:11px 0;border-bottom:1px solid #F1F1EF}
+.family-member:last-child{border-bottom:0}
+.family-avatar,.family-invite-avatar{width:44px;height:44px;flex:0 0 44px;border-radius:50%;display:grid;place-items:center;background:#E7F4F1;color:var(--primary);font-size:14px;font-weight:800;overflow:hidden}
+.family-avatar img{width:100%;height:100%;object-fit:cover}
+.family-member-info{display:flex;flex:1;min-width:0;flex-direction:column;gap:4px}
+.family-member-info strong{font-size:14px;overflow-wrap:anywhere}
+.family-member-info>span{font-size:12px;color:var(--muted);overflow-wrap:anywhere}
+.family-role,.family-pending{display:inline-flex;align-items:center;justify-content:center;min-height:28px;padding:4px 9px;border-radius:999px;background:#F1F5F9;color:#64748B;font-size:11px;font-weight:700;white-space:nowrap}
+.family-role.admin{background:var(--primary-soft);color:var(--primary)}
+.family-member-menu{position:relative;flex:0 0 auto}
+.family-member-menu summary{width:44px;height:44px;display:grid;place-items:center;border:1px solid var(--border);border-radius:12px;list-style:none;font-size:14px;font-weight:800;letter-spacing:1px;cursor:pointer}
+.family-member-menu summary::-webkit-details-marker{display:none}
+.family-member-actions{position:absolute;right:0;top:48px;z-index:5;width:190px;padding:12px;background:#fff;border:1px solid var(--border);border-radius:14px;box-shadow:var(--shadow-2);display:grid;gap:10px}
+.family-member-actions label,.family-create label,.family-invite-form label{display:grid;gap:6px;font-size:12px;font-weight:700;color:#475569}
+.family-member-actions select,.family-create input,.family-invite-form input,.family-name-edit input{width:100%;min-height:44px;padding:10px 11px;border:1px solid #D8DDE5;border-radius:10px;background:#fff;font:inherit;font-size:14px}
+.family-access-card .card-head{margin-bottom:12px}
+.family-shared-icon{width:40px;height:40px;display:grid;place-items:center;border-radius:13px;background:#F0FDFA;color:var(--primary);font-size:22px}
+.family-access-list{display:grid;gap:4px}
+.family-access-list>div{display:flex;align-items:center;gap:11px;padding:10px 0;border-bottom:1px solid #F1F1EF}
+.family-access-list>div>span{width:38px;height:38px;flex:0 0 38px;border-radius:11px;background:var(--surface-2);display:grid;place-items:center;color:var(--primary);font-size:18px;font-weight:800}
+.family-access-list>div>div{display:flex;min-width:0;flex-direction:column;gap:3px}
+.family-access-list strong{font-size:12px}
+.family-access-list small{color:var(--muted);font-size:11px;line-height:1.35}
+.family-access-note{margin-top:13px;padding:10px 11px;border-radius:11px;background:#F8FAFC;color:#64748B;font-size:11px;line-height:1.5}
+.family-invite-form{display:grid;gap:11px;margin:0 0 10px;padding:14px;border:1px solid #BFE8DF;border-radius:14px;background:#F5FCFA}
+.family-form-title{display:grid;gap:4px;margin-bottom:2px}
+.family-form-title strong{font-size:14px}
+.family-form-title span{font-size:12px;color:var(--muted)}
+.family-invitation{display:flex;align-items:center;gap:11px;min-height:72px;padding:10px 0;border-bottom:1px solid #F1F1EF}
+.family-invitation:last-child{border-bottom:0}
+.family-invite-avatar{background:#FFF7E6;color:#B7791F;font-size:18px}
+.family-pending{background:#FFF7E6;color:#9A6700}
+.family-invitation-actions{display:flex;gap:6px}
+.family-invitation-actions .tiny{min-height:40px}
+.family-create{max-width:520px;width:100%;margin:24px auto;padding:24px;display:grid;gap:14px;text-align:left}
+.family-create .family-hero-icon{margin:0 auto 2px}
+.family-create h3{text-align:center;margin:0;font-size:21px}
+.family-create p{text-align:center;color:var(--muted);font-size:13px;line-height:1.5;margin:-8px 0 4px}
+.family-create .button{min-height:48px}
+.family-loading{padding:24px;text-align:center;color:var(--muted)}
+.family-alert{padding:12px 14px;border:1px solid #FECDD3;border-radius:12px;background:#FFF1F2;color:#9F1239;font-size:13px;line-height:1.45;overflow-wrap:anywhere}
+.family-notice{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:11px 14px;border:1px solid #A7F3D0;border-radius:12px;background:#ECFDF5;color:#047857;font-size:13px;line-height:1.45}
+.family-notice button{width:40px;height:40px;flex:0 0 40px;border:0;border-radius:10px;background:transparent;color:inherit;font-size:22px;cursor:pointer}
+.family-name-edit{display:block;width:min(100%,380px)}
+.family-inline-actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px}
+.family-confirm{padding-bottom:calc(20px + env(safe-area-inset-bottom))}
+.family-confirm p{font-size:14px;line-height:1.55;color:#475569}
+.family-danger-button{background:#BE123C!important;box-shadow:none!important}
+.sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
+@media(max-width:700px){
+  .family-columns{grid-template-columns:1fr;gap:12px}
+  .family-overview{padding:16px}
+  .family-overview-main{align-items:flex-start;flex-wrap:wrap}
+  .family-title-block{padding-top:3px}
+  .family-title-block h3{font-size:19px}
+  .family-edit-button{margin-left:72px}
+  .family-summary{margin-top:15px;gap:8px}
+  .family-summary strong{font-size:14px}
+  .family-summary span{font-size:10px;line-height:1.35}
+  .family-member{gap:9px;flex-wrap:wrap}
+  .family-member-info{flex-basis:calc(100% - 106px)}
+  .family-role{margin-left:53px}
+  .family-member-menu{margin-left:auto}
+  .family-invitation{flex-wrap:wrap}
+  .family-invitation .family-member-info{flex-basis:calc(100% - 64px)}
+  .family-invitation-actions{width:100%;padding-left:55px}
+  .family-invitation-actions .tiny{flex:1}
+  .family-members-card .card-head{align-items:flex-start}
+  .family-members-card .card-head .button{min-height:44px;white-space:nowrap}
+  .family-refresh{width:44px;padding:0!important}
+  .family-refresh span{display:none}
+}
