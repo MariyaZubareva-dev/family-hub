@@ -21,11 +21,16 @@ RUN apk add --no-cache \
     oniguruma-dev \
     postgresql-dev \
     su-exec \
+    tesseract-ocr \
+    tesseract-ocr-data-rus \
+    tesseract-ocr-data-eng \
     && docker-php-ext-install \
         intl \
         mbstring \
         pdo_pgsql \
         zip
+
+RUN printf "post_max_size=16M\nmemory_limit=256M\nmax_execution_time=120\n" > /usr/local/etc/php/conf.d/finance-uploads.ini
 
 WORKDIR /var/www/html
 

@@ -23,7 +23,7 @@ class FinanceBaseController extends BaseApiController
 
     protected function activeCategory(string $familyId, string $categoryId): object
     {
-        $cat = DB::table('expense_categories')->where('id', $categoryId)->where('family_id', $familyId)->where('status', 'ACTIVE')->first();
+        $cat = DB::table('expense_categories')->where('id', $categoryId)->where('family_id', $familyId)->where('status', 'ACTIVE')->where('transaction_type', 'EXPENSE')->first();
         abort_unless($cat, 404, 'Category not found');
         return $cat;
     }
@@ -35,10 +35,10 @@ class FinanceBaseController extends BaseApiController
             return $categoryId;
         }
         if ($categoryName) {
-            $cat = DB::table('expense_categories')->where('family_id', $familyId)->where('name', $categoryName)->where('status','ACTIVE')->first();
+            $cat = DB::table('expense_categories')->where('family_id', $familyId)->where('name', $categoryName)->where('status','ACTIVE')->where('transaction_type', 'EXPENSE')->first();
             if ($cat) return $cat->id;
             // Fallback: try case-insensitive
-            $cat = DB::table('expense_categories')->where('family_id', $familyId)->whereRaw('LOWER(name)=?', [mb_strtolower($categoryName)])->where('status','ACTIVE')->first();
+            $cat = DB::table('expense_categories')->where('family_id', $familyId)->whereRaw('LOWER(name)=?', [mb_strtolower($categoryName)])->where('status','ACTIVE')->where('transaction_type', 'EXPENSE')->first();
             if ($cat) return $cat->id;
         }
         return null;

@@ -9,7 +9,14 @@ use Illuminate\Support\Facades\DB;
 class FinanceTransactionController extends BaseApiController {
  private function writable(Request $r,$familyId,FinanceTransaction $transaction){$m=$this->membership($r,$familyId);abort_unless($m->role==='ADMIN'||$transaction->created_by===$m->user_id,403);return $m;}
  public function index(Request $r):JsonResponse{$m=$this->membership($r);$q=FinanceTransaction::where('family_id',$m->family_id)->orderByDesc('occurred_on')->orderByDesc('created_at');$items=$q->get();$income=(float)$items->where('type','INCOME')->sum('amount');$expense=(float)$items->where('type','EXPENSE')->sum('amount');return response()->json(['data'=>$items,'summary'=>['income'=>$income,'expense'=>$expense,'balance'=>$income-$expense]]);}
- public function store(Request $r):JsonResponse{$m=$this->membership($r);$d=$r->validate(['type'=>['required','in:INCOME,EXPENSE'],'amount'=>['required','numeric','gt:0'],'category'=>['required','string','max:80'],'budget_type'=>['nullable','in:FIXED,FLEXIBLE,FUTURE'],'description'=>['nullable','string','max:255'],'occurred_on'=>['required','date']]);$x=FinanceTransaction::create([...$d,'family_id'=>$m->family_id,'created_by'=>$m->user_id]);$this->checkBudgetWarning($m->family_id, $d['occurred_on']);return response()->json(['data'=>$x],201);}
+ public function store(Request $r):JsonResponse{$m=$this->membership($r);$d=$r->validate(['type'=>['required','in:INCOME,EXPENSE'],'amount'=>['required','numeric','gt:0'],'category'=>['required','string','max:80'],'category_id'=>['nullable','string'],'budget_type'=>['nullable','in:FIXED,FLEXIBLE,FUTURE'],'description'=>['nullable','string','max:255'],'occurred_on'=>['required','date']]);$this->validateCategory($d,$m->family_id);$x=FinanceTransaction::create([...$d,'family_id'=>$m->family_id,'created_by'=>$m->user_id]);$this->checkBudgetWarning($m->family_id, $d['occurred_on']);return response()->json(['data'=>$x],201);}
+
+    private function validateCategory(array $data, string $familyId): void
+    {
+        if (empty($data['category_id'])) return;
+        $category = \App\Models\ExpenseCategory::where('family_id', $familyId)->where('id', $data['category_id'])->where('status', 'ACTIVE')->first();
+        abort_unless($category && $category->transaction_type === $data['type'] && $category->name === $data['category'], 422, 'Выберите категорию для этого типа операции.');
+    }
 
     private function checkBudgetWarning(string $familyId, string $occurredOn): void
     {
@@ -33,6 +40,6 @@ class FinanceTransactionController extends BaseApiController {
             \Illuminate\Support\Facades\Log::warning('Budget warning check failed', ['error' => $e->getMessage()]);
         }
     }
- public function update(Request $r,FinanceTransaction $transaction):JsonResponse{$this->writable($r,$transaction->family_id,$transaction);$d=$r->validate(['type'=>['sometimes','in:INCOME,EXPENSE'],'amount'=>['sometimes','numeric','gt:0'],'category'=>['sometimes','string','max:80'],'budget_type'=>['nullable','in:FIXED,FLEXIBLE,FUTURE'],'description'=>['nullable','string','max:255'],'occurred_on'=>['sometimes','date']]);$transaction->update($d);return response()->json(['data'=>$transaction->fresh()]);}
+ public function update(Request $r,FinanceTransaction $transaction):JsonResponse{$m=$this->writable($r,$transaction->family_id,$transaction);$d=$r->validate(['type'=>['sometimes','in:INCOME,EXPENSE'],'amount'=>['sometimes','numeric','gt:0'],'category'=>['sometimes','string','max:80'],'category_id'=>['nullable','string'],'budget_type'=>['nullable','in:FIXED,FLEXIBLE,FUTURE'],'description'=>['nullable','string','max:255'],'occurred_on'=>['sometimes','date']]);$this->validateCategory([...$transaction->toArray(),...$d],$m->family_id);$transaction->update($d);return response()->json(['data'=>$transaction->fresh()]);}
  public function destroy(Request $r,FinanceTransaction $transaction):JsonResponse{$this->writable($r,$transaction->family_id,$transaction);$transaction->delete();return response()->json([],204);}
 }

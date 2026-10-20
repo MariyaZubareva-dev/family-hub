@@ -13,7 +13,6 @@ class CreditController extends BaseApiController
     public function index(Request $request): JsonResponse
     {
         $membership = $this->membership($request);
-        $this->assertAdmin($membership);
 
         $credits = Credit::where('family_id', $membership->family_id)
             ->where('status', 'ACTIVE')
@@ -30,6 +29,7 @@ class CreditController extends BaseApiController
         $this->assertAdmin($membership);
 
         $data = $request->validate([
+            'type' => ['sometimes', 'in:CREDIT,INSTALLMENT'],
             'name' => ['nullable', 'string', 'max:120'],
             'principal' => ['required', 'numeric', 'gt:0'],
             'annual_rate' => ['required', 'numeric', 'min:0', 'max:100'],
@@ -43,6 +43,8 @@ class CreditController extends BaseApiController
             'first_payment_date' => ['required', 'date', 'after_or_equal:start_date'],
             'recalculation_mode' => ['required', 'in:TERM,PAYMENT'],
         ]);
+
+        abort_if(($data['type'] ?? 'CREDIT') === 'INSTALLMENT' && (float)$data['annual_rate'] !== 0.0, 422, 'Для рассрочки ставка должна быть равна нулю.');
 
         if (!empty($data['payment_schedule'])) {
             $expectedMonth = 1;

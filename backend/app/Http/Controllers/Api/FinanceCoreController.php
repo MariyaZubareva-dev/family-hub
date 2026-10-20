@@ -48,7 +48,7 @@ class FinanceCoreController extends FinanceBaseController
 
         // Group by category (string) — enrich with ExpenseCategory meta
         $grouped = $expenseRows->groupBy('category');
-        $allCatsMeta = DB::table('expense_categories')->where('family_id', $familyId)->where('status','ACTIVE')->get()->keyBy(fn($c)=>mb_strtolower($c->name));
+        $allCatsMeta = DB::table('expense_categories')->where('family_id', $familyId)->where('status','ACTIVE')->where('transaction_type','EXPENSE')->get()->keyBy(fn($c)=>mb_strtolower($c->name));
 
         $chartAll = $grouped->map(function ($items, $category) use ($totalExpense, $allCatsMeta) {
             $amount = round((float) $items->sum('amount'), 2);
@@ -74,7 +74,7 @@ class FinanceCoreController extends FinanceBaseController
                     $bc = DB::table('budget_categories')->where('budget_id',$budgetRow->id)->where('category_id',$c['id'])->first();
                     if (!$bc) {
                         // Fallback by name match via expense_categories
-                        $catByName = DB::table('expense_categories')->where('family_id',$familyId)->where('name',$c['name'])->first();
+                        $catByName = DB::table('expense_categories')->where('family_id',$familyId)->where('name',$c['name'])->where('transaction_type','EXPENSE')->first();
                         if ($catByName) $bc = DB::table('budget_categories')->where('budget_id',$budgetRow->id)->where('category_id',$catByName->id)->first();
                     }
                     if ($bc) {
@@ -197,26 +197,38 @@ class FinanceCoreController extends FinanceBaseController
     public function categories(Request $request): JsonResponse
     {
         $m = $this->viewMembership($request);
+        \App\Services\Finance\CategoryCatalog::ensureDefaults($m->family_id, $m->user_id);
         return response()->json(['data' => ExpenseCategory::query()->where('family_id', $m->family_id)->where('status', 'ACTIVE')->orderBy('name')->get()]);
+    }
+
+    public function createCategory(Request $request): JsonResponse
+    {
+        $m = $this->adminMembership($request);
+        $d = $request->validate(['name' => 'required|string|max:80', 'transaction_type' => 'required|in:EXPENSE,INCOME'], [
+            'name.required' => 'Введите название категории.', 'name.max' => 'Название категории должно быть не длиннее 80 символов.',
+            'transaction_type.in' => 'Выберите доход или расход.',
+        ]);
+        $d['name'] = trim($d['name']);
+        abort_if($d['name'] === '', 422, 'Введите название категории.');
+        $exists = ExpenseCategory::withTrashed()->where('family_id', $m->family_id)->where('transaction_type', $d['transaction_type'])->whereRaw('LOWER(name) = ?', [mb_strtolower($d['name'])])->exists();
+        abort_if($exists, 422, 'Категория с таким названием уже существует.');
+        $category = ExpenseCategory::create([...$d, 'family_id' => $m->family_id, 'created_by' => $m->user_id, 'status' => 'ACTIVE']);
+        return response()->json(['data' => $category], 201);
     }
 
     public function saveBudget(Request $request): JsonResponse
     {
         $m = $this->adminMembership($request);
-        $d = $request->validate(['year' => ['required','integer'], 'month' => ['required','integer','between:1,12'], 'total_limit' => ['required','numeric','min:0'], 'categories' => ['array'], 'categories.*.category_id' => ['required','string'], 'categories.*.limit_amount' => ['required','numeric','min:0']]);
-        $budget = DB::table('budgets')->where(['family_id'=>$m->family_id,'year'=>$d['year'],'month'=>$d['month']])->first();
-        if ($budget) {
-            DB::table('budgets')->where('id',$budget->id)->update(['total_limit'=>$d['total_limit'],'updated_at'=>now()]);
-            $budgetId = $budget->id;
-        } else {
-            $budgetId = (string) Str::ulid();
-            DB::table('budgets')->insert(['id'=>$budgetId,'family_id'=>$m->family_id,'year'=>$d['year'],'month'=>$d['month'],'total_limit'=>$d['total_limit'],'status'=>'ACTIVE','created_by'=>$m->user_id,'created_at'=>now(),'updated_at'=>now()]);
-        }
-        DB::table('budget_categories')->where('budget_id',$budgetId)->delete();
-        foreach ($d['categories'] ?? [] as $cat) {
-            $this->activeCategory($m->family_id, $cat['category_id']);
-            DB::table('budget_categories')->insert(['id'=>(string)Str::ulid(),'budget_id'=>$budgetId,'category_id'=>$cat['category_id'],'limit_amount'=>$cat['limit_amount'],'created_at'=>now(),'updated_at'=>now()]);
-        }
+        $d = $request->validate(['year' => 'required|integer|between:2000,2100', 'month' => 'required|integer|between:1,12', 'total_limit' => 'required|numeric|min:0', 'categories' => 'array', 'categories.*.category_id' => 'required|string|distinct', 'categories.*.limit_amount' => 'required|numeric|min:0']);
+        foreach ($d['categories'] ?? [] as $cat) $this->activeCategory($m->family_id, $cat['category_id']);
+        DB::transaction(function () use ($d, $m) {
+            $budget = DB::table('budgets')->where(['family_id' => $m->family_id, 'year' => $d['year'], 'month' => $d['month']])->lockForUpdate()->first();
+            $budgetId = $budget->id ?? (string) Str::ulid();
+            if ($budget) DB::table('budgets')->where('id', $budgetId)->update(['total_limit' => $d['total_limit'], 'updated_at' => now()]);
+            else DB::table('budgets')->insert(['id' => $budgetId, 'family_id' => $m->family_id, 'year' => $d['year'], 'month' => $d['month'], 'total_limit' => $d['total_limit'], 'status' => 'ACTIVE', 'created_by' => $m->user_id, 'created_at' => now(), 'updated_at' => now()]);
+            DB::table('budget_categories')->where('budget_id', $budgetId)->delete();
+            foreach ($d['categories'] ?? [] as $cat) DB::table('budget_categories')->insert(['id' => (string) Str::ulid(), 'budget_id' => $budgetId, 'category_id' => $cat['category_id'], 'limit_amount' => $cat['limit_amount'], 'created_at' => now(), 'updated_at' => now()]);
+        });
         return $this->budgetResponse($m->family_id, $d['year'], $d['month']);
     }
 
@@ -274,9 +286,10 @@ class FinanceCoreController extends FinanceBaseController
     // ---- Receipts: v07 N-expenses flow ----
     public function receipts(Request $request): JsonResponse {
         $m=$this->viewMembership($request);
-        $rows = DB::table('receipts')->where('family_id',$m->family_id)->whereNull('deleted_at')->orderByDesc('created_at')->get()->map(function($x){
+        $rows = DB::table('receipts')->where('family_id',$m->family_id)->whereNull('deleted_at')->orderByDesc('created_at')->get()->map(function($x) use ($m){
             $arr = (array)$x;
-            $arr['ai_result'] = $x->ai_result ? json_decode($x->ai_result, true) : null;
+            $arr['ai_result'] = null;
+            $arr['can_edit'] = $m->role === 'ADMIN' || $x->uploaded_by === $m->user_id;
             // decode review_payload if exists
             if (isset($x->review_payload) && $x->review_payload) {
                 $arr['review_payload'] = is_string($x->review_payload) ? json_decode($x->review_payload, true) : $x->review_payload;
@@ -284,9 +297,7 @@ class FinanceCoreController extends FinanceBaseController
             // hide raw image_data for list (keep thumb only) — but return flag if exists
             $arr['has_image'] = !empty($x->image_data);
             // don't leak huge base64 in list unless needed — provide truncated
-            if (isset($arr['image_data']) && strlen($arr['image_data']) > 200) {
-                $arr['image_data_preview'] = substr($arr['image_data'], 0, 200).'...';
-            }
+            unset($arr['image_data']);
             return $arr;
         });
         return response()->json(['data'=>$rows]);
@@ -296,6 +307,8 @@ class FinanceCoreController extends FinanceBaseController
         $m=$this->viewMembership($request);
         $row = $this->ownedRow('receipts', $receipt, $m->family_id);
         $arr = (array)$row;
+        $arr['can_edit'] = $m->role === 'ADMIN' || $row->uploaded_by === $m->user_id;
+        unset($arr['image_data']);
         $arr['ai_result'] = $row->ai_result ? json_decode($row->ai_result, true) : null;
         if (isset($row->review_payload) && $row->review_payload) {
             $arr['review_payload'] = is_string($row->review_payload) ? json_decode($row->review_payload, true) : $row->review_payload;
@@ -305,7 +318,11 @@ class FinanceCoreController extends FinanceBaseController
 
     public function uploadReceipt(Request $request): JsonResponse {
         $m=$this->viewMembership($request);
-        $d=$request->validate(['file_name'=>'nullable|string|max:255','mime_type'=>'nullable|string|max:80','image_data'=>'required|string','merchant'=>'nullable|string|max:255','total'=>'nullable|numeric','occurred_on'=>'nullable|date','items'=>'nullable|array']);
+        $d=$request->validate(['file_name'=>'nullable|string|max:255','mime_type'=>'nullable|string|max:80','image_data'=>'required|string|max:12000000','merchant'=>'nullable|string|max:255','total'=>'nullable|numeric','occurred_on'=>'nullable|date','items'=>'nullable|array']);
+        $parts = explode(',', $d['image_data'], 2);
+        abort_unless(count($parts) === 2 && preg_match('#^data:image/(jpeg|png|webp);base64$#', $parts[0]), 422, 'Выберите фото в формате JPEG, PNG или WebP.');
+        $bytes = base64_decode($parts[1], true);
+        abort_unless($bytes !== false && strlen($bytes) <= 8 * 1024 * 1024 && @getimagesizefromstring($bytes), 422, 'Не удалось прочитать фото. Выберите другое изображение размером до 8 МБ.');
         $id=(string)Str::ulid();
         // Prepare review_payload from initial items if provided (manual)
         $reviewPayload = null;
@@ -321,6 +338,8 @@ class FinanceCoreController extends FinanceBaseController
         $this->tryAnalyzeReceipt($id,$m->family_id);
         $row=DB::table('receipts')->where('id',$id)->first();
         $arr = (array)$row;
+        $arr['can_edit'] = $m->role === 'ADMIN' || $row->uploaded_by === $m->user_id;
+        unset($arr['image_data']);
         $arr['ai_result']=$row->ai_result?json_decode($row->ai_result,true):null;
         if (isset($row->review_payload) && $row->review_payload) $arr['review_payload']=is_string($row->review_payload)?json_decode($row->review_payload,true):$row->review_payload;
         return response()->json(['data'=>$arr],201);
@@ -340,7 +359,7 @@ class FinanceCoreController extends FinanceBaseController
             'currency'=>'nullable|string|max:10',
             'items'=>'nullable|array',
             'items.*.name'=>'required_with:items|string|max:255',
-            'items.*.qty'=>'nullable|numeric|min:0',
+            'items.*.qty'=>'required|numeric|gt:0',
             'items.*.price'=>'required_with:items|numeric|min:0',
             'items.*.category'=>'nullable|string|max:120',
             'items.*.category_id'=>'nullable|string',
@@ -366,6 +385,8 @@ class FinanceCoreController extends FinanceBaseController
         }
         $row = DB::table('receipts')->where('id',$receipt)->first();
         $arr=(array)$row;
+        $arr['can_edit'] = $m->role === 'ADMIN' || $row->uploaded_by === $m->user_id;
+        unset($arr['image_data']);
         $arr['ai_result']=$row->ai_result?json_decode($row->ai_result,true):null;
         if (isset($row->review_payload) && $row->review_payload) $arr['review_payload']=is_string($row->review_payload)?json_decode($row->review_payload,true):$row->review_payload;
         // If fallback, extract from ai_result
@@ -388,14 +409,17 @@ class FinanceCoreController extends FinanceBaseController
             'currency'=>'nullable|string|max:10',
             'items'=>'required|array|min:1',
             'items.*.name'=>'required|string|max:255',
-            'items.*.qty'=>'nullable|numeric|min:0',
-            'items.*.price'=>'required|numeric|min:0',
+            'items.*.qty'=>'required|numeric|gt:0',
+            'items.*.price'=>'required|numeric|gt:0',
             'items.*.category'=>'nullable|string|max:120',
             'items.*.category_id'=>'nullable|string',
-            'items.*.amount'=>'nullable|numeric|min:0',
+
         ]);
 
         $date = $d['date'] ?? Carbon::now()->format('Y-m-d');
+        $computedTotal = round(collect($d['items'])->sum(fn($i) => round($i['qty'] * $i['price'], 2)), 2);
+        abort_if(isset($d['total']) && abs($computedTotal - (float)$d['total']) > 0.02, 422, 'Итог не совпадает с суммой позиций. Проверьте количество и цены.');
+        $d['total'] = $computedTotal;
         // Idempotency: if already has expense_id and confirmed, abort
         if (!empty($row->expense_id)) {
             $exists = DB::table('finance_transactions')->where('id',$row->expense_id)->exists();
@@ -404,11 +428,13 @@ class FinanceCoreController extends FinanceBaseController
 
         $createdIds = [];
         DB::transaction(function() use ($d, $date, $m, $receipt, &$createdIds, $row) {
+            $locked = DB::table('receipts')->where('id', $receipt)->lockForUpdate()->first();
+            abort_if($locked->ocr_status === 'CONFIRMED', 409, 'Чек уже подтверждён.');
             foreach ($d['items'] as $item) {
                 $qty = isset($item['qty']) ? (float)$item['qty'] : 1;
                 $price = (float)$item['price'];
-                // Allow amount override, else qty*price
-                $amount = isset($item['amount']) ? (float)$item['amount'] : round($qty * $price, 2);
+                // Each line creates an expense for its actual quantity and unit price.
+                $amount = round($qty * $price, 2);
                 if ($amount <= 0) $amount = round($price,2);
                 $catName = $item['category'] ?? 'Покупки';
                 $catId = $this->resolveCategoryId($m->family_id, $catName, $item['category_id'] ?? null);
@@ -447,6 +473,8 @@ class FinanceCoreController extends FinanceBaseController
         $transactions = DB::table('finance_transactions')->whereIn('id',$createdIds)->get()->map(fn($x)=>array_merge((array)$x,['amount'=>(float)$x->amount]));
         $row = DB::table('receipts')->where('id',$receipt)->first();
         $arr=(array)$row;
+        $arr['can_edit'] = $m->role === 'ADMIN' || $row->uploaded_by === $m->user_id;
+        unset($arr['image_data']);
         $arr['ai_result']=$row->ai_result?json_decode($row->ai_result,true):null;
         if (isset($row->review_payload)) $arr['review_payload']=is_string($row->review_payload)?json_decode($row->review_payload,true):$row->review_payload;
 
@@ -458,50 +486,25 @@ class FinanceCoreController extends FinanceBaseController
         ]], 201);
     }
 
-    private function tryAnalyzeReceipt(string $id,string $familyId): void
+    public function retryReceipt(Request $request, string $receipt): JsonResponse
     {
-        $row=DB::table('receipts')->where('id',$id)->first(); if(!$row)return;
-        $image=$row->image_data; $ocrText=null;
-        if(str_starts_with($image,'data:image/')){
-            $tmp=tempnam(sys_get_temp_dir(),'fh_receipt_');
-            $parts=explode(',', $image,2); if(count($parts)===2){file_put_contents($tmp,base64_decode($parts[1]));}
-            $cmd='command -v tesseract'; exec($cmd,$out,$code);
-            if($code===0){$escaped=escapeshellarg($tmp);$text=shell_exec("tesseract $escaped stdout -l rus+eng 2>/dev/null");$ocrText=is_string($text)?trim($text):null;}
-            @unlink($tmp);
-        }
-        $result=null;
-        $parsedItems = null;
-        if(env('OPENAI_API_KEY')){
-            try{
-                $resp=Http::withToken(env('OPENAI_API_KEY'))->timeout(45)->post('https://api.openai.com/v1/responses',['model'=>env('OPENAI_MODEL','gpt-5.6-luna'),'input'=>[['role'=>'user','content'=>[['type'=>'input_text','text'=>'Распознай чек. Верни JSON только с полями merchant,total,date,currency,items{name,qty,price,category}. Не придумывай значения. Если поле неизвестно, null.'],['type'=>'input_image','image_url'=>$image]]]]]);
-                if($resp->successful()){
-                    $json=$resp->json();
-                    $result=['raw'=>$json];
-                    // Try to extract structured JSON from output text if model returned JSON
-                    $textOut = $json['output'][0]['content'][0]['text'] ?? null;
-                    if ($textOut) {
-                        // Try to find JSON in text
-                        if (preg_match('/\{.*\}/s', $textOut, $m)) {
-                            $decoded = json_decode($m[0], true);
-                            if ($decoded) {
-                                $result['parsed'] = $decoded;
-                                $parsedItems = $decoded['items'] ?? null;
-                            }
-                        }
-                    }
-                }
-            }catch(\Throwable $e){report($e);}
-        }
-        // Build initial review_payload from parsed result if available
-        $payload = null;
-        if ($parsedItems || $result) {
-            $payload = $result['parsed'] ?? ['merchant'=>null,'total'=>null,'date'=>null,'currency'=>'RUB','items'=>$parsedItems];
-        }
-        $update = ['ocr_status'=>$ocrText||$result?'COMPLETED':'NOT_CONFIGURED','ocr_text'=>$ocrText,'ai_result'=>$result?json_encode($result,JSON_UNESCAPED_UNICODE):null,'updated_at'=>now()];
-        if ($payload) {
-            try { $update['review_payload']=json_encode($payload,JSON_UNESCAPED_UNICODE); } catch(\Throwable $e){}
-        }
-        DB::table('receipts')->where('id',$id)->update($update);
+        $m = $this->viewMembership($request);
+        $row = $this->ownedRow('receipts', $receipt, $m->family_id);
+        abort_unless($m->role === 'ADMIN' || $row->uploaded_by === $m->user_id, 403);
+        abort_if($row->ocr_status === 'CONFIRMED', 409, 'Чек уже подтверждён.');
+        $this->tryAnalyzeReceipt($receipt, $m->family_id);
+        return $this->receiptShow($request, $receipt);
+    }
+
+    private function tryAnalyzeReceipt(string $id, string $familyId): void
+    {
+        $row = DB::table('receipts')->where('id', $id)->where('family_id', $familyId)->first();
+        if (!$row) return;
+        $result = app(\App\Services\Finance\ReceiptRecognizer::class)->recognize($row->image_data);
+        DB::table('receipts')->where('id', $id)->update([
+            'ocr_status' => $result['status'], 'ocr_text' => $result['text'],
+            'review_payload' => json_encode($result['payload'], JSON_UNESCAPED_UNICODE), 'updated_at' => now(),
+        ]);
     }
 
     private function ownedRow(string $table,string $id,string $familyId): object { $row=DB::table($table)->where('id',$id)->where('family_id',$familyId)->first(); abort_unless($row,404); return $row; }
