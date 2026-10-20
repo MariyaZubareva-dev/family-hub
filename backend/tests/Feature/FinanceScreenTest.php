@@ -113,6 +113,19 @@ class FinanceScreenTest extends TestCase
         $this->assertSame(159.9, $result['payload']['total']);
     }
 
+    public function test_slow_recognition_cannot_reopen_a_confirmed_receipt(): void
+    {
+        $id = $this->upload();
+        $this->mock(ReceiptRecognizer::class, function ($mock) use ($id) {
+            $mock->shouldReceive('recognize')->once()->andReturnUsing(function () use ($id) {
+                DB::table('receipts')->where('id', $id)->update(['ocr_status' => 'CONFIRMED']);
+                return ['status' => 'COMPLETED', 'text' => '', 'payload' => ['items' => []]];
+            });
+        });
+        $this->postJson("/api/v1/finance/receipts/$id/retry")->assertOk()->assertJsonPath('data.ocr_status', 'CONFIRMED');
+        $this->assertDatabaseHas('receipts', ['id' => $id, 'ocr_status' => 'CONFIRMED']);
+    }
+
     public function test_parser_does_not_treat_totals_and_payments_as_products(): void
     {
         $payload = (new ReceiptRecognizer)->parseText("Молоко 99,90\nХлеб 2 x 30,00 60,00\nИТОГ 159,90\nОПЛАТА КАРТОЙ 159,90\nНДС 20,00");

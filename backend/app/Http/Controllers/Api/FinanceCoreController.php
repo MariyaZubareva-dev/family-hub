@@ -501,7 +501,7 @@ class FinanceCoreController extends FinanceBaseController
         $row = DB::table('receipts')->where('id', $id)->where('family_id', $familyId)->first();
         if (!$row) return;
         $result = app(\App\Services\Finance\ReceiptRecognizer::class)->recognize($row->image_data);
-        DB::table('receipts')->where('id', $id)->update([
+        DB::table('receipts')->where('id', $id)->where('ocr_status', '!=', 'CONFIRMED')->update([
             'ocr_status' => $result['status'], 'ocr_text' => $result['text'],
             'review_payload' => json_encode($result['payload'], JSON_UNESCAPED_UNICODE), 'updated_at' => now(),
         ]);

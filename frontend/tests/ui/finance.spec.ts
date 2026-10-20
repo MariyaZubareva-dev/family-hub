@@ -89,7 +89,7 @@ test('credit, historical prepayment and its purpose persist after reload',async(
   const state=await mockFinance(page);await page.goto('/?section=finance');await tab(page,'Кредиты')
   await page.getByRole('button',{name:'＋ Добавить',exact:true}).click()
   const form=page.getByRole('dialog',{name:'Новый кредит или рассрочка'})
-  await form.getByLabel('Тип',{exact:true}).selectOption('INSTALLMENT');await form.getByLabel('Название',{exact:true}).fill('Рассрочка на технику')
+  await form.getByRole('combobox',{name:'Тип',exact:true}).selectOption('INSTALLMENT');await form.getByLabel('Название',{exact:true}).fill('Рассрочка на технику')
   await form.getByLabel('Сумма, ₽',{exact:true}).fill('12000');await form.getByLabel('Срок, месяцев').fill('12');await form.getByLabel('Платёж в месяц, ₽').fill('1000')
   await form.getByLabel('Дата договора').fill('2026-01-01');await form.getByLabel('Первый платёж').fill('2026-02-01');await form.getByRole('button',{name:'Сохранить кредит'}).click()
   await expect(form).toHaveCount(0);await expect(page.getByRole('button',{name:/Рассрочка на технику/})).toBeVisible()
