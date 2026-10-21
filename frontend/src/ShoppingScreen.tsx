@@ -92,7 +92,7 @@ export default function ShoppingScreen(){
           <div className="f-actions"><button type="button" className="button secondary" onClick={()=>{setAddingCategory(false);setCategoryError('')}} disabled={!!busy}>Отмена категории</button><button type="button" className="button primary" disabled={!!busy} onClick={()=>void addCategory()}>{busy==='category'?'Добавляем…':'Добавить категорию'}</button></div>
         </div>}
         {formError&&<div className="s-message s-error" role="alert">{formError}</div>}
-        <div className="f-actions"><button type="button" className="button secondary" onClick={()=>setShow(false)} disabled={!!busy}>Отмена</button><button className="button primary" disabled={!!busy||addingCategory}>{busy==='save'?'Сохраняем…':'Сохранить покупку'}</button></div>
+        <div className="f-actions"><button type="button" className="button secondary" onClick={()=>setShow(false)} disabled={!!busy}>Отмена</button><button className="button primary" disabled={!!busy||addingCategory}>{busy==='save'?'Сохраняем…':'Сохранить'}</button></div>
       </form>
     </Modal>}
   </div>
