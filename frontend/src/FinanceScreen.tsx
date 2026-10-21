@@ -46,11 +46,11 @@ function Help({text,label='Подсказка'}:{text:string;label?:string}) {
   return <span className="f-help" ref={ref}><button type="button" className="f-help-button" aria-label={label} aria-expanded={open} aria-describedby={open?id:undefined} onClick={()=>setOpen(v=>!v)}>?</button>{open&&<span id={id} role="tooltip" className="f-tooltip">{text}</span>}</span>
 }
 function ActionSymbol({title}:{title:string}) {
-  const kind=title.startsWith('Удалить')?'delete':title.startsWith('Категория')?'category':title.includes('доход')?'income':title.includes('расход')?'expense':title.includes('кредит')?'credit':title.includes('бюджет')?'budget':'receipt'
-  const paths:Record<string,string>={income:'M16 5 6 15 M6 6v9h9',expense:'M5 16 15 6 M6 6h9v9',category:'M3 4h7l8 8-6 6-9-9V4Z M7 7h.01',credit:'M3 5h16v12H3V5Z M3 9h16 M6 13h4',budget:'M3 6h15v12H3V6Z M3 6V4h12 M14 10h6v5h-6v-5Z',receipt:'M5 3h12v16l-3-2-3 2-3-2-3 2V3Z M8 7h6 M8 11h6',delete:'M4 6h14 M8 6V3h6v3 M6 6l1 13h8l1-13 M10 9v7 M13 9v7'}
+  const kind=title.startsWith('Удалить')?'delete':title.startsWith('Категория')?'category':title.includes('доход')?'income':title.includes('расход')?'expense':title.includes('кредит')?'credit':title.includes('бюджет')?'budget':title.includes('покупку')?'shopping':'receipt'
+  const paths:Record<string,string>={shopping:'M4 7h14v12H4V7Z M8 7V5a3 3 0 0 1 6 0v2',income:'M16 5 6 15 M6 6v9h9',expense:'M5 16 15 6 M6 6h9v9',category:'M3 4h7l8 8-6 6-9-9V4Z M7 7h.01',credit:'M3 5h16v12H3V5Z M3 9h16 M6 13h4',budget:'M3 6h15v12H3V6Z M3 6V4h12 M14 10h6v5h-6v-5Z',receipt:'M5 3h12v16l-3-2-3 2-3-2-3 2V3Z M8 7h6 M8 11h6',delete:'M4 6h14 M8 6V3h6v3 M6 6l1 13h8l1-13 M10 9v7 M13 9v7'}
   return <span className={`f-action-symbol f-action-symbol-${kind}`} aria-hidden="true"><svg viewBox="0 0 22 22" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d={paths[kind]}/></svg></span>
 }
-function Modal({title,onClose,busy,children}:{title:string;onClose:()=>void;busy?:boolean;children:ReactNode}) {
+export function Modal({title,onClose,busy,children}:{title:string;onClose:()=>void;busy?:boolean;children:ReactNode}) {
   const ref=useRef<HTMLDialogElement>(null), id=useId()
   useEffect(()=>{
     const d=ref.current!,previousFocus=document.activeElement as HTMLElement|null
@@ -63,7 +63,7 @@ function Modal({title,onClose,busy,children}:{title:string;onClose:()=>void;busy
 function Message({text,error=false}:{text:string;error?:boolean}) { return text?<div className={error?'f-message f-error':'f-message'} role={error?'alert':'status'}>{text}</div>:null }
 function Empty({children}:{children:ReactNode}) { return <p className="f-empty">{children}</p> }
 function Head({title,children}:{title:string;children?:ReactNode}) {return <div className="f-head"><h3>{title}</h3>{children}</div>}
-function Field({label,children}:{label:string;children:ReactNode}) {return <label className="f-field"><span>{label}</span>{children}</label>}
+export function Field({label,children}:{label:string;children:ReactNode}) {return <label className="f-field"><span>{label}</span>{children}</label>}
 
 export default function FinanceScreen() {
   const [tab,setTab]=useState<Tab>('overview'), [kind,setKind]=useState<Kind>('EXPENSE')

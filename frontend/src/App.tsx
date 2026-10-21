@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import './styles.v07.css'
 import './family.css'
 import FinanceScreen from './FinanceScreen'
+import ShoppingScreen from './ShoppingScreen'
 
 function FamilySymbol({kind}:{kind:string}) {
   const paths:Record<string,string>={
@@ -149,7 +150,7 @@ export default function App(){
       {!access&&!accessError&&<div className="family-loading">Загружаем пространство…</div>}
       {access&&section==='home' && <HomeView onGo={setSection} totalExpense={totalExpense} visibility={access} />}
       {access?.calendar&&section==='calendar' && <CalendarV07 />}
-      {access?.shopping&&section==='lists' && <ListsV07 />}
+      {access?.shopping&&section==='lists' && <ShoppingScreen />}
       {access?.finance&&section==='finance' && <FinanceScreen />}
       {access&&section==='family' && <FamilyV07 />}
     </main>
@@ -202,19 +203,6 @@ function CalendarV07(){
   </div>
 }
 
-function ListsV07(){
-  const [items,setItems]=useState<any[]>([]);const [type,setType]=useState<'LARGE'|'RECURRING'>('LARGE');const [show,setShow]=useState(false);const [name,setName]=useState('');const [category,setCategory]=useState('');const [amount,setAmount]=useState('');const [due,setDue]=useState('');const [cadence,setCadence]=useState('3');const [error,setError]=useState('')
-  const refresh=()=>apiGet('/planned-purchases').then(j=>setItems(j.data||[])).catch(e=>setError(String(e.message||e).slice(0,140)))
-  useEffect(()=>{refresh()},[])
-  const add=async()=>{try{setError('');await apiPost('/planned-purchases',{type,name,category:category||undefined,estimated_amount:amount?Number(amount):undefined,due_date:due||undefined,cadence_months:type==='RECURRING'?Number(cadence):undefined,notify_days_before:7});setName('');setCategory('');setAmount('');setDue('');setShow(false);await refresh()}catch(e:any){setError(String(e.message||e).slice(0,150))}}
-  const mark=async(id:string)=>{try{await apiPost(`/planned-purchases/${id}/purchased`,{purchased_on:new Date().toISOString().slice(0,10)});await refresh()}catch(e:any){setError(String(e.message||e).slice(0,120))}}
-  const shown=items.filter(x=>x.type===type)
-  return <div className="stack"><SectionTitle title="Планируемые покупки" subtitle="Общий семейный план крупных и регулярных покупок." action={<button className="button primary small" onClick={()=>setShow(!show)}>＋ Добавить</button>} />{error&&<div className="card" style={{color:'#B91C1C'}}>{error}</div>}
-    <div className="segmented"><button className={type==='LARGE'?'active':''} onClick={()=>setType('LARGE')}>Крупные покупки и подарки</button><button className={type==='RECURRING'?'active':''} onClick={()=>setType('RECURRING')}>Регулярные покупки</button></div>
-    {show&&<div className="card"><h3>{type==='LARGE'?'Добавить покупку или подарок':'Добавить регулярную покупку'}</h3><div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(180px,1fr))',gap:10}}><input placeholder="Название" value={name} onChange={e=>setName(e.target.value)} /><input placeholder="Категория" value={category} onChange={e=>setCategory(e.target.value)} /><input type="number" min="0" placeholder="Сумма, ₽" value={amount} onChange={e=>setAmount(e.target.value)} /><label>Ориентировочная дата<input type="date" value={due} onChange={e=>setDue(e.target.value)} /></label>{type==='RECURRING'&&<label>Периодичность, месяцев<input type="number" min="1" max="120" value={cadence} onChange={e=>setCadence(e.target.value)} /></label>}</div><div style={{display:'flex',gap:8,marginTop:12}}><button className="button primary" onClick={add}>Сохранить</button><button className="button secondary" onClick={()=>setShow(false)}>Отмена</button></div></div>}
-    <div className="card"><div className="card-head"><h3>{type==='LARGE'?'Крупные покупки и подарки':'Регулярные покупки'}</h3><span className="pill">{shown.length}</span></div>{shown.length?shown.map(x=><div className="list-item-card" key={x.id}><div style={{flex:1}}><strong>{x.name}</strong><small style={{display:'block',color:'var(--muted)'}}>{x.category||'Без категории'}{x.cadence_months?` · каждые ${x.cadence_months} мес.`:''} · добавил(а): {x.creator?.first_name||x.creator?.username||'участник'}</small></div><b>{x.estimated_amount?rub(Number(x.estimated_amount)):'Сумма не задана'}</b><span>{x.due_date||'Дата не задана'}</span>{type==='RECURRING'&&<button className="button secondary small" onClick={()=>mark(x.id)}>Купили</button>}</div>):<p className="muted">Список пока пуст. Добавьте первую позицию.</p>}</div>
-  </div>
-}
 function FamilyV07(){
   const [family,setFamily]=useState<any>(null)
   const [invitations,setInvitations]=useState<any[]>([])
