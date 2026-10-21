@@ -20,7 +20,7 @@ class ReminderObserver
     public function updated(Reminder $reminder): void
     {
         // If scheduled_at or responsible changed, the scheduler will pick up new time via notification_sent_at reset.
-        if ($reminder->wasChanged('scheduled_at') || $reminder->wasChanged('responsible_member_id')) {
+        if ($reminder->wasChanged('scheduled_at') || $reminder->wasChanged('responsible_member_id') || $reminder->wasChanged('responsible_member_ids')) {
             $reminder->forceFill(['notification_sent_at' => null])->saveQuietly();
         }
         if ($reminder->wasChanged('status') && $reminder->status === 'CANCELLED') {

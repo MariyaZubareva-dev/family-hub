@@ -4,7 +4,7 @@ import './calendar.css'
 
 type Kind='EVENT'|'REMINDER'
 type Member={id:string;user?:{first_name?:string;username?:string}}
-type Entry={id:string;title:string;description?:string;status:string;start_at?:string;scheduled_at?:string;responsible_member?:Member;creator?:{first_name?:string;username?:string}}
+type Entry={id:string;title:string;description?:string;status:string;start_at?:string;scheduled_at?:string;responsible_member?:Member;responsible_member_ids?:string[];creator?:{first_name?:string;username?:string}}
 type Row=Entry&{date:Date;kind:Kind}
 const dayKey=(d:Date)=>`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`
 const dateText=(d:Date)=>d.toLocaleDateString('ru-RU',{day:'numeric',month:'long'})
@@ -26,7 +26,7 @@ async function request(path:string,body?:unknown){
     if(response.status>=500)throw new Error('Сервер временно недоступен. Попробуйте ещё раз позже.')
     const message=Object.values(json?.errors||{}).flat()[0]||json?.message
     if(typeof message==='string'&&/[а-яё]/i.test(message)&&!/SQLSTATE|Exception|<|>/.test(message))throw new Error(message)
-    throw new Error(response.status===422?'Проверьте название, дату и ответственного. Данные пока не сохранены.':'Не удалось выполнить действие. Попробуйте ещё раз.')
+    throw new Error(response.status===422?'Проверьте название, дату и хотя бы одного ответственного. Данные пока не сохранены.':'Не удалось выполнить действие. Попробуйте ещё раз.')
   }
   return json
 }
@@ -35,11 +35,11 @@ export default function CalendarScreen(){
   const [events,setEvents]=useState<Entry[]>([]),[reminders,setReminders]=useState<Entry[]>([]),[members,setMembers]=useState<Member[]>([])
   const [month,setMonth]=useState(()=>new Date(new Date().getFullYear(),new Date().getMonth(),1)),[selectedDay,setSelectedDay]=useState('')
   const [kind,setKind]=useState<Kind>('EVENT'),[show,setShow]=useState(false),[saving,setSaving]=useState(false),[loading,setLoading]=useState(true)
-  const [title,setTitle]=useState(''),[description,setDescription]=useState(''),[responsible,setResponsible]=useState(''),[when,setWhen]=useState('')
+  const [title,setTitle]=useState(''),[description,setDescription]=useState(''),[responsible,setResponsible]=useState<string[]>([]),[when,setWhen]=useState('')
   const [error,setError]=useState(''),[formError,setFormError]=useState(''),[notice,setNotice]=useState('')
   const refresh=async()=>{
     setLoading(true);setError('')
-    try{const [e,r,f]=await Promise.all([request('/events'),request('/reminders'),request('/family')]);setEvents(e.data||[]);setReminders(r.data||[]);setMembers(f.data?.members||[]);setResponsible(current=>current||f.data?.current_member_id||f.data?.members?.[0]?.id||'')}
+    try{const [e,r,f]=await Promise.all([request('/events'),request('/reminders'),request('/family')]);setEvents(e.data||[]);setReminders(r.data||[]);setMembers(f.data?.members||[]);setResponsible(current=>current.length?current:[f.data?.current_member_id||f.data?.members?.[0]?.id].filter(Boolean))}
     catch(e){setError(errorText(e))}finally{setLoading(false)}
   }
   useEffect(()=>{void refresh()},[])
@@ -50,10 +50,11 @@ export default function CalendarScreen(){
   }
   const submit=async(e:FormEvent)=>{
     e.preventDefault();if(saving)return
-    if(!title.trim()||!responsible||!when||!Number.isFinite(new Date(when).getTime())){setFormError('Заполните название, дату и ответственного.');return}
+    if(!responsible.length){setFormError('Выберите хотя бы одного ответственного.');return}
+    if(!title.trim()||!when||!Number.isFinite(new Date(when).getTime())){setFormError('Заполните название, дату и время.');return}
     setSaving(true);setFormError('')
     const date=new Date(when),timezone=Intl.DateTimeFormat().resolvedOptions().timeZone
-    const base={title:title.trim(),description:description.trim()||undefined,responsible_member_id:responsible,timezone}
+    const base={title:title.trim(),description:description.trim()||undefined,responsible_member_ids:responsible,timezone}
     try{
       const j=await request(kind==='EVENT'?'/events':'/reminders',kind==='EVENT'?{...base,start_at:date.toISOString(),end_at:new Date(date.getTime()+3600000).toISOString(),participant_member_ids:members.map(m=>m.id)}:{...base,scheduled_at:date.toISOString()})
       if(kind==='EVENT')setEvents(rows=>[...rows,j.data]);else setReminders(rows=>[...rows,j.data])
@@ -87,7 +88,7 @@ export default function CalendarScreen(){
       {!loading&&!error&&!shown.length&&<p className="c-empty">{selectedDay?'На этот день планов пока нет.':'В этом месяце планов пока нет.'}</p>}
       {shown.map(x=><article className="c-entry" key={x.kind+x.id}>
         <div className="c-date"><b>{x.date.getDate()}</b><small>{x.date.toLocaleDateString('ru-RU',{month:'short'})}</small></div>
-        <div className="c-copy"><span className="c-kind">{x.kind==='EVENT'?'Событие':'Напоминание'}</span><strong>{x.title}</strong>{x.description&&<details className="c-description"><summary>Описание</summary><p>{x.description}</p></details>}<small>{x.responsible_member?'Ответственный: '+memberName(x.responsible_member):x.creator?'Добавил(а): '+(x.creator.first_name||x.creator.username||'участник'):''}</small></div>
+        <div className="c-copy"><span className="c-kind">{x.kind==='EVENT'?'Событие':'Напоминание'}</span><strong>{x.title}</strong>{x.description&&<details className="c-description"><summary>Описание</summary><p>{x.description}</p></details>}<small>{x.responsible_member_ids?.length?'Ответственные: '+x.responsible_member_ids.map(id=>{const member=members.find(m=>m.id===id);return member?memberName(member):'Бывший участник'}).join(', '):x.responsible_member?'Ответственный: '+memberName(x.responsible_member):x.creator?'Добавил(а): '+(x.creator.first_name||x.creator.username||'участник'):''}</small></div>
         <time dateTime={x.date.toISOString()}>{x.date.toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit'})}</time>
       </article>)}
     </section>
@@ -96,7 +97,7 @@ export default function CalendarScreen(){
         <Field label="Название"><input required maxLength={255} value={title} onChange={e=>setTitle(e.target.value)} placeholder={kind==='EVENT'?'Например, Встреча':'Например, Забрать заказ'} disabled={saving}/></Field>
         <Field label="Дата"><input type="date" required value={when.slice(0,10)} onChange={e=>setWhen(e.target.value+'T'+(when.slice(11,16)||'09:00'))} disabled={saving}/></Field>
         <Field label="Время"><input type="time" required value={when.slice(11,16)} onChange={e=>setWhen(when.slice(0,10)+'T'+e.target.value)} disabled={saving}/></Field>
-        <Field label="Ответственный"><select value={responsible} required onChange={e=>setResponsible(e.target.value)} disabled={saving}>{members.map(m=><option key={m.id} value={m.id}>{memberName(m)}</option>)}</select></Field>
+        <fieldset className="c-responsibles" disabled={saving}><legend>Ответственные <span>{responsible.length}</span></legend><div>{members.map(m=><label key={m.id}><input type="checkbox" checked={responsible.includes(m.id)} onChange={e=>setResponsible(ids=>e.target.checked?[...ids,m.id]:ids.filter(id=>id!==m.id))}/><span>{memberName(m)}</span></label>)}</div></fieldset>
         <Field label="Описание"><textarea maxLength={2000} value={description} onChange={e=>setDescription(e.target.value)} placeholder="Необязательно" disabled={saving}/></Field>
       </div>
       {formError&&<div className="c-message c-error" role="alert">{formError}</div>}
