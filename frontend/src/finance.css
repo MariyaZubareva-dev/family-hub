@@ -123,3 +123,12 @@
 .f-receipt-quantity-price{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
 .finance-dialog textarea{width:100%;min-width:0;max-width:100%;min-height:72px;border:1px solid #D8DDE5;border-radius:9px;padding:8px;background:#fff;font:inherit;font-size:16px;color:#1A1E22;line-height:1.4;resize:vertical}
 .finance-dialog textarea:focus-visible{outline:2px solid var(--primary);outline-offset:2px}
+
+.f-receipt-upload{display:grid;gap:8px}
+.f-receipts .f-receipt-line .f-copy strong{display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
+.f-receipts .f-receipt-line{padding:8px 0}
+.f-receipts .f-receipt-history{gap:4px;padding:6px 0}
+.f-history-open{display:flex;align-items:center;gap:8px;flex:1;min-width:0;text-align:left;background:none;border:0;padding:4px 0;color:inherit;font:inherit;cursor:pointer}
+.f-history-open .f-copy{flex:1}
+.f-receipt-history>.f-icon{flex:0 0 36px}
+@media(min-width:400px){.f-receipt-upload{grid-template-columns:1fr 1fr}.f-receipt-upload .button{font-size:11px;padding:10px 6px}}

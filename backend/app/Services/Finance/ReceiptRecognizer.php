@@ -52,6 +52,7 @@ class ReceiptRecognizer
                 // Fall back to local OCR; never return provider diagnostics or credentials to the user.
             }
         }
+        $payload['recognizer_version'] = 'numbered-v2';
         $payload['receipt_total'] = $payload['total'];
         return ['text' => $text, 'payload' => $payload, 'status' => $this->isBalanced($payload) ? 'COMPLETED' : 'NEEDS_REVIEW'];
     }

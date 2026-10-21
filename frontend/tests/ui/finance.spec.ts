@@ -7,7 +7,7 @@ async function mockFinance(page:Page) {
   let budget:any={total_limit:0,spent_amount:0,available_amount:0,categories:[]}
   await page.route('**/api/v1/**',async route=>{
     const req=route.request(),url=new URL(req.url()),path=url.pathname.replace('/api/v1',''),method=req.method()
-    const body=method==='GET'?null:req.postDataJSON()
+    const body=method==='GET'||method==='DELETE'?null:req.postDataJSON()
     if(body)requests.push({path,body})
     let data:any=[]
     if(path==='/me')data={id:'u1',family:{id:'f1',role:'ADMIN',visibility:{calendar:true,shopping:true,finance:true}}}
@@ -32,6 +32,7 @@ async function mockFinance(page:Page) {
       data=method==='POST'?receipts.at(-1):receipts
     }else if(path.startsWith('/finance/receipts/')){
       const r=receipts.find(r=>path.includes('/'+r.id));data=r
+      if(method==='DELETE'){receipts.splice(receipts.indexOf(r),1);data=null}
       if(method==='PATCH'){r.review_payload=body}
       if(path.endsWith('/confirm')){r.ocr_status='CONFIRMED';r.review_payload=body;data={total_amount:body.total,created_count:body.items.length};for(const i of body.items)transactions.push({id:'rt'+transactions.length,type:'EXPENSE',amount:i.qty*i.price,category:i.category,occurred_on:body.date})}
     }else if(path==='/finance/budgets/save'){
@@ -89,7 +90,7 @@ test('photo review, draft edits and confirmation save actual expenses',async({pa
   await page.getByRole('button',{name:'Подтвердить расходы'}).click()
   await expect(page.getByText('Чек подтверждён. Добавлены расходы на 200 ₽.',{exact:true})).toBeVisible()
   expect(state.transactions).toHaveLength(1);expect(state.transactions[0].amount).toBe(200)
-  expect(state.requests.find(r=>r.path==='/finance/receipts')?.body.image_data).toMatch(/^data:image\/jpeg;base64,/)
+  expect(state.requests.find(r=>r.path==='/finance/receipts')?.body.image_data).toBe('data:image/png;base64,'+image.toString('base64'))
   await page.reload();await tab(page,'Чеки');await expect(page.getByText(/Расходы сохранены/)).toBeVisible()
 })
 
@@ -164,4 +165,25 @@ for(const width of [320,393,768])test(`numbered receipt review is compact at ${w
   await editor.getByLabel('Цена, ₽').fill('8862');await editor.getByRole('button',{name:'Готово',exact:true}).click()
   await expect(page.getByRole('button',{name:'Подтвердить расходы'})).toBeDisabled()
   await expect(page.getByText(/На чеке 8.*663 ₽ — проверьте позиции/)).toBeVisible()
+})
+
+test('camera capture and draft deletion persist without creating expenses',async({page})=>{
+  const state=await mockFinance(page);await page.goto('/?section=finance');await tab(page,'Чеки')
+  const camera=page.getByLabel('Сфотографировать чек',{exact:true})
+  await expect(camera).toHaveAttribute('capture','environment')
+  await expect(page.getByLabel('Фото чека',{exact:true})).not.toHaveAttribute('capture')
+  const image=Buffer.from(readFileSync('../backend/tests/Fixtures/receipt.png.b64','utf8'),'base64')
+  await camera.setInputFiles({name:'camera.jpg',mimeType:'image/jpeg',buffer:image})
+  await expect(page.getByRole('button',{name:'Подтвердить расходы'})).toBeEnabled()
+  await page.getByRole('button',{name:'Удалить черновик Магазин',exact:true}).click()
+  let dialog=page.getByRole('dialog',{name:'Удалить черновик?'})
+  await dialog.getByRole('button',{name:'Отмена',exact:true}).click()
+  expect(state.receipts).toHaveLength(1)
+  await page.getByRole('button',{name:'Удалить черновик Магазин',exact:true}).click()
+  dialog=page.getByRole('dialog',{name:'Удалить черновик?'})
+  await dialog.getByRole('button',{name:'Удалить черновик',exact:true}).click()
+  await expect(page.getByText('Черновик чека удалён.',{exact:true})).toBeVisible()
+  expect(state.receipts).toHaveLength(0);expect(state.transactions).toHaveLength(0)
+  await page.reload();await tab(page,'Чеки')
+  await expect(page.getByText('Загруженных чеков пока нет.',{exact:true})).toBeVisible()
 })

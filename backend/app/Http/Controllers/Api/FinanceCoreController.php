@@ -378,13 +378,13 @@ class FinanceCoreController extends FinanceBaseController
         // Try to update review_payload if column exists, else fallback to ai_result
         $updated = false;
         try {
-            DB::table('receipts')->where('id',$receipt)->update(['review_payload'=>json_encode($payload,JSON_UNESCAPED_UNICODE),'updated_at'=>now()]);
+            DB::table('receipts')->where('id',$receipt)->whereNull('deleted_at')->update(['review_payload'=>json_encode($payload,JSON_UNESCAPED_UNICODE),'updated_at'=>now()]);
             $updated = true;
         } catch(\Throwable $e){
             // Fallback: store in ai_result under review key
             $ai = $row->ai_result ? json_decode($row->ai_result,true) : [];
             $ai['review_payload'] = $payload;
-            DB::table('receipts')->where('id',$receipt)->update(['ai_result'=>json_encode($ai,JSON_UNESCAPED_UNICODE),'updated_at'=>now()]);
+            DB::table('receipts')->where('id',$receipt)->whereNull('deleted_at')->update(['ai_result'=>json_encode($ai,JSON_UNESCAPED_UNICODE),'updated_at'=>now()]);
             $updated = true;
         }
         $row = DB::table('receipts')->where('id',$receipt)->first();
@@ -438,7 +438,8 @@ class FinanceCoreController extends FinanceBaseController
 
         $createdIds = [];
         DB::transaction(function() use ($d, $date, $m, $receipt, &$createdIds, $row) {
-            $locked = DB::table('receipts')->where('id', $receipt)->lockForUpdate()->first();
+            $locked = DB::table('receipts')->where('id', $receipt)->whereNull('deleted_at')->lockForUpdate()->first();
+            abort_unless($locked, 404, 'Чек удалён или недоступен.');
             abort_if($locked->ocr_status === 'CONFIRMED', 409, 'Чек уже подтверждён.');
             foreach ($d['items'] as $item) {
                 $qty = isset($item['qty']) ? (float)$item['qty'] : 1;
@@ -496,6 +497,22 @@ class FinanceCoreController extends FinanceBaseController
         ]], 201);
     }
 
+    public function deleteReceipt(Request $request, string $receipt): JsonResponse
+    {
+        $m = $this->viewMembership($request);
+        DB::transaction(function () use ($m, $receipt) {
+            $row = DB::table('receipts')->where('id', $receipt)->where('family_id', $m->family_id)->whereNull('deleted_at')->lockForUpdate()->first();
+            abort_unless($row, 404, 'Черновик уже удалён или недоступен.');
+            abort_unless($m->role === 'ADMIN' || $row->uploaded_by === $m->user_id, 403, 'Удалить черновик может его автор или администратор семьи.');
+            abort_if($row->ocr_status === 'CONFIRMED', 409, 'Чек уже подтверждён. Расходы по нему сохранены.');
+            DB::table('receipts')->where('id', $receipt)->update([
+                'deleted_at' => now(), 'updated_at' => now(), 'image_data' => null,
+                'ocr_text' => null, 'review_payload' => null, 'ai_result' => null,
+            ]);
+        });
+        return response()->json([], 204);
+    }
+
     public function retryReceipt(Request $request, string $receipt): JsonResponse
     {
         $m = $this->viewMembership($request);
@@ -508,14 +525,14 @@ class FinanceCoreController extends FinanceBaseController
 
     private function tryAnalyzeReceipt(string $id, string $familyId): void
     {
-        $row = DB::table('receipts')->where('id', $id)->where('family_id', $familyId)->first();
+        $row = DB::table('receipts')->where('id', $id)->where('family_id', $familyId)->whereNull('deleted_at')->first();
         if (!$row) return;
         $result = app(\App\Services\Finance\ReceiptRecognizer::class)->recognize($row->image_data);
-        DB::table('receipts')->where('id', $id)->where('ocr_status', '!=', 'CONFIRMED')->update([
+        DB::table('receipts')->where('id', $id)->whereNull('deleted_at')->where('ocr_status', '!=', 'CONFIRMED')->update([
             'ocr_status' => $result['status'], 'ocr_text' => $result['text'],
             'review_payload' => json_encode($result['payload'], JSON_UNESCAPED_UNICODE), 'updated_at' => now(),
         ]);
     }
 
-    private function ownedRow(string $table,string $id,string $familyId): object { $row=DB::table($table)->where('id',$id)->where('family_id',$familyId)->first(); abort_unless($row,404); return $row; }
+    private function ownedRow(string $table,string $id,string $familyId): object { $query=DB::table($table)->where('id',$id)->where('family_id',$familyId); if ($table === 'receipts') $query->whereNull('deleted_at'); $row=$query->first(); abort_unless($row,404); return $row; }
 }

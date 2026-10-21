@@ -103,6 +103,47 @@ class FinanceScreenTest extends TestCase
         $this->assertDatabaseCount('receipts',1);
     }
 
+    public function test_draft_deletion_is_authorized_and_hides_it_everywhere(): void
+    {
+        $id = $this->upload();
+        $this->actingAs($this->member)->deleteJson("/api/v1/finance/receipts/$id")->assertForbidden();
+        $this->actingAs($this->admin)->deleteJson("/api/v1/finance/receipts/$id")->assertNoContent();
+        $this->getJson('/api/v1/finance/receipts')->assertOk()->assertJsonCount(0, 'data');
+        $this->getJson("/api/v1/finance/receipts/$id")->assertNotFound();
+        $this->patchJson("/api/v1/finance/receipts/$id", [])->assertNotFound();
+        $this->postJson("/api/v1/finance/receipts/$id/retry")->assertNotFound();
+        $this->postJson("/api/v1/finance/receipts/$id/confirm", [])->assertNotFound();
+        $this->deleteJson("/api/v1/finance/receipts/$id")->assertNotFound();
+        $this->assertDatabaseHas('receipts', ['id'=>$id, 'image_data'=>null, 'review_payload'=>null]);
+        $this->assertDatabaseCount('finance_transactions', 0);
+    }
+
+    public function test_author_can_delete_own_draft_but_not_a_confirmed_receipt(): void
+    {
+        $this->actingAs($this->member);
+        $id = $this->upload();
+        $this->deleteJson("/api/v1/finance/receipts/$id")->assertNoContent();
+        $this->actingAs($this->admin);
+        $id = $this->upload();
+        $this->postJson("/api/v1/finance/receipts/$id/confirm", ['date'=>'2026-10-20','total'=>99.9,'items'=>[['name'=>'Молоко','qty'=>1,'price'=>99.9,'category'=>'Покупки']]])->assertCreated();
+        $this->deleteJson("/api/v1/finance/receipts/$id")->assertConflict();
+        $this->getJson("/api/v1/finance/receipts/$id")->assertOk();
+        $this->assertDatabaseCount('finance_transactions', 1);
+    }
+
+    public function test_late_recognition_cannot_restore_a_deleted_draft(): void
+    {
+        $id = $this->upload();
+        $this->mock(ReceiptRecognizer::class, function ($mock) use ($id) {
+            $mock->shouldReceive('recognize')->once()->andReturnUsing(function () use ($id) {
+                DB::table('receipts')->where('id', $id)->update(['deleted_at'=>now(), 'image_data'=>null, 'review_payload'=>null]);
+                return ['status'=>'COMPLETED', 'text'=>'late', 'payload'=>['items'=>[]]];
+            });
+        });
+        $this->postJson("/api/v1/finance/receipts/$id/retry")->assertNotFound();
+        $this->assertDatabaseHas('receipts', ['id'=>$id, 'image_data'=>null, 'review_payload'=>null]);
+    }
+
     public function test_local_ocr_reads_photo_without_a_paid_api(): void
     {
         $result = app(ReceiptRecognizer::class)->recognize($this->image());
