@@ -96,7 +96,7 @@ class ReceiptRecognizer
             $items[] = $item; $block = null;
         };
         foreach ($lines as $raw) {
-            $line = trim($raw, " \t'\"`“”");
+            $line = preg_replace('/^[\s\x{0027}\x{0022}\x{0060}\x{2018}\x{2019}\x{201C}\x{201D}]+|[\s\x{0027}\x{0022}\x{0060}\x{2018}\x{2019}\x{201C}\x{201D}]+$/u', '', $raw);
             if (preg_match('/^(?:ИТОГ(?:О)?|ВСЕГО|TOTAL)\s*[=:]?\s*(\d+(?: \d{3})*(?:[.,]\d{1,2})?)\s*(?:₽|руб\.?)?$/ui', $line, $m)) {
                 $finish(); $total = $number($m[1]); break;
             }
