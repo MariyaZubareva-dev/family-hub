@@ -217,3 +217,32 @@
 .f-budget-summary strong{font-size:13px;white-space:nowrap}
 @media(pointer:coarse){.finance-dialog .f-field :is(input,select,textarea),.finance-page .f-prepayment-form :is(input,select),.finance-page .f-budget-month input{font-size:14px}}
 @supports(-webkit-touch-callout:none){.finance-dialog .f-field :is(input,select,textarea),.finance-page .f-prepayment-form :is(input,select),.finance-page .f-budget-month input{font-size:16px}}
+/* Quiet, grouped surfaces keep the accepted compact type and row heights. */
+.finance-dialog{background:#fff;box-shadow:0 -8px 32px #183B2E24}
+.finance-dialog::backdrop{background:#1A1E224D;backdrop-filter:blur(2px)}
+.f-dialog-identity{display:flex;align-items:center;gap:8px;min-width:0}
+.f-action-symbol{display:grid;place-items:center;flex:0 0 28px;width:28px;height:28px;border-radius:9px;background:#EAF4F0;color:var(--primary)}
+.f-action-symbol svg{width:18px;height:18px;display:block}
+.f-action-symbol-delete{background:#FFF1F2;color:#BE123C}
+.finance-dialog .f-head .f-icon{background:#F2F5F3;color:#62746B;border-radius:50%}
+.finance-dialog .f-head .f-icon:hover{background:#E6EFEB;color:var(--primary)}
+.f-form-fields{min-width:0;border:1px solid #E5ECE8;border-radius:12px;background:#F7F9F8}
+.finance-dialog .f-form-fields>.f-field,.f-prepayment-form .f-form-fields>.f-field{min-height:40px;padding:4px 10px;border-bottom:1px solid #E5ECE8}
+.finance-dialog .f-form-fields>.f-field:not(:has(textarea)),.f-prepayment-form .f-form-fields>.f-field{display:grid;grid-template-columns:minmax(88px,.8fr) minmax(0,1.6fr);align-items:center;gap:8px}
+.f-form-fields>.f-field:first-child{border-radius:11px 11px 0 0}
+.f-form-fields>.f-field:last-child{border-bottom:0;border-radius:0 0 11px 11px}
+.f-form-fields>.f-field:only-child{border-radius:11px}
+.finance-dialog .f-form-fields>:is(.f-form-pair,.f-receipt-quantity-price),.f-prepayment-form .f-form-fields>:is(.f-form-pair,.f-receipt-quantity-price){gap:0}
+.finance-dialog .f-form-fields>:is(.f-form-pair,.f-receipt-quantity-price)>.f-field,.f-prepayment-form .f-form-fields>:is(.f-form-pair,.f-receipt-quantity-price)>.f-field{padding-inline:10px;border-bottom:0}
+.f-form-fields>:is(.f-form-pair,.f-receipt-quantity-price)>.f-field+.f-field{border-left:1px solid #E5ECE8}
+.finance-dialog .f-form-fields .f-field>span,.f-prepayment-form .f-form-fields .f-field>span{color:#64736B}
+.finance-dialog .f-form-fields .f-field:focus-within,.f-prepayment-form .f-form-fields .f-field:focus-within{background:#fff;box-shadow:inset 2px 0 var(--primary);border-bottom-color:#E5ECE8}
+.finance-dialog .f-form-fields input,.finance-dialog .f-form-fields select,.f-prepayment-form .f-form-fields input,.f-prepayment-form .f-form-fields select{font-variant-numeric:tabular-nums}
+.finance-dialog .f-form-fields .f-field input::placeholder,.finance-dialog .f-form-fields .f-field textarea::placeholder{color:#7D8B83}
+.finance-dialog .button.primary:not(.f-danger-button),.f-prepayment-form>.button.primary{background-image:linear-gradient(180deg,#147F74,#0F766E);box-shadow:0 2px 5px #0F766E18}
+.finance-dialog .button.primary:disabled{background-image:none;box-shadow:none}
+.finance-dialog .f-form-fields .f-budget-limits-head{padding-inline:10px}
+.finance-dialog .f-form-fields .f-budget-limits{padding-inline:10px}
+.finance-dialog .f-form-fields .f-budget-limit>.f-field{border:0;box-shadow:none}
+.finance-dialog .f-form-fields>.f-budget-limits-head{border-block:1px solid #E5ECE8}
+.finance-dialog .f-form-fields>.f-budget-limits-head:first-child{border-top:0}
