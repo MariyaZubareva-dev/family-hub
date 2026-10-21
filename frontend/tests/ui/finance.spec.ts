@@ -41,7 +41,7 @@ async function mockFinance(page:Page) {
     else if(path==='/planned-purchases')data=[{id:'p1',name:'Шампунь',due_date:'2026-11-01',last_purchased_at:'2026-10-01',type:'RECURRING'}]
     await route.fulfill({json:{data}})
   })
-  return {categories,transactions,credits,receipts,requests}
+  return {categories,transactions,credits,receipts,requests,setBudget:(value:any)=>{budget=value}}
 }
 const tab=(page:Page,name:string)=>page.getByRole('tab',{name,exact:true}).click()
 
@@ -108,7 +108,7 @@ test('credit, historical prepayment and its purpose persist after reload',async(
 
 test('budget saves limits; stocks use shopping data and a tooltip instead of duplicate actions',async({page})=>{
   const state=await mockFinance(page);await page.goto('/?section=finance');await tab(page,'Бюджет')
-  await page.getByRole('button',{name:'Настроить лимиты'}).click();await page.getByLabel('Общий лимит, ₽').fill('20000');await page.getByLabel('Лимит: Продукты',{exact:true}).fill('5000');await page.getByRole('button',{name:'Сохранить лимиты'}).click()
+  await page.getByRole('button',{name:'Настроить лимиты'}).click();await page.getByLabel('Общий лимит, ₽').fill('20000');await page.getByLabel('Добавить лимит категории').selectOption('e1');await page.getByLabel('Лимит: Продукты',{exact:true}).fill('5000');await page.getByRole('button',{name:'Сохранить лимиты'}).click()
   await expect(page.getByText('Лимиты бюджета сохранены.',{exact:true})).toBeVisible()
   expect(state.requests.find(r=>r.path==='/finance/budgets/save')?.body).toMatchObject({total_limit:20000,categories:[{category_id:'e1',limit_amount:5000}]})
   await page.reload();await tab(page,'Бюджет');await expect(page.getByText('20 000 ₽',{exact:true})).toHaveCount(2)
@@ -239,9 +239,46 @@ for(const {width,height} of [{width:320,height:852},{width:393,height:852},{widt
   for(const [kind,title,file] of [['Расходы','Категория расхода','expense-category'],['Доходы','Категория дохода','income-category']]){
     await page.getByRole('button',{name:kind,exact:true}).click();const trigger=page.getByRole('button',{name:'＋ Категория',exact:true});await trigger.click();await check(title,file);await expect(trigger).toBeFocused()
   }
+  await tab(page,'Бюджет');await page.getByRole('button',{name:'Настроить лимиты',exact:true}).click();await check('Лимиты бюджета','budget')
   await tab(page,'Кредиты');await page.getByRole('button',{name:'＋ Добавить',exact:true}).click();await check('Новый кредит или рассрочка','credit')
   await tab(page,'Чеки');await page.getByRole('button',{name:/Магазин.*Проверьте позиции/}).click()
   await page.getByRole('button',{name:'Изменить данные чека',exact:true}).click();await check('Данные чека','receipt')
   await page.getByRole('button',{name:'Изменить позицию 1',exact:true}).click();await check('Позиция 1','item')
   await page.getByRole('button',{name:'Удалить черновик Магазин',exact:true}).click();await check('Удалить черновик?','delete')
+})
+
+for(const width of [320,393,768])test(`budget is compact and optional category limits persist at ${width}px`,async({page})=>{
+  const state=await mockFinance(page)
+  state.setBudget({id:null,total_limit:0,spent_amount:10663,available_amount:-10663,categories:[]})
+  for(let n=0;n<20;n++)state.categories.push({id:'extra'+n,name:'Дополнительная категория '+n,transaction_type:'EXPENSE'})
+  await page.setViewportSize({width,height:852});await page.goto('/?section=finance');await tab(page,'Бюджет')
+  await expect(page.getByText('Не задан',{exact:true})).toBeVisible()
+  await expect(page.locator('.f-budget-summary .danger')).toHaveCount(0)
+  const card=page.locator('.f-budget>.card').first()
+  expect(await card.evaluate(el=>el.getBoundingClientRect().height)).toBeLessThan(280)
+  await page.screenshot({path:`test-results/budget-summary-${width}.png`,fullPage:true})
+  await page.getByRole('button',{name:'Настроить лимиты',exact:true}).click()
+  const dialog=page.getByRole('dialog',{name:'Лимиты бюджета',exact:true})
+  await expect(dialog.getByRole('spinbutton')).toHaveCount(1)
+  await dialog.getByLabel('Общий лимит, ₽',{exact:true}).fill('20000')
+  await dialog.getByLabel('Добавить лимит категории',{exact:true}).selectOption('e1')
+  await dialog.getByLabel('Лимит: Продукты',{exact:true}).fill('5000')
+  await dialog.getByLabel('Добавить лимит категории',{exact:true}).selectOption('e2')
+  await dialog.getByLabel('Лимит: Покупки',{exact:true}).fill('6000')
+  await expect(dialog.getByRole('spinbutton')).toHaveCount(3)
+  await expect(dialog.getByLabel('Добавить лимит категории').locator('option[value=e1]')).toHaveCount(0)
+  expect(await dialog.evaluate(el=>el.scrollWidth<=el.clientWidth)).toBe(true)
+  await page.screenshot({path:`test-results/budget-editor-${width}.png`})
+  await dialog.getByRole('button',{name:'Сохранить лимиты',exact:true}).click()
+  await expect(dialog).toHaveCount(0)
+  await page.reload();await tab(page,'Бюджет');await page.getByRole('button',{name:'Настроить лимиты',exact:true}).click()
+  await expect(dialog.getByLabel('Лимит: Продукты',{exact:true})).toHaveValue('5000')
+  await dialog.getByRole('button',{name:'Убрать лимит: Продукты',exact:true}).click()
+  await dialog.getByRole('button',{name:'Отмена',exact:true}).click()
+  await page.getByRole('button',{name:'Настроить лимиты',exact:true}).click()
+  await expect(dialog.getByLabel('Лимит: Продукты',{exact:true})).toHaveValue('5000')
+  await dialog.getByRole('button',{name:'Убрать лимит: Продукты',exact:true}).click()
+  await dialog.getByRole('button',{name:'Сохранить лимиты',exact:true}).click()
+  await expect(dialog).toHaveCount(0)
+  expect(state.requests.filter(r=>r.path==='/finance/budgets/save').at(-1)?.body.categories).toEqual([{category_id:'e2',limit_amount:6000}])
 })

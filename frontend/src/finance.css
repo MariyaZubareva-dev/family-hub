@@ -154,3 +154,36 @@
 .f-review-fix{align-self:flex-start;border:0;background:none;padding:4px 0;color:var(--primary);font:inherit;font-size:11px;text-align:left;cursor:pointer}
 
 .finance-dialog .button.f-danger-button{background:#BE123C;color:#fff}
+
+/* Dense finance forms: short labels share a row with their fields. */
+.finance-dialog{width:min(100%,420px)}
+.finance-dialog>section{padding:12px 14px calc(12px + env(safe-area-inset-bottom))}
+.finance-dialog .f-head{margin-bottom:6px;min-height:32px}
+.finance-dialog .f-head h2{font-size:16px}
+.finance-dialog .f-head .f-icon{width:32px;height:32px;flex-basis:32px}
+.finance-dialog .f-form,.f-prepayment-form{gap:8px}
+.finance-dialog .f-form>.f-field:not(:has(textarea)),.f-prepayment-form>.f-field{display:grid;grid-template-columns:96px minmax(0,1fr);align-items:center;gap:8px}
+.finance-page input:not([type=file]),.finance-page select,.finance-dialog input,.finance-dialog select{min-height:36px;height:36px;padding:6px 8px;font-size:14px}
+.finance-dialog textarea{font-size:14px}
+.finance-page input[type=number],.finance-dialog input[type=number]{appearance:textfield;-moz-appearance:textfield}
+.finance-page input[type=number]::-webkit-inner-spin-button,.finance-page input[type=number]::-webkit-outer-spin-button,.finance-dialog input[type=number]::-webkit-inner-spin-button,.finance-dialog input[type=number]::-webkit-outer-spin-button{-webkit-appearance:none;margin:0}
+.finance-page select,.finance-dialog select{appearance:none;-webkit-appearance:none;padding-right:26px;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath d='m3 4.5 3 3 3-3' fill='none' stroke='%2364748B' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 8px center;background-size:12px}
+.finance-page :where(input,select,textarea):focus-visible,.finance-dialog :where(input,select,textarea):focus-visible{outline:0;border-color:var(--primary);box-shadow:0 0 0 2px #0F766E20}
+.f-prepayment-form .f-form-pair{grid-template-columns:repeat(2,minmax(0,1fr))}
+.f-prepayment-form>.button{align-self:flex-end}
+.f-budget-month>.f-field{display:grid;grid-template-columns:minmax(70px,1fr) minmax(130px,170px);align-items:center;gap:8px;margin-bottom:10px}
+.f-budget-summary{margin:10px 0}
+.f-budget-summary strong{font-size:13px}
+.f-budget-limits-head{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.f-budget-limits-head strong{font-size:12px;font-weight:600}
+.f-budget-limits{display:flex;flex-direction:column;gap:4px}
+.f-budget-limits:empty{display:none}
+.f-budget-limit{display:flex;align-items:center;gap:4px;padding-bottom:4px;border-bottom:1px solid #F1F1EF}
+.f-budget-limit>.f-field{flex:1;display:grid;grid-template-columns:minmax(0,1fr) minmax(80px,105px);align-items:center;gap:8px}
+.f-budget-limit .f-icon{width:30px;height:30px;flex-basis:30px;font-size:18px}
+.f-budget-limit input{text-align:right}
+@supports(-webkit-touch-callout:none){
+  .finance-page input:not([type=file]),.finance-page select,.finance-dialog input,.finance-dialog select,.finance-dialog textarea{font-size:16px}
+}
+
+.finance-page .f-line-category select{height:30px}
