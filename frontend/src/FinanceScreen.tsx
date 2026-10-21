@@ -65,8 +65,8 @@ function Empty({children}:{children:ReactNode}) { return <p className="f-empty">
 function Head({title,children}:{title:string;children?:ReactNode}) {return <div className="f-head"><h3>{title}</h3>{children}</div>}
 export function Field({label,children}:{label:string;children:ReactNode}) {return <label className="f-field"><span>{label}</span>{children}</label>}
 
-export default function FinanceScreen() {
-  const [tab,setTab]=useState<Tab>('overview'), [kind,setKind]=useState<Kind>('EXPENSE')
+export default function FinanceScreen({initialTab='overview',initialReceiptFile,onReceiptConsumed}:{initialTab?:Tab;initialReceiptFile?:File|null;onReceiptConsumed?:()=>void}) {
+  const [tab,setTab]=useState<Tab>(initialTab), [kind,setKind]=useState<Kind>('EXPENSE')
   const [period,setPeriod]=useState('month'), [categories,setCategories]=useState<Category[]>([])
   const [analytics,setAnalytics]=useState<any>(null), [transactions,setTransactions]=useState<any[]>([])
   const [admin,setAdmin]=useState(false), [shopping,setShopping]=useState(false)
@@ -117,7 +117,7 @@ export default function FinanceScreen() {
       <div className="f-search"><input aria-label="Поиск категории" placeholder="Поиск категории" value={search} onChange={e=>setSearch(e.target.value)}/>{admin&&<button className="button secondary" onClick={()=>{setCategoryName('');setCategoryError('');setAddingCategory(true)}}>＋ Категория</button>}</div>
       <div className="f-category-list">{rows.map(c=><div className="f-row" key={c.id}><span className="f-category-icon">{c.icon||'•'}</span><strong className="f-copy">{c.name}</strong><small>{kind==='INCOME'?'Доход':'Расход'}</small></div>)}</div>{!rows.length&&<Empty>Категории не найдены.</Empty>}
     </section>}
-    {tab==='receipts'&&<Receipts categories={categories.filter(c=>c.transaction_type==='EXPENSE')} onSaved={done}/>}
+    {tab==='receipts'&&<Receipts initialFile={initialReceiptFile} onConsumed={onReceiptConsumed} ready={!loading&&!error} categories={categories.filter(c=>c.transaction_type==='EXPENSE')} onSaved={done}/>}
     {tab==='stocks'&&<Stocks allowed={shopping}/>}
     {tab==='credits'&&<Credits admin={admin}/>}
     {tab==='budget'&&<Budget categories={categories.filter(c=>c.transaction_type==='EXPENSE')} admin={admin} onSaved={done} periodControl={periodControl} income={income} expense={expense}/>}
@@ -139,7 +139,8 @@ async function preparePhoto(file:File):Promise<string> {
   const image=await createImageBitmap(file)
   try {if(file.size<=8*1024*1024&&Math.max(image.width,image.height)<=3200)return original;const ratio=Math.min(1,3200/Math.max(image.width,image.height));const canvas=document.createElement('canvas');canvas.width=Math.round(image.width*ratio);canvas.height=Math.round(image.height*ratio);canvas.getContext('2d')!.drawImage(image,0,0,canvas.width,canvas.height);return canvas.toDataURL('image/jpeg',0.9)}finally{image.close()}
 }
-function Receipts({categories,onSaved}:{categories:Category[];onSaved:(text:string)=>void}) {
+function Receipts({categories,onSaved,initialFile,onConsumed,ready}:{categories:Category[];onSaved:(text:string)=>void;initialFile?:File|null;onConsumed?:()=>void;ready:boolean}) {
+  const consumedFile=useRef<File|null>(null)
   const reviewStatusId=useId()
   const [list,setList]=useState<any[]>([]),[receipt,setReceipt]=useState<any>(null),[items,setItems]=useState<Item[]>([])
   const [receiptTotal,setReceiptTotal]=useState(''),[editIndex,setEditIndex]=useState<number|null>(null),[editMeta,setEditMeta]=useState(false),[deleting,setDeleting]=useState<any>(null)
@@ -151,6 +152,7 @@ function Receipts({categories,onSaved}:{categories:Category[];onSaved:(text:stri
     setReceipt(r);setEditIndex(null);setEditMeta(false);setReceiptTotal(p.receipt_total!=null?String(p.receipt_total):p.total!=null?String(p.total):'');setMerchant(p.merchant||'');setDate(p.date||today());setItems((p.items||[]).map((it:any)=>{const c=categories.find(c=>c.id===it.category_id||c.name===it.category)||categories.find(c=>c.name==='Покупки')||categories[0];return {name:it.name||'',qty:Number(it.qty)||0,price:Number(it.price)||0,needs_review:!!it.needs_review,category:c?.name||'Покупки',category_id:c?.id}}));setError('');setNotice('')
   }
   const upload=async(file:File)=>{if(busy)return;setBusy(true);setError('');try{const image=await preparePhoto(file);const j=await request('/finance/receipts','POST',{file_name:file.name,mime_type:image.slice(5,image.indexOf(';')),image_data:image});select(j.data);await refresh()}catch(e){setError(errorText(e))}finally{setBusy(false)}}
+  useEffect(()=>{if(initialFile&&ready&&consumedFile.current!==initialFile){consumedFile.current=initialFile;void upload(initialFile);onConsumed?.()}},[initialFile,ready])
   const open=async(id:string)=>{if(busy)return;setBusy(true);setError('');try{select((await request(`/finance/receipts/${id}`)).data)}catch(e){setError(errorText(e))}finally{setBusy(false)}}
   const update=(index:number,patch:Partial<Item>)=>setItems(rows=>rows.map((r,i)=>i===index?{...r,...patch}:r))
   const total=items.reduce((s,i)=>s+Math.round(i.qty*i.price*100)/100,0),finalized=receipt?.ocr_status==='CONFIRMED',confirmed=finalized||receipt?.can_edit===false

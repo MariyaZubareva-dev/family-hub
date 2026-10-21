@@ -4,6 +4,7 @@ import './family.css'
 import FinanceScreen from './FinanceScreen'
 import ShoppingScreen from './ShoppingScreen'
 import CalendarScreen from './CalendarScreen'
+import HomeScreen from './HomeScreen'
 import { DEFAULT_TIMEZONE, TIMEZONES, timezoneLabel } from './lib/timezone'
 
 function FamilySymbol({kind}:{kind:string}) {
@@ -116,6 +117,9 @@ export default function App(){
   const [monthlyPlan,setMonthlyPlan]=useState(10000)
   const [access,setAccess]=useState<SectionVisibility|null>(null)
   const [familyRole,setFamilyRole]=useState('')
+  const [calendarAction,setCalendarAction]=useState<'EVENT'|'REMINDER'|undefined>()
+  const [financeTarget,setFinanceTarget]=useState<'overview'|'receipts'|'credits'>('overview')
+  const [homeReceipt,setHomeReceipt]=useState<File|null>(null)
   const [accessError,setAccessError]=useState('')
   useEffect(()=>{
     let active=true
@@ -152,10 +156,10 @@ export default function App(){
     <main className="page">
       {accessError&&<div className="family-alert" role="alert">{accessError}</div>}
       {!access&&!accessError&&<div className="family-loading">Загружаем пространство…</div>}
-      {access&&section==='home' && <HomeView onGo={setSection} totalExpense={totalExpense} visibility={access} />}
-      {access?.calendar&&section==='calendar' && <CalendarScreen />}
+      {access&&section==='home' && <HomeScreen apiGet={apiGet} visibility={access} onFamily={()=>setSection('family')} onCalendar={kind=>{setCalendarAction(kind);setSection('calendar')}} onFinance={tab=>{setFinanceTarget(tab);setSection('finance')}} onReceipt={file=>{setHomeReceipt(file);setFinanceTarget('receipts');setSection('finance')}} />}
+      {access?.calendar&&section==='calendar' && <CalendarScreen initialKind={calendarAction} onActionConsumed={()=>setCalendarAction(undefined)} />}
       {access?.shopping&&section==='lists' && <ShoppingScreen isAdmin={familyRole==='ADMIN'} />}
-      {access?.finance&&section==='finance' && <FinanceScreen />}
+      {access?.finance&&section==='finance' && <FinanceScreen initialTab={financeTarget} initialReceiptFile={homeReceipt} onReceiptConsumed={()=>setHomeReceipt(null)} />}
       {access&&section==='family' && <FamilyV07 />}
     </main>
 
@@ -163,7 +167,7 @@ export default function App(){
       <Nav active={section==='home'} label="Главная" icon="⌂" onClick={()=>setSection('home')} />
       {access?.calendar&&<Nav active={section==='calendar'} label="Календарь" icon="▦" onClick={()=>setSection('calendar')} />}
       {access?.shopping&&<Nav active={section==='lists'} label="Покупки" icon="☷" onClick={()=>setSection('lists')} />}
-      {access?.finance&&<Nav active={section==='finance'} label="Финансы" icon="₽" onClick={()=>setSection('finance')} />}
+      {access?.finance&&<Nav active={section==='finance'} label="Финансы" icon="₽" onClick={()=>{setFinanceTarget('overview');setSection('finance')}} />}
       <Nav active={section==='family'} label="Семья" icon="👨‍👩‍👧" onClick={()=>setSection('family')} />
     </nav>
   </div>
@@ -171,23 +175,8 @@ export default function App(){
 
 function Nav(p:{active:boolean; label:string; icon:string; onClick:()=>void}){
   return <button className={p.active?'nav-item active':'nav-item'} onClick={p.onClick}>
-    <span style={{fontSize:18}}>{p.icon}</span><small>{p.label}</small>
+    <span aria-hidden="true" style={{fontSize:18}}>{p.icon}</span><small>{p.label}</small>
   </button>
-}
-
-// ---------- HOME — dashboard спека ----------
-function HomeView(p:{onGo:(s:Section)=>void; totalExpense:number;visibility:SectionVisibility}){
-  const [events,setEvents]=useState<any[]>([]);const [reminders,setReminders]=useState<any[]>([]);const [credits,setCredits]=useState<any[]>([]);const [analytics,setAnalytics]=useState<any>(null)
-  useEffect(()=>{const n=new Date();const q=`?period=month&year=${n.getFullYear()}&month=${n.getMonth()+1}`;Promise.allSettled([p.visibility.calendar?apiGet('/events'):Promise.resolve({data:[]}),p.visibility.calendar?apiGet('/reminders'):Promise.resolve({data:[]}),p.visibility.finance?apiGet('/credits'):Promise.resolve({data:[]}),p.visibility.finance?apiGet('/finance/analytics'+q):Promise.resolve({data:null})]).then(r=>{if(r[0].status==='fulfilled')setEvents(r[0].value.data||[]);if(r[1].status==='fulfilled')setReminders(r[1].value.data||[]);if(r[2].status==='fulfilled')setCredits(r[2].value.data||[]);if(r[3].status==='fulfilled')setAnalytics(r[3].value.data)})},[p.visibility.calendar,p.visibility.finance])
-  const soon=[...events.filter(x=>x.status==='SCHEDULED').map(x=>({...x,_at:new Date(x.start_at),_kind:'Событие'})),...reminders.filter(x=>x.status==='SCHEDULED').map(x=>({...x,_at:new Date(x.scheduled_at),_kind:'Напоминание'}))].filter(x=>x._at>=new Date()).sort((a,b)=>a._at-b._at).slice(0,5)
-  const cats=(analytics?.ranked||[]).slice(0,6);const max=Math.max(1,...cats.map((c:any)=>Number(c.amount)||0))
-  const next=credits.map(c=>{const [y,m,day]=String(c.first_payment_date).slice(0,10).split('-').map(Number);const first=new Date(y,m-1,day);const today=new Date();today.setHours(0,0,0,0);const addMonth=(n:number)=>{const ix=first.getFullYear()*12+first.getMonth()+n;const yr=Math.floor(ix/12);const mo=ix%12;return new Date(yr,mo,Math.min(first.getDate(),new Date(yr,mo+1,0).getDate()))};let idx=Math.max(0,(today.getFullYear()-first.getFullYear())*12+today.getMonth()-first.getMonth());let d=addMonth(idx);if(d<today){idx++;d=addMonth(idx)}const installment=idx+1;const part=(c.payment_schedule||[]).find((x:any)=>installment>=Number(x.from_month)&&installment<=Number(x.to_month));return {...c,_next:d,_nextAmount:Number(part?.amount??c.standard_payment)}}).sort((a,b)=>a._next-b._next).slice(0,4)
-  return <div className="stack"><SectionTitle title="Обзор семьи" subtitle={new Date().toLocaleDateString('ru-RU',{day:'numeric',month:'long',year:'numeric'})} />
-    <div className="grid-2">{p.visibility.calendar&&<div className="card"><div className="card-head"><h3>События и напоминания</h3><button className="button secondary small" onClick={()=>p.onGo('calendar')}>Календарь →</button></div>{soon.length?soon.map((x:any)=><div className="list-item-card" key={x._kind+x.id}><span className="pill">{x._kind}</span><strong style={{flex:1}}>{x.title}</strong><small>{x._at.toLocaleString('ru-RU',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'})}</small></div>):<p className="muted">Ближайших событий и напоминаний нет.</p>}<button className="button primary small" onClick={()=>p.onGo('calendar')}>＋ Добавить</button></div>}
-      {p.visibility.finance&&<div className="card"><div className="card-head"><h3>Бюджет за месяц</h3><button className="button secondary small" onClick={()=>p.onGo('finance')}>Финансы →</button></div><div className="grid-3"><div className="metric"><small>Доходы</small><strong>{rub(Number(analytics?.total_income)||0)}</strong></div><div className="metric"><small>Расходы</small><strong>{rub(Number(analytics?.total_expense)||0)}</strong></div><div className="metric balance"><small>Остаток</small><strong style={{color:(Number(analytics?.balance)||0)>=0?'#0F766E':'#E11D48'}}>{rub(Number(analytics?.balance)||0)}</strong></div></div>{cats.length?cats.map((c:any)=><div key={c.id||c.name} style={{marginTop:8}}><div className="summary-line"><span>{c.name}</span><b>{rub(Number(c.amount)||0)}</b></div><div className="progress"><span style={{width:`${Math.max(2,Number(c.amount)/max*100)}%`,background:c.color||'#0F766E'}} /></div></div>):<p className="muted">Расходы появятся после добавления операций.</p>}</div>}</div>
-    {p.visibility.finance&&<div className="card"><div className="card-head"><h3>Ближайшие платежи по кредитам</h3><button className="button secondary small" onClick={()=>{p.onGo('finance')}}>Кредиты →</button></div>{next.length?next.map((c:any)=><div className="list-item-card" key={c.id}><strong style={{flex:1}}>{c.name||'Кредит'}</strong><span>{c._next.toLocaleDateString('ru-RU')}</span><b>{rub(Number(c._nextAmount)||0)}</b></div>):<p className="muted">Кредиты не добавлены.</p>}</div>}
-    {!p.visibility.calendar&&!p.visibility.finance&&<div className="card"><p className="muted">Доступные разделы указаны в нижнем меню. Настройки видимости — в разделе «Семья».</p><button className="button secondary small" onClick={()=>p.onGo('family')}>Открыть семью</button></div>}
-  </div>
 }
 
 function FamilyV07(){

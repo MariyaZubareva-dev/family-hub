@@ -31,7 +31,8 @@ async function request(path:string,body?:unknown){
   return json
 }
 
-export default function CalendarScreen(){
+export default function CalendarScreen({initialKind,onActionConsumed}:{initialKind?:Kind;onActionConsumed?:()=>void}){
+  const actionOpened=useRef(false)
   const [events,setEvents]=useState<Entry[]>([]),[reminders,setReminders]=useState<Entry[]>([]),[members,setMembers]=useState<Member[]>([])
   const [timezone,setTimezone]=useState(DEFAULT_TIMEZONE),[expanded,setExpanded]=useState(false),[filter,setFilter]=useState<'ALL'|Kind>('ALL')
   const initialized=useRef(false)
@@ -49,6 +50,7 @@ export default function CalendarScreen(){
     const input=zoneInput(new Date(Date.now()+3600000),timezone)
     setKind(value);setTitle('');setDescription('');setWhen(selectedDay?selectedDay+'T'+input.slice(11):input);setFormError('');setShow(true)
   }
+  useEffect(()=>{if(initialKind&&!loading&&!error&&!actionOpened.current&&members.length){actionOpened.current=true;open(initialKind);onActionConsumed?.()}},[initialKind,loading,error,members.length])
   const submit=async(e:FormEvent)=>{
     e.preventDefault();if(saving)return
     if(!responsible.length){setFormError('Выберите хотя бы одного ответственного.');return}
