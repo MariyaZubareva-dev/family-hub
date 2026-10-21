@@ -99,6 +99,7 @@ class PlannedPurchaseApiTest extends TestCase
         FamilyMember::create(['family_id' => $family->id, 'user_id' => $user->id, 'role' => 'ADMIN', 'status' => 'ACTIVE']);
         $this->withoutMiddleware(TelegramAuthenticate::class)->actingAs($user)
             ->postJson('/api/v1/planned-purchases', ['type' => 'LARGE', 'name' => 'Забор', 'category' => '  Участок  '])->assertCreated();
+        \Illuminate\Support\Facades\DB::table('planned_purchases')->where('family_id', $family->id)->update(['category' => '  Участок  ']);
         \Illuminate\Support\Facades\Schema::drop('purchase_categories');
         $migration = require database_path('migrations/2026_10_21_000023_create_purchase_categories_table.php');
         $migration->up();
