@@ -355,6 +355,7 @@ class FinanceCoreController extends FinanceBaseController
         $d=$request->validate([
             'merchant'=>'nullable|string|max:255',
             'total'=>'nullable|numeric|min:0',
+            'receipt_total'=>'nullable|numeric|gt:0',
             'date'=>'nullable|date',
             'currency'=>'nullable|string|max:10',
             'items'=>'nullable|array',
@@ -364,7 +365,10 @@ class FinanceCoreController extends FinanceBaseController
             'items.*.category'=>'nullable|string|max:120',
             'items.*.category_id'=>'nullable|string',
         ]);
+        $previous = $row->review_payload ? json_decode($row->review_payload, true) : [];
+        $receiptTotal = array_key_exists('receipt_total', $d) ? $d['receipt_total'] : ($previous['receipt_total'] ?? $previous['total'] ?? null);
         $payload = [
+            'receipt_total'=>$receiptTotal,
             'merchant'=>$d['merchant']??null,
             'total'=>isset($d['total'])?(float)$d['total']:null,
             'date'=>$d['date']??null,
@@ -405,6 +409,7 @@ class FinanceCoreController extends FinanceBaseController
         $d=$request->validate([
             'merchant'=>'nullable|string|max:255',
             'total'=>'nullable|numeric|min:0',
+            'receipt_total'=>'nullable|numeric|gt:0',
             'date'=>'nullable|date',
             'currency'=>'nullable|string|max:10',
             'items'=>'required|array|min:1',
@@ -419,6 +424,11 @@ class FinanceCoreController extends FinanceBaseController
         $date = $d['date'] ?? Carbon::now()->format('Y-m-d');
         $computedTotal = round(collect($d['items'])->sum(fn($i) => round($i['qty'] * $i['price'], 2)), 2);
         abort_if(isset($d['total']) && abs($computedTotal - (float)$d['total']) > 0.02, 422, 'Итог не совпадает с суммой позиций. Проверьте количество и цены.');
+        $previous = $row->review_payload ? json_decode($row->review_payload, true) : [];
+        $receiptTotal = array_key_exists('receipt_total', $d) ? $d['receipt_total'] : ($previous['receipt_total'] ?? $previous['total'] ?? null);
+        abort_unless($receiptTotal !== null && (float)$receiptTotal > 0, 422, 'Укажите итог на чеке перед подтверждением.');
+        abort_if(abs($computedTotal - (float)$receiptTotal) > 0.02, 422, 'Сумма позиций не совпадает с итогом на чеке. Проверьте данные перед подтверждением.');
+        $d['receipt_total'] = (float)$receiptTotal;
         $d['total'] = $computedTotal;
         // Idempotency: if already has expense_id and confirmed, abort
         if (!empty($row->expense_id)) {
@@ -463,7 +473,7 @@ class FinanceCoreController extends FinanceBaseController
             $update = ['ocr_status'=>'CONFIRMED','updated_at'=>now()];
             try { $update['confirmed_at']=now(); } catch(\Throwable $e){}
             // Store review_payload final
-            $payload = ['merchant'=>$d['merchant']??null,'total'=>$d['total']??null,'date'=>$date,'currency'=>$d['currency']??'RUB','items'=>$d['items']];
+            $payload = ['receipt_total'=>$d['receipt_total'],'merchant'=>$d['merchant']??null,'total'=>$d['total']??null,'date'=>$date,'currency'=>$d['currency']??'RUB','items'=>$d['items']];
             try { $update['review_payload']=json_encode($payload,JSON_UNESCAPED_UNICODE); } catch(\Throwable $e){}
             // Do NOT set expense_id (FK to expenses table) — link via finance_transactions.receipt_id instead
             // Clear heavy image_data after 30 days? For now keep but optionally truncate preview — we keep it, but frontend should not refetch huge

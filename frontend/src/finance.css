@@ -99,3 +99,27 @@
 .finance-page :where(button,input,select):focus-visible,.finance-dialog :where(button,input,select):focus-visible{outline:2px solid var(--primary);outline-offset:2px}
 @media(min-width:540px){.f-tabs{grid-template-columns:repeat(6,minmax(0,1fr))}.f-prepayment{grid-template-columns:100px auto minmax(0,1fr);gap:12px}.f-prepayment>.f-field{grid-column:auto;grid-template-columns:1fr}.f-credit-list{display:grid;grid-template-columns:1fr 1fr}}
 @media(max-width:350px){.finance-page .card{padding:12px}.f-search{flex-direction:column}.f-search .button{align-self:flex-end}.f-form-pair{grid-template-columns:minmax(0,1fr)}.f-trend{gap:3px}.f-metrics>div{padding:9px 6px}}
+
+/* Receipt review uses compact lines; only the selected position opens an editor. */
+.f-receipts .f-receipt-review{gap:8px;margin-top:0}
+.f-receipt-meta{display:flex;align-items:center;gap:8px;padding:5px 0 9px;border-bottom:1px solid #F1F1EF}
+.f-receipt-lines{display:flex;flex-direction:column}
+.f-receipt-line{display:flex;align-items:flex-start;gap:7px;padding:10px 0;border-bottom:1px solid #F1F1EF}
+.f-line-index{flex:0 0 16px;padding-top:2px;font-size:10px;color:#64748B}
+.f-receipt-line .f-copy strong{font-size:12px;line-height:1.4;overflow-wrap:anywhere}
+.f-receipt-line .f-copy small{font-size:10px;line-height:1.5}
+.f-line-end{display:flex;flex-direction:column;align-items:flex-end;gap:1px;flex:0 0 auto}
+.f-line-end b{font-size:12px;white-space:nowrap;font-weight:600;font-variant-numeric:tabular-nums}
+.f-line-end .f-icon{width:32px;height:32px;font-size:18px}
+.f-receipt-tools{display:flex;justify-content:space-between;gap:6px;flex-wrap:wrap}
+.f-receipts .f-receipt-tools .button{font-size:11px;padding:6px 8px}
+.f-receipt-total{padding:10px;background:#F8FAFC;border:1px solid #E2E8F0;border-radius:10px;display:flex;flex-direction:column;gap:5px}
+.f-receipt-total>div{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.f-receipt-total span{font-size:11px;color:#475569}
+.f-receipt-total b{font-size:15px;white-space:nowrap;font-weight:600}
+.f-receipt-total small{font-size:10px;line-height:1.45}
+.f-receipt-submit{display:flex;gap:8px}
+.f-receipt-submit .primary{flex:1;min-width:0}
+.f-receipt-quantity-price{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+.finance-dialog textarea{width:100%;min-width:0;max-width:100%;min-height:72px;border:1px solid #D8DDE5;border-radius:9px;padding:8px;background:#fff;font:inherit;font-size:16px;color:#1A1E22;line-height:1.4;resize:vertical}
+.finance-dialog textarea:focus-visible{outline:2px solid var(--primary);outline-offset:2px}

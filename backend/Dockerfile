@@ -18,13 +18,17 @@ RUN apk add --no-cache \
     bash \
     icu-dev \
     libzip-dev \
+    libpng-dev \
+    libjpeg-turbo-dev \
     oniguruma-dev \
     postgresql-dev \
     su-exec \
     tesseract-ocr \
     tesseract-ocr-data-rus \
     tesseract-ocr-data-eng \
+    && docker-php-ext-configure gd --with-jpeg \
     && docker-php-ext-install \
+        gd \
         intl \
         mbstring \
         pdo_pgsql \

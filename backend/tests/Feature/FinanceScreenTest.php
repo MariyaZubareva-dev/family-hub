@@ -75,7 +75,7 @@ class FinanceScreenTest extends TestCase
     public function test_receipt_confirmation_creates_expenses_once(): void
     {
         $this->categories(); $id = $this->upload();
-        $payload = ['date'=>'2026-10-20','total'=>199.8,'items'=>[['name'=>'Молоко','qty'=>2,'price'=>99.9,'category'=>'Покупки']]];
+        $payload = ['date'=>'2026-10-20','receipt_total'=>199.8,'total'=>199.8,'items'=>[['name'=>'Молоко','qty'=>2,'price'=>99.9,'category'=>'Покупки']]];
         $this->patchJson("/api/v1/finance/receipts/$id", $payload)->assertOk();
         $this->postJson("/api/v1/finance/receipts/$id/confirm", $payload)->assertCreated()->assertJsonPath('data.created_count',1)->assertJsonPath('data.total_amount',199.8);
         $this->postJson("/api/v1/finance/receipts/$id/confirm", $payload)->assertConflict();
@@ -124,6 +124,34 @@ class FinanceScreenTest extends TestCase
         });
         $this->postJson("/api/v1/finance/receipts/$id/retry")->assertOk()->assertJsonPath('data.ocr_status', 'CONFIRMED');
         $this->assertDatabaseHas('receipts', ['id' => $id, 'ocr_status' => 'CONFIRMED']);
+    }
+
+    public function test_numbered_receipt_has_two_positions_and_does_not_count_total_as_a_product(): void
+    {
+        $text = file_get_contents(__DIR__.'/../Fixtures/numbered-receipt.txt');
+        $payload = (new ReceiptRecognizer)->parseText($text);
+        $this->assertCount(2, $payload['items']);
+        $this->assertSame('Пункт выдачи товаров', $payload['items'][0]['name']);
+        $this->assertSame(1.0, $payload['items'][0]['qty']);
+        $this->assertSame(1.0, $payload['items'][0]['price']);
+        $this->assertSame('Кресло подвесное Ami БАУНТИ 325795859 1-но местное до 120 кг коричневый', $payload['items'][1]['name']);
+        $this->assertSame(1.0, $payload['items'][1]['qty']);
+        $this->assertSame(8662.0, $payload['items'][1]['price']);
+        $this->assertSame(8663.0, $payload['total']);
+        $this->assertSame('2026-10-17', $payload['date']);
+    }
+
+    public function test_ocr_does_not_claim_success_when_quantity_and_line_total_disagree(): void
+    {
+        $payload = (new ReceiptRecognizer)->parseText("1: Товар\n4 шт. x 8662.00\nОбщая стоимость позиции с учетом скидок и наценок 8662.00\nИТОГ = 8662.00");
+        $this->assertTrue($payload['items'][0]['needs_review']);
+    }
+
+    public function test_confirm_rejects_a_self_consistent_but_wrong_receipt_total(): void
+    {
+        $id = $this->upload();
+        $this->postJson("/api/v1/finance/receipts/$id/confirm", ['total'=>199.8,'items'=>[['name'=>'Молоко','qty'=>2,'price'=>99.9,'category'=>'Покупки']]])->assertUnprocessable();
+        $this->assertDatabaseCount('finance_transactions', 0);
     }
 
     public function test_parser_does_not_treat_totals_and_payments_as_products(): void
