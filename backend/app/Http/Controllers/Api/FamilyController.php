@@ -23,7 +23,7 @@ class FamilyController extends BaseApiController
     public function update(Request $request): JsonResponse
     {
         $m=$this->membership($request); $this->assertAdmin($m);
-        $data=$request->validate(['name'=>['required','string','max:120']]);
+        $data=$request->validate(['name'=>['sometimes','required','string','max:120'],'timezone'=>['sometimes','required','timezone']]);
         $m->family->update($data);
         return response()->json(['data'=>$this->payload($m->family->fresh()->load('members.user'),$m)]);
     }
@@ -125,5 +125,5 @@ class FamilyController extends BaseApiController
     public function leave(Request $request): JsonResponse { $member=$this->membership($request); DB::transaction(function()use($member){ $member=FamilyMember::whereKey($member->id)->lockForUpdate()->firstOrFail(); if($member->role==='ADMIN')$this->assertNotLastAdmin($member->family_id); $member->update(['status'=>'INACTIVE']); }); return response()->json([],204); }
     public function create(Request $request): JsonResponse { abort_if($request->user()->familyMembers()->where('status','ACTIVE')->exists(),409,'User already belongs to an active family.'); $d=$request->validate(['name'=>['required','string','max:120']]); $family=Family::create(['name'=>$d['name'],'status'=>'ACTIVE','created_by'=>$request->user()->id]); $member=FamilyMember::create(['family_id'=>$family->id,'user_id'=>$request->user()->id,'role'=>'ADMIN','status'=>'ACTIVE','joined_at'=>now()]); return response()->json(['data'=>$this->payload($family->load('members.user'),$member)],201); }
     private function assertNotLastAdmin(string $familyId): void { $admins=FamilyMember::where('family_id',$familyId)->where('status','ACTIVE')->where('role','ADMIN')->orderBy('id')->lockForUpdate()->get(['id'])->count(); abort_if($admins<=1,422,'The last administrator cannot be removed or demoted.'); }
-    private function payload(Family $family,FamilyMember $m): array { return ['id'=>$family->id,'name'=>$family->name,'status'=>$family->status,'my_role'=>$m->role,'my_visibility'=>$m->visibleSections(),'current_member_id'=>$m->id,'members'=>$family->members->where('status','ACTIVE')->values()->map(fn($x)=>['id'=>$x->id,'role'=>$x->role,'visibility'=>$x->visibleSections(),'status'=>$x->status,'joined_at'=>$x->joined_at,'user'=>$x->user])]; }
+    private function payload(Family $family,FamilyMember $m): array { return ['id'=>$family->id,'name'=>$family->name,'timezone'=>$family->timezone??'Europe/Moscow','status'=>$family->status,'my_role'=>$m->role,'my_visibility'=>$m->visibleSections(),'current_member_id'=>$m->id,'members'=>$family->members->where('status','ACTIVE')->values()->map(fn($x)=>['id'=>$x->id,'role'=>$x->role,'visibility'=>$x->visibleSections(),'status'=>$x->status,'joined_at'=>$x->joined_at,'user'=>$x->user])]; }
 }

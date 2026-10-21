@@ -2,7 +2,7 @@ import { expect, test, type Page } from '@playwright/test'
 
 const full = { calendar: true, shopping: true, finance: true }
 function fixture() {
-  return { id: 'f1', name: 'Наша семья', my_role: 'ADMIN', current_member_id: 'm1', my_visibility: { ...full }, members: [
+  return { id: 'f1', name: 'Наша семья', timezone: 'Europe/Moscow', my_role: 'ADMIN', current_member_id: 'm1', my_visibility: { ...full }, members: [
     { id: 'm1', role: 'ADMIN', visibility: { ...full }, user: { first_name: 'Мария', username: 'zubareva_life' } },
     { id: 'm2', role: 'USER', visibility: { ...full }, user: { first_name: 'Андрей', username: 'atomrus1993' } },
     { id: 'm3', role: 'USER', visibility: { ...full }, user: { first_name: 'Оченьдлинноеимяучастникасемьи', username: 'a_very_long_telegram_username_123456789' } },
@@ -25,7 +25,7 @@ async function mockApi(page: Page, family = fixture()) {
     else if (path.endsWith('/family/members/m2') && request.method() === 'DELETE') {
       requests.push({ path, body: null }); family.members = family.members.filter(m => m.id !== 'm2'); data = family
     }
-    else if (path.endsWith('/family')) data = family
+    else if (path.endsWith('/family')) { if(request.method()==='PATCH'){const body=request.postDataJSON();requests.push({path,body});Object.assign(family,body)} data = family }
     else if (path.endsWith('/visibility') && request.method() === 'PATCH') {
       const body = request.postDataJSON()
       requests.push({ path, body })
@@ -155,3 +155,15 @@ for (const width of [320, 393]) {
     expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(width)
   })
 }
+
+test('family administrator saves timezone and it survives reload',async({page})=>{
+  const requests=await mockApi(page)
+  await page.goto('/?section=family')
+  const select=page.getByRole('combobox',{name:'Часовой пояс семьи'})
+  await expect(select).toHaveValue('Europe/Moscow')
+  await select.selectOption('Asia/Yekaterinburg')
+  await expect(select).toHaveValue('Asia/Yekaterinburg')
+  expect(requests[0]).toEqual({path:'/api/v1/family',body:{timezone:'Asia/Yekaterinburg'}})
+  await page.reload()
+  await expect(select).toHaveValue('Asia/Yekaterinburg')
+})

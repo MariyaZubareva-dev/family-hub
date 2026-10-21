@@ -10,6 +10,7 @@ class Reminder extends Model
 {
     use HasUlids;
     protected $guarded = [];
+    protected $attributes = ['status' => 'SCHEDULED', 'timezone' => 'Europe/Moscow'];
     protected $keyType = 'string';
     public $incrementing = false;
     protected $casts = ['responsible_member_ids' => 'array', 'scheduled_at' => 'datetime'];

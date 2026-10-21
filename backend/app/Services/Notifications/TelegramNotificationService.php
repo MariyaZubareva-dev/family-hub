@@ -24,23 +24,23 @@ class TelegramNotificationService
 
     public static function notifyEventCreated(Event $event): void
     {
-        self::dispatchForEvent($event, 'EVENT_CHANGED', "➕ Новое событие: " . e($event->title) . "\n{$event->start_at->format('d.m.Y H:i')} · " . e($event->timezone) . ($event->location ? "\n📍 " . e($event->location) : ''));
+        self::dispatchForEvent($event, 'EVENT_CHANGED', "➕ Новое событие: " . e($event->title) . "\n{$event->start_at->copy()->setTimezone($event->timezone ?: 'Europe/Moscow')->format('d.m.Y H:i')} · " . e($event->timezone) . ($event->location ? "\n📍 " . e($event->location) : ''));
     }
 
     public static function notifyEventChanged(Event $event): void
     {
-        self::dispatchForEvent($event, 'EVENT_CHANGED', "✏️ Событие изменено: " . e($event->title) . "\n{$event->start_at->format('d.m.Y H:i')} · " . e($event->timezone));
+        self::dispatchForEvent($event, 'EVENT_CHANGED', "✏️ Событие изменено: " . e($event->title) . "\n{$event->start_at->copy()->setTimezone($event->timezone ?: 'Europe/Moscow')->format('d.m.Y H:i')} · " . e($event->timezone));
     }
 
     public static function notifyEventCancelled(Event $event): void
     {
-        self::dispatchForEvent($event, 'EVENT_CANCELLED', "❌ Событие отменено: " . e($event->title) . "\n{$event->start_at->format('d.m.Y H:i')}");
+        self::dispatchForEvent($event, 'EVENT_CANCELLED', "❌ Событие отменено: " . e($event->title) . "\n{$event->start_at->copy()->setTimezone($event->timezone ?: 'Europe/Moscow')->format('d.m.Y H:i')}");
     }
 
     public static function notifyReminderDue(Reminder $reminder): void
     {
         $recipients = FamilyMember::where('family_id', $reminder->family_id)->where('status', 'ACTIVE')->get();
-        $text = "🔔 Напоминание: " . e($reminder->title) . ($reminder->description ? "\n" . e($reminder->description) : '') . "\n⏰ {$reminder->scheduled_at->format('d.m.Y H:i')} · " . e($reminder->timezone);
+        $text = "🔔 Напоминание: " . e($reminder->title) . ($reminder->description ? "\n" . e($reminder->description) : '') . "\n⏰ {$reminder->scheduled_at->copy()->setTimezone($reminder->timezone ?: 'Europe/Moscow')->format('d.m.Y H:i')} · " . e($reminder->timezone);
         foreach ($recipients as $member) {
             $key = "reminder:{$reminder->id}:{$reminder->scheduled_at->toIso8601String()}:{$member->id}";
             self::dispatch($reminder->family_id, $member->id, 'REMINDER', $key, $text, ['reminder_id' => $reminder->id], $reminder->scheduled_at, $reminder);
@@ -62,7 +62,7 @@ class TelegramNotificationService
     public static function notifyEventReminder(Event $event, FamilyMember $recipient): void
     {
         $key = "event_reminder:{$event->id}:{$event->start_at->toIso8601String()}:{$recipient->id}";
-        $text = "⏰ Скоро событие: " . e($event->title) . "\n{$event->start_at->format('d.m.Y H:i')} · " . e($event->timezone) . ($event->location ? "\n📍 " . e($event->location) : '');
+        $text = "⏰ Скоро событие: " . e($event->title) . "\n{$event->start_at->copy()->setTimezone($event->timezone ?: 'Europe/Moscow')->format('d.m.Y H:i')} · " . e($event->timezone) . ($event->location ? "\n📍 " . e($event->location) : '');
         self::dispatch($event->family_id, $recipient->id, 'EVENT_REMINDER', $key, $text, ['event_id' => $event->id], $event->start_at, $event);
     }
 

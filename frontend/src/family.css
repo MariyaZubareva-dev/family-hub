@@ -44,3 +44,9 @@
 @media(pointer:coarse){.family-page :is(.family-invite-form,.family-member-actions,.family-name-edit) :is(input,select){font-size:14px}}
 @supports(-webkit-touch-callout:none){.family-page :is(.family-invite-form,.family-member-actions,.family-name-edit) :is(input,select){font-size:16px}}
 @media(max-height:520px){.family-page .family-confirm,.family-visibility-dialog{max-height:calc(100dvh - 12px)}}
+.family-timezone{display:flex;align-items:center;gap:8px;margin-top:10px;padding-top:8px;border-top:1px solid #E5ECE8;min-height:36px;font-size:11px;color:#64736B}
+.family-page .family-timezone select{flex:1;min-width:0;width:100%;min-height:32px;max-width:100%;border:0;background:transparent;font:inherit;color:var(--text);text-align:right;padding:4px 0}
+.family-timezone strong{flex:1;min-width:0;text-align:right;font-weight:500;overflow-wrap:anywhere}
+.family-timezone>span{flex:0 0 auto}
+.family-page .family-timezone select:focus-visible{outline:2px solid var(--primary);outline-offset:2px}
+@supports(-webkit-touch-callout:none){.family-page .family-timezone select{font-size:16px}}

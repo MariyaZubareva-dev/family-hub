@@ -67,14 +67,18 @@ class TelegramNotificationJob implements ShouldQueue
         }
 
         $deepLink = $this->deepLinkForType();
-        $fullText = $this->text . ($deepLink ? "\n\nОткрыть в Family Hub: {$deepLink}" : '');
+        $fullText = $this->text;
 
         try {
-            $resp = Http::timeout(10)->post("https://api.telegram.org/bot{$token}/sendMessage", [
+            $message = [
                 'chat_id' => $chatId,
                 'text' => $fullText,
                 'parse_mode' => 'HTML',
-            ]);
+            ];
+            if ($deepLink && str_starts_with($deepLink, 'https://')) {
+                $message['reply_markup'] = ['inline_keyboard' => [[['text' => 'Открыть Family Hub', 'web_app' => ['url' => $deepLink]]]]];
+            }
+            $resp = Http::timeout(10)->post("https://api.telegram.org/bot{$token}/sendMessage", $message);
 
             if ($resp->successful()) {
                 $msgId = $resp->json('result.message_id');

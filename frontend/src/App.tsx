@@ -4,6 +4,7 @@ import './family.css'
 import FinanceScreen from './FinanceScreen'
 import ShoppingScreen from './ShoppingScreen'
 import CalendarScreen from './CalendarScreen'
+import { DEFAULT_TIMEZONE, TIMEZONES, timezoneLabel } from './lib/timezone'
 
 function FamilySymbol({kind}:{kind:string}) {
   const paths:Record<string,string>={
@@ -291,6 +292,11 @@ function FamilyV07(){
     dialog?.showModal()
     return ()=>{dialog?.close();window.requestAnimationFrame(()=>previousFocus?.focus())}
   },[visibilitySection])
+  const saveTimezone=async(timezone:string)=>{
+    setBusy('timezone');setError('')
+    try{const result=await apiPatch('/family',{timezone});setFamily(result.data);setNotice('Часовой пояс семьи сохранён.')}
+    catch(e:any){setError(String(e.message||e).slice(0,180))}finally{setBusy('')}
+  }
   const initials=(member:any)=>`${member.user?.first_name?.[0]||''}${member.user?.last_name?.[0]||''}`.toUpperCase()||'👤'
   if(loading&&!family&&!error)return <div className="stack"><SectionTitle title="Семья" subtitle="Загружаем семейное пространство…"/><div className="card family-loading">Загружаем участников и приглашения…</div></div>
   if(!loaded&&!family)return <div className="stack"><SectionTitle title="Семья" subtitle="Не удалось загрузить семейное пространство."/><div className="family-alert" role="alert">{error}</div><button className="button secondary" onClick={refresh}>Попробовать ещё раз</button></div>
@@ -308,6 +314,7 @@ function FamilyV07(){
         </div>
         {isAdmin&&!editingName&&<button className="family-icon-button" onClick={()=>setEditingName(true)} aria-label="Изменить название" title="Изменить название"><FamilySymbol kind="edit"/></button>}
       </div>
+      <div className="family-timezone"><span>Часовой пояс</span>{isAdmin?<select aria-label="Часовой пояс семьи" value={family.timezone||DEFAULT_TIMEZONE} onChange={e=>void saveTimezone(e.target.value)} disabled={!!busy}>{TIMEZONES.map(zone=><option key={zone} value={zone}>{timezoneLabel(zone)}</option>)}</select>:<strong>{timezoneLabel(family.timezone||DEFAULT_TIMEZONE)}</strong>}</div>
     </section>
     <section className="card family-members-card" aria-labelledby="family-members-title">
       <div className="card-head"><h3 id="family-members-title">Участники <span className="family-heading-count">{family.members?.length||0}</span></h3>{isAdmin&&<button className="family-text-button" onClick={()=>setShowInvite(v=>!v)}>{showInvite?'Закрыть':'＋ Пригласить'}</button>}</div>
