@@ -32,7 +32,7 @@ async function request(path:string, method='GET', body?:unknown) {
   }
   return json || { data:null }
 }
-function Help({text,label='Подсказка'}:{text:string;label?:string}) {
+export function Help({text,label='Подсказка'}:{text:string;label?:string}) {
   const [open,setOpen]=useState(false)
   const id=useId()
   const ref=useRef<HTMLSpanElement>(null)
@@ -46,8 +46,8 @@ function Help({text,label='Подсказка'}:{text:string;label?:string}) {
   return <span className="f-help" ref={ref}><button type="button" className="f-help-button" aria-label={label} aria-expanded={open} aria-describedby={open?id:undefined} onClick={()=>setOpen(v=>!v)}>?</button>{open&&<span id={id} role="tooltip" className="f-tooltip">{text}</span>}</span>
 }
 function ActionSymbol({title}:{title:string}) {
-  const kind=title.startsWith('Удалить')?'delete':title.startsWith('Категория')?'category':title.includes('доход')?'income':title.includes('расход')?'expense':title.includes('кредит')?'credit':title.includes('бюджет')?'budget':title.includes('покупку')?'shopping':'receipt'
-  const paths:Record<string,string>={shopping:'M4 7h14v12H4V7Z M8 7V5a3 3 0 0 1 6 0v2',income:'M16 5 6 15 M6 6v9h9',expense:'M5 16 15 6 M6 6h9v9',category:'M3 4h7l8 8-6 6-9-9V4Z M7 7h.01',credit:'M3 5h16v12H3V5Z M3 9h16 M6 13h4',budget:'M3 6h15v12H3V6Z M3 6V4h12 M14 10h6v5h-6v-5Z',receipt:'M5 3h12v16l-3-2-3 2-3-2-3 2V3Z M8 7h6 M8 11h6',delete:'M4 6h14 M8 6V3h6v3 M6 6l1 13h8l1-13 M10 9v7 M13 9v7'}
+  const kind=title.startsWith('Удалить')?'delete':title.startsWith('Категория')?'category':title.includes('доход')?'income':title.includes('расход')?'expense':title.includes('кредит')?'credit':title.includes('бюджет')?'budget':title.includes('покупку')?'shopping':title.includes('событие')?'calendar':title.includes('напоминание')?'reminder':'receipt'
+  const paths:Record<string,string>={calendar:'M4 5h14v14H4V5Z M8 3v4 M14 3v4 M4 9h14 M8 12h2 M12 15h2',reminder:'M5 15h12l-2-3V8a4 4 0 0 0-8 0v4l-2 3Z M9 18h4',shopping:'M4 7h14v12H4V7Z M8 7V5a3 3 0 0 1 6 0v2',income:'M16 5 6 15 M6 6v9h9',expense:'M5 16 15 6 M6 6h9v9',category:'M3 4h7l8 8-6 6-9-9V4Z M7 7h.01',credit:'M3 5h16v12H3V5Z M3 9h16 M6 13h4',budget:'M3 6h15v12H3V6Z M3 6V4h12 M14 10h6v5h-6v-5Z',receipt:'M5 3h12v16l-3-2-3 2-3-2-3 2V3Z M8 7h6 M8 11h6',delete:'M4 6h14 M8 6V3h6v3 M6 6l1 13h8l1-13 M10 9v7 M13 9v7'}
   return <span className={`f-action-symbol f-action-symbol-${kind}`} aria-hidden="true"><svg viewBox="0 0 22 22" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d={paths[kind]}/></svg></span>
 }
 export function Modal({title,onClose,busy,children}:{title:string;onClose:()=>void;busy?:boolean;children:ReactNode}) {
