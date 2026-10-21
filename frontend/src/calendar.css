@@ -46,3 +46,6 @@
 .c-error{background:#FFF1F2;border-color:#FECDD3;color:#9F1239}
 .calendar-page button:focus-visible,.c-description summary:focus-visible{outline:2px solid var(--primary);outline-offset:2px}
 @media(max-width:360px){.calendar-page .card{padding:12px}.c-month-head{gap:1px}.c-month-head h3{font-size:13px}.c-copy strong{font-size:12px}.c-entry{gap:7px}}
+/* Leave enough room for the full responsible-person label at 320px. */
+.calendar-page .finance-dialog .f-form-fields>.f-field:has(select){grid-template-columns:104px minmax(0,1fr)}
+.calendar-page .finance-dialog .f-field select{text-overflow:ellipsis}

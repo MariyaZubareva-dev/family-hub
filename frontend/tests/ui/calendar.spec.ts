@@ -51,6 +51,7 @@ for(const width of [320,393,768]){
     await event.getByLabel('Дата',{exact:true}).fill('2026-10-23')
     await event.getByLabel('Время',{exact:true}).fill('16:30')
     await event.getByRole('combobox',{name:'Ответственный',exact:true}).selectOption('m2')
+    expect(await event.getByRole('combobox',{name:'Ответственный',exact:true}).evaluate(el=>{const label=el.closest('label')!.querySelector('span')!;return label.scrollWidth<=label.clientWidth && el.getBoundingClientRect().left-label.getBoundingClientRect().right>=4})).toBe(true)
     await event.getByRole('textbox',{name:'Описание',exact:true}).fill('Обсудить планы')
     await page.screenshot({path:`test-results/calendar-event-form-${width}.png`,fullPage:true})
     expect((await event.boundingBox())!.width).toBeLessThanOrEqual(Math.min(width,420))
