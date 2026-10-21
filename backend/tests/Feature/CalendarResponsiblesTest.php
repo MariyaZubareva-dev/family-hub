@@ -140,7 +140,7 @@ class CalendarResponsiblesTest extends TestCase
         config(['services.telegram.bot_token' => 'test-token', 'app.url' => 'https://teamportal.ru']);
         \Illuminate\Support\Facades\Http::fake(['api.telegram.org/*' => \Illuminate\Support\Facades\Http::response(['ok' => true, 'result' => ['message_id' => 1]], 200)]);
         $data = $this->postJson('/api/v1/reminders', [...$this->payload('reminders'), 'scheduled_at' => '2026-10-21T16:22:00Z'])
-            ->assertCreated()->assertJsonPath('data.timezone', 'Europe/Moscow')->json('data');
+            ->assertCreated()->assertJsonPath('data.timezone', 'Europe/Moscow')->assertJsonPath('data.scheduled_at', '2026-10-21T16:22:00.000000Z')->json('data');
         TelegramNotificationService::notifyReminderDue(Reminder::findOrFail($data['id']));
         $job = Queue::pushed(\App\Jobs\TelegramNotificationJob::class)->first(fn ($job) => $job->notificationType === 'REMINDER');
         $this->assertNotNull($job);
@@ -150,7 +150,7 @@ class CalendarResponsiblesTest extends TestCase
             ($request['reply_markup']['inline_keyboard'][0][0]['web_app']['url'] ?? null) === 'https://teamportal.ru/?section=calendar'
             && !str_contains($request['text'], 'https://teamportal.ru'));
         $event = $this->postJson('/api/v1/events', [...$this->payload('events'), 'start_at' => '2026-10-21T16:22:00Z', 'end_at' => '2026-10-21T17:22:00Z'])
-            ->assertCreated()->json('data');
+            ->assertCreated()->assertJsonPath('data.start_at', '2026-10-21T16:22:00.000000Z')->json('data');
         TelegramNotificationService::notifyEventReminder(Event::findOrFail($event['id']), $this->one);
         $eventJob = Queue::pushed(\App\Jobs\TelegramNotificationJob::class)->first(fn ($job) => $job->notificationType === 'EVENT_REMINDER');
         $this->assertStringContainsString('21.10.2026 19:22', $eventJob->text);

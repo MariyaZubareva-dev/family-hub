@@ -67,7 +67,7 @@ export default function CalendarScreen(){
   const monthRows=rows.filter(x=>{const p=zoneParts(x.date,timezone);return p.month===month.getMonth()+1&&p.year===month.getFullYear()})
   const dayRows=selectedDay?monthRows.filter(x=>zoneInput(x.date,timezone).slice(0,10)===selectedDay):monthRows
   const shown=dayRows.filter(x=>filter==='ALL'||x.kind===filter)
-  const dayCounts=new Map<string,number>();for(const row of monthRows){const key=zoneInput(row.date,timezone).slice(0,10);dayCounts.set(key,(dayCounts.get(key)||0)+1)}
+  const dayCounts=new Map<string,number>();for(const row of rows){const key=zoneInput(row.date,timezone).slice(0,10);dayCounts.set(key,(dayCounts.get(key)||0)+1)}
   const offset=(month.getDay()+6)%7,days=new Date(month.getFullYear(),month.getMonth()+1,0).getDate(),today=zoneInput(new Date(),timezone).slice(0,10)
   const anchor=selectedDay||(today.startsWith(`${month.getFullYear()}-${String(month.getMonth()+1).padStart(2,'0')}`)?today:dayKey(month))
   const anchorDate=new Date(anchor+'T12:00:00'),weekStart=new Date(anchorDate);weekStart.setDate(anchorDate.getDate()-(anchorDate.getDay()+6)%7)

@@ -10,6 +10,7 @@ class Reminder extends Model
 {
     use HasUlids;
     protected $guarded = [];
+    protected $dateFormat = 'Y-m-d H:i:sP';
     protected $attributes = ['status' => 'SCHEDULED', 'timezone' => 'Europe/Moscow'];
     protected $keyType = 'string';
     public $incrementing = false;
