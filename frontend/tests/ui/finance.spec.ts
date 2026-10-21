@@ -188,7 +188,7 @@ test('camera capture and draft deletion persist without creating expenses',async
 
 test('missing total has a visible next step and item categories persist into expenses',async({page})=>{
   const state=await mockFinance(page)
-  state.receipts.push({id:'r3',file_name:'review.jpg',can_edit:true,created_at:'2026-10-21',ocr_status:'NEEDS_REVIEW',review_payload:{total:null,receipt_total:null,items:[{name:'Молоко',qty:1,price:100,category:'Покупки',category_id:'e2'}]}})
+  state.receipts.push({id:'r3',file_name:'review.jpg',can_edit:true,created_at:'2026-10-21',ocr_status:'NEEDS_REVIEW',review_payload:{total:null,receipt_total:null,items:[{name:'Молоко',qty:1,price:100,category:'Покупки',category_id:'e2',needs_review:true}]}})
   await page.setViewportSize({width:320,height:852})
   await page.goto('/?section=finance');await tab(page,'Чеки')
   await page.getByRole('button',{name:/review.jpg.*Нужна проверка/}).click()
@@ -197,6 +197,10 @@ test('missing total has a visible next step and item categories persist into exp
   await expect(page.getByText('Итог не распознан. Введите сумму с чека в поле выше.',{exact:true})).toBeVisible()
   const total=page.getByLabel('Итог на чеке, ₽',{exact:true})
   await expect(total).toBeVisible();await total.fill('100')
+  await expect(confirm).toBeDisabled()
+  await page.getByRole('button',{name:'Проверить позицию 1 →',exact:true}).click()
+  await expect(page.getByRole('dialog',{name:'Позиция 1',exact:true})).toBeVisible()
+  await page.getByRole('button',{name:'Готово',exact:true}).click()
   await page.getByLabel('Категория позиции 1',{exact:true}).selectOption('e1')
   await expect(confirm).toBeEnabled()
   await page.screenshot({path:'test-results/receipt-ready-320.png',fullPage:true})
