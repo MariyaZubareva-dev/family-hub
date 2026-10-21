@@ -1,0 +1,46 @@
+/* Family uses the same compact surfaces and action treatment as Finance. */
+.family-page .card{border-color:#E5E9E6;box-shadow:0 2px 8px #1A1E2206}
+.family-page .family-overview{background:#fff}
+.family-page .family-hero-icon,.family-page .family-section-icon{background:#EAF4F0;color:var(--primary);border-radius:9px}
+.family-page .family-title-block h3{font-size:16px;font-weight:600}
+.family-page .family-title-block p,.family-page .family-member-info>span,.family-page .family-access-copy small{color:#718078}
+.family-page .family-icon-button,.family-page .family-member-menu{border-radius:9px;color:#62746B}
+.family-page .family-icon-button:hover,.family-page .family-member-menu:hover,.family-page .family-member-menu[aria-expanded=true]{background:#EAF4F0;color:var(--primary)}
+.family-page .family-avatar{background:#EAF4F0}
+.family-page .family-role{background:#F1F4F2;color:#64736B}
+.family-page .family-role.admin{background:#EAF4F0;color:var(--primary)}
+.family-page .family-member,.family-page .family-access-row,.family-page .family-invitation{border-bottom-color:#EDF0ED}
+.family-page .button,.family-visibility-dialog .button{min-height:36px;padding:8px 12px;border-radius:9px;font-size:12px;box-shadow:none}
+.family-page .button.primary:not(.family-danger-button),.family-visibility-dialog .button.primary{background-image:linear-gradient(180deg,#147F74,#0F766E);box-shadow:0 2px 5px #0F766E18}
+.family-page .button:disabled{background-image:none;box-shadow:none;opacity:.55}
+.family-page .family-invite-form{padding:0;border:0;background:transparent;gap:8px;margin:6px 0 8px}
+.family-form-fields,.family-page .family-member-actions,.family-visibility-list{border:1px solid #E5ECE8;border-radius:12px;background:#F7F9F8}
+.family-page .family-invite-form label{min-height:40px;padding:4px 10px;grid-template-columns:90px minmax(0,1fr);border-bottom:1px solid #E5ECE8;color:#64736B}
+.family-page .family-invite-form label:last-child{border-bottom:0}
+.family-page .family-invite-form label:first-child{border-radius:11px 11px 0 0}
+.family-page .family-invite-form label:last-child{border-radius:0 0 11px 11px}
+.family-page :is(.family-invite-form,.family-member-actions,.family-name-edit) :is(input,select){min-height:32px;height:32px;padding:4px 0;border:0;border-radius:0;background:transparent;box-shadow:none;font-size:13px;text-align:right;color:var(--text)}
+.family-page :is(.family-invite-form,.family-member-actions) label:focus-within{background:#fff;box-shadow:inset 2px 0 var(--primary)}
+.family-page :is(.family-invite-form,.family-member-actions,.family-name-edit) :is(input,select):focus-visible{outline:0}
+.family-page .family-name-edit{border-bottom:1px solid #E5ECE8}
+.family-page .family-name-edit:focus-within{border-color:var(--primary);box-shadow:0 1px 0 var(--primary)}
+.family-page .family-name-edit input{text-align:left}
+.family-page .family-member-actions{padding:4px 8px;gap:8px}
+.family-page .family-member-actions label{padding:0 4px;color:#64736B}
+.family-page .family-member-actions .tiny{border:0;background:#FFF1F2;color:#BE123C;border-radius:8px}
+.family-page .family-invite-form input::placeholder{color:#7D8B83}
+.family-page .family-confirm,.family-visibility-dialog{width:min(100%,420px);max-height:85dvh;background:#fff;padding:12px 14px calc(12px + env(safe-area-inset-bottom));box-shadow:0 -8px 32px #183B2E24}
+.family-page .modal-backdrop{background:#1A1E224D;backdrop-filter:blur(2px)}
+.family-visibility-dialog::backdrop{background:#1A1E224D;backdrop-filter:blur(2px)}
+.family-page .family-confirm .modal-head,.family-visibility-dialog .modal-head{min-height:32px;margin-bottom:6px;gap:8px}
+.family-page .family-confirm .modal-head h2,.family-visibility-dialog .modal-head h2{font-size:14px;font-weight:600;line-height:1.35}
+.family-page .family-confirm .modal-head button,.family-visibility-dialog .modal-head button{width:32px;height:32px;flex:0 0 32px;background:#F2F5F3;color:#62746B;border-radius:50%}
+.family-page .family-confirm p{font-size:12px}
+.family-visibility-member{min-height:56px;padding:8px 10px;border-color:#E5ECE8}
+.family-visibility-member:last-child{border-bottom:0}
+.family-visibility-note{font-size:11px;color:#64736B}
+.family-visibility-member strong{font-size:12px}
+.family-visibility-member:focus-within{background:#fff;box-shadow:inset 2px 0 var(--primary)}
+@media(pointer:coarse){.family-page :is(.family-invite-form,.family-member-actions,.family-name-edit) :is(input,select){font-size:14px}}
+@supports(-webkit-touch-callout:none){.family-page :is(.family-invite-form,.family-member-actions,.family-name-edit) :is(input,select){font-size:16px}}
+@media(max-height:520px){.family-page .family-confirm,.family-visibility-dialog{max-height:calc(100dvh - 12px)}}

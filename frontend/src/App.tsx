@@ -1,6 +1,19 @@
 import { useEffect, useMemo, useState } from 'react'
 import './styles.v07.css'
+import './family.css'
 import FinanceScreen from './FinanceScreen'
+
+function FamilySymbol({kind}:{kind:string}) {
+  const paths:Record<string,string>={
+    home:'m3 10 9-7 9 7 M5 9v12h14V9 M9 21v-8h6v8',
+    calendar:'M5 5h14v16H5z M8 3v4 M16 3v4 M5 10h14 M8 14h2 M14 14h2 M8 17h2',
+    shopping:'M9 6h11 M9 12h11 M9 18h11 m-17-12 1 1 2-2 m-3 7 1 1 2-2 m-3 7 1 1 2-2',
+    finance:'M3 6h18v14H3z M3 10h18 M15 15h3 M6 3h12',
+    edit:'m4 16 12-12 4 4-12 12-5 1z M13 7l4 4',
+    settings:'M8 3h8v4l3 2 3 2-4 7-3-1-3 2-3-2-3 1-4-7 3-2 3-2z M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0',
+  }
+  return <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d={paths[kind]||paths.home}/></svg>
+}
 
 // ---- API helpers (Telegram auth + local dev fallback) ----
 function getAuthHeaders(): Record<string,string> {
@@ -314,17 +327,17 @@ function FamilyV07(){
     {notice&&<div className="family-notice" role="status">{notice}<button onClick={()=>setNotice('')} aria-label="Закрыть уведомление">×</button></div>}
     <section className="card family-overview" aria-label="Информация о семье">
       <div className="family-overview-main">
-        <div className="family-hero-icon" aria-hidden="true">⌂</div>
+        <div className="family-hero-icon" aria-hidden="true"><FamilySymbol kind="home"/></div>
         <div className="family-title-block">
           {editingName&&isAdmin?<><label className="family-name-edit"><span className="sr-only">Название семьи</span><input value={familyName} maxLength={120} onChange={e=>setFamilyName(e.target.value)} onKeyDown={e=>e.key==='Enter'&&saveFamilyName()}/></label><div className="family-inline-actions"><button className="button primary small" onClick={saveFamilyName} disabled={busy==='name'}>Сохранить</button><button className="button secondary small" onClick={()=>{setFamilyName(family.name);setEditingName(false)}}>Отмена</button></div></>:<h3>{family.name}</h3>}
           <p>{family.members?.length||0} {pluralRu(family.members?.length||0,'участник','участника','участников')}{isAdmin&&invitations.length>0?` · ${invitations.length} ${pluralRu(invitations.length,'приглашение','приглашения','приглашений')}`:''}</p>
         </div>
-        {isAdmin&&!editingName&&<button className="family-icon-button" onClick={()=>setEditingName(true)} aria-label="Изменить название" title="Изменить название">✎</button>}
+        {isAdmin&&!editingName&&<button className="family-icon-button" onClick={()=>setEditingName(true)} aria-label="Изменить название" title="Изменить название"><FamilySymbol kind="edit"/></button>}
       </div>
     </section>
     <section className="card family-members-card" aria-labelledby="family-members-title">
       <div className="card-head"><h3 id="family-members-title">Участники <span className="family-heading-count">{family.members?.length||0}</span></h3>{isAdmin&&<button className="family-text-button" onClick={()=>setShowInvite(v=>!v)}>{showInvite?'Закрыть':'＋ Пригласить'}</button>}</div>
-      {showInvite&&isAdmin&&<div className="family-invite-form"><label><span>Telegram ID<br/>или логин</span><input value={inviteTarget} onChange={e=>setInviteTarget(e.target.value)} placeholder="@username / ID" autoComplete="off"/></label><label><span>Имя <span className="muted">(необязательно)</span></span><input value={inviteName} onChange={e=>setInviteName(e.target.value)} placeholder="Имя участника" maxLength={255}/></label><button className="button primary full" onClick={invite} disabled={busy==='invite'}>{busy==='invite'?'Создаём…':'Создать приглашение'}</button></div>}
+      {showInvite&&isAdmin&&<div className="family-invite-form"><div className="family-form-fields"><label><span>Telegram ID<br/>или логин</span><input value={inviteTarget} onChange={e=>setInviteTarget(e.target.value)} placeholder="@username / ID" autoComplete="off"/></label><label><span>Имя <span className="muted">(необязательно)</span></span><input value={inviteName} onChange={e=>setInviteName(e.target.value)} placeholder="Имя участника" maxLength={255}/></label></div><button className="button primary full" onClick={invite} disabled={busy==='invite'}>{busy==='invite'?'Создаём…':'Создать приглашение'}</button></div>}
       <div className="family-member-list">{family.members?.map((m:any)=><article className="family-member" key={m.id}>
         <div className="family-avatar">{m.user?.avatar_url?<img src={m.user.avatar_url} alt=""/>:initials(m)}</div>
         <div className="family-member-info"><div className="family-member-name-row"><strong title={m.user?.first_name||m.user?.username}>{m.user?.first_name||m.user?.username||'Участник'}{m.id===family.current_member_id&&<span className="family-you"> · вы</span>}</strong><span className={`family-role ${m.role==='ADMIN'?'admin':''}`} title={m.role==='ADMIN'?'Администратор':'Участник'}>{m.role==='ADMIN'?'Админ':'Участник'}</span></div><span title={m.user?.username?`@${m.user.username}`:''}>{m.user?.username?`@${String(m.user.username).replace(/^@/,'')}`:'Участник семьи'}</span></div>
@@ -337,15 +350,15 @@ function FamilyV07(){
       <div className="family-access-list">{SHARED_SECTIONS.map(section=>{
         const visible=(family.members||[]).filter((m:any)=>m.visibility?.[section.id]!==false).length
         const mine=family.my_visibility?.[section.id]!==false
-        return <div className="family-access-row" key={section.id}><span className="family-section-icon" aria-hidden="true">{section.icon}</span><div className="family-access-copy"><strong>{section.title}</strong><small>{isAdmin?`${visible} из ${family.members?.length||0} участников`:mine?'Доступен':'Скрыт администратором'}</small></div>{isAdmin&&<button className="family-icon-button" aria-label={`Настроить видимость: ${section.title}`} onClick={()=>setVisibilitySection(section.id)}>⚙</button>}</div>
+        return <div className="family-access-row" key={section.id}><span className="family-section-icon" aria-hidden="true"><FamilySymbol kind={section.id}/></span><div className="family-access-copy"><strong>{section.title}</strong><small>{isAdmin?`${visible} из ${family.members?.length||0} участников`:mine?'Доступен':'Скрыт администратором'}</small></div>{isAdmin&&<button className="family-icon-button" aria-label={`Настроить видимость: ${section.title}`} onClick={()=>setVisibilitySection(section.id)}><FamilySymbol kind="settings"/></button>}</div>
       })}</div>
     </section>
     {isAdmin&&invitations.length>0&&<details className="card family-invitations-card" open><summary className="family-invitations-summary">Приглашения <span className="family-heading-count">{invitations.length}</span></summary>{invitations.map((inv:any)=><div className="family-invitation" key={inv.id}><div className="family-member-info"><strong>{inv.first_name||(inv.username?`@${String(inv.username).replace(/^@/,'')}`:`Telegram ID ${inv.telegram_user_id}`)}</strong><span>Ожидает ответа{inv.expires_at?` · до ${new Date(inv.expires_at).toLocaleDateString('ru-RU')}`:''}</span></div><div className="family-invitation-actions"><button className="tiny" onClick={()=>copyInvitation(inv)}>Копировать</button><button className="tiny danger" disabled={busy===inv.id} onClick={()=>setConfirmInvitation(inv)}>Отменить</button></div></div>)}</details>}
     {visibilitySection&&<dialog id="family-visibility-dialog" className="family-visibility-dialog" aria-labelledby="family-visibility-title" onCancel={()=>setVisibilitySection(null)} onClick={e=>{if(e.target===e.currentTarget)setVisibilitySection(null)}}>
       <div className="modal-head"><h2 id="family-visibility-title">{SHARED_SECTIONS.find(s=>s.id===visibilitySection)?.title}</h2><button className="family-icon-button" onClick={()=>setVisibilitySection(null)} aria-label="Закрыть настройки видимости">×</button></div>
-      <p className="family-visibility-note">Кому виден раздел. Изменения сохраняются сразу.</p>
+      <p className="family-visibility-note">Кому виден раздел. Изменения сохраняются сразу.</p><div className="family-visibility-list">
       {family.members?.map((m:any)=><label className="family-visibility-member" key={m.id}><div className="family-avatar">{m.user?.avatar_url?<img src={m.user.avatar_url} alt=""/>:initials(m)}</div><span><strong>{m.user?.first_name||m.user?.username||'Участник'}</strong><small>{m.role==='ADMIN'?'Админ · полный доступ':busy===m.id?'Сохраняем…':'Участник'}</small></span><input type="checkbox" role="switch" aria-label={`${m.user?.first_name||m.user?.username||'Участник'}: ${SHARED_SECTIONS.find(s=>s.id===visibilitySection)?.title}`} checked={m.visibility?.[visibilitySection]!==false} disabled={m.role==='ADMIN'||!!busy} onChange={e=>setMemberVisibility(m,visibilitySection,e.target.checked)}/></label>)}
-      {error&&<div className="family-alert" role="alert">{error}</div>}
+      </div>{error&&<div className="family-alert" role="alert">{error}</div>}
       <p className="family-visibility-note">Администраторам доступны все разделы. Ограничить видимость можно для роли «Участник». Скрытые данные не показываются в приложении и не приходят в уведомлениях.</p>
       <button className="button primary full" onClick={()=>setVisibilitySection(null)}>Готово</button>
     </dialog>}

@@ -15,7 +15,16 @@ async function mockApi(page: Page, family = fixture()) {
     const path = new URL(request.url()).pathname
     let data: any = []
     if (path.endsWith('/me')) data = { family: { id: family.id, role: family.my_role, visibility: family.my_visibility } }
-    else if (path.endsWith('/family/invitations')) data = []
+    else if (path.endsWith('/family/invitations')) {
+      if (request.method() === 'POST') { requests.push({ path, body: request.postDataJSON() }); data = request.postDataJSON() }
+      else data = []
+    }
+    else if (path.endsWith('/family/members/m2') && request.method() === 'PATCH') {
+      const body = request.postDataJSON(); requests.push({ path, body }); family.members[1].role = body.role; data = family
+    }
+    else if (path.endsWith('/family/members/m2') && request.method() === 'DELETE') {
+      requests.push({ path, body: null }); family.members = family.members.filter(m => m.id !== 'm2'); data = family
+    }
     else if (path.endsWith('/family')) data = family
     else if (path.endsWith('/visibility') && request.method() === 'PATCH') {
       const body = request.postDataJSON()
@@ -94,6 +103,7 @@ test('admin changes visibility for a member; admin toggle stays locked', async (
   await member.click()
   await expect(member).not.toBeChecked()
   expect(requests).toEqual([{ path: '/api/v1/family/members/m2/visibility', body: { visibility: { finance: false } } }])
+  await page.screenshot({ path: 'test-results/family-visibility-393.png', fullPage: true })
   await page.keyboard.press('Escape')
   await expect(dialog).toHaveCount(0)
   await expect(page.getByRole('button', { name: 'Настроить видимость: Бюджет и кредиты' })).toBeFocused()
@@ -115,3 +125,33 @@ test('restricted sections are absent from navigation and overview', async ({ pag
   await expect(page.getByRole('heading', { name: 'Бюджет за месяц' })).toHaveCount(0)
   await expect(page.getByRole('heading', { name: 'События и напоминания' })).toHaveCount(0)
 })
+
+for (const width of [320, 393]) {
+  test(`family styled controls save invitations, roles and removal at ${width}px`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 852 })
+    const requests = await mockApi(page)
+    await page.goto('/?section=family')
+    await page.getByRole('button', { name: '＋ Пригласить', exact: true }).click()
+    const invite = page.locator('.family-invite-form')
+    await invite.getByRole('textbox', { name: /Telegram ID/ }).fill('@new_member')
+    await invite.getByRole('textbox', { name: 'Имя (необязательно)' }).fill('Новый участник')
+    expect(await invite.locator('input').first().evaluate(el => getComputedStyle(el).borderTopWidth)).toBe('0px')
+    await invite.getByRole('button', { name: 'Создать приглашение' }).click()
+    await expect(invite).toHaveCount(0)
+    expect(requests[0]).toEqual({ path: '/api/v1/family/invitations', body: { username: 'new_member', first_name: 'Новый участник' } })
+    await page.getByLabel('Действия участника: Андрей', { exact: true }).click()
+    await page.getByRole('combobox', { name: 'Роль', exact: true }).selectOption('ADMIN')
+    await expect(page.locator('.family-member').filter({ hasText: 'Андрей' }).locator('.family-role')).toHaveText('Админ')
+    expect(requests[1]).toEqual({ path: '/api/v1/family/members/m2', body: { role: 'ADMIN' } })
+    await page.getByLabel('Удалить из семьи', { exact: true }).click()
+    const confirmation = page.getByRole('dialog', { name: 'Удалить участника?' })
+    await expect(confirmation).toBeVisible()
+    expect((await confirmation.boundingBox())!.width).toBeLessThanOrEqual(Math.min(width, 420))
+    await page.screenshot({ path: `test-results/family-confirm-${width}.png`, fullPage: true })
+    await confirmation.getByRole('button', { name: 'Удалить участника', exact: true }).click()
+    await expect(confirmation).toHaveCount(0)
+    await expect(page.getByRole('heading', { name: 'Участники 2' })).toBeVisible()
+    expect(requests[2]).toEqual({ path: '/api/v1/family/members/m2', body: null })
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(width)
+  })
+}
