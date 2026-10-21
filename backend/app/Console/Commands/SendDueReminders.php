@@ -10,7 +10,7 @@ class SendDueReminders extends Command
  protected $description='Send due Family Hub reminders to Telegram users';
  public function handle():int{
   $now=CarbonImmutable::now('Europe/Moscow');
-  $items=Reminder::whereNull('notification_sent_at')->where('status','SCHEDULED')->whereBetween('scheduled_at',[$now->subMinutes(2),$now->addMinute()])->get();
+  $items=Reminder::whereNull('notification_sent_at')->where('status','SCHEDULED')->whereBetween('scheduled_at',[$now->subMinutes(2)->toIso8601String(),$now->addMinute()->toIso8601String()])->get();
   foreach($items as $r){TelegramNotificationService::notifyReminderDue($r);$r->forceFill(['notification_sent_at'=>now()])->save();}
   $this->info("Processed {$items->count()} reminders."); return self::SUCCESS;
  }

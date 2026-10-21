@@ -155,4 +155,18 @@ class CalendarResponsiblesTest extends TestCase
         $eventJob = Queue::pushed(\App\Jobs\TelegramNotificationJob::class)->first(fn ($job) => $job->notificationType === 'EVENT_REMINDER');
         $this->assertStringContainsString('21.10.2026 19:22', $eventJob->text);
     }
+    public function test_scheduler_uses_absolute_time_with_moscow_application_timezone(): void
+    {
+        $this->travelTo(\Carbon\Carbon::parse('2026-10-21T16:00:00Z'));
+        $due = $this->postJson('/api/v1/reminders', [...$this->payload('reminders'), 'scheduled_at' => '2026-10-21T16:22:00Z'])->assertCreated()->json('data');
+        $later = $this->postJson('/api/v1/reminders', [...$this->payload('reminders'), 'scheduled_at' => '2026-10-21T19:22:00Z'])->assertCreated()->json('data');
+        $event = $this->postJson('/api/v1/events', [...$this->payload('events'), 'start_at' => '2026-10-21T16:51:30Z', 'end_at' => '2026-10-21T17:51:30Z'])->assertCreated()->json('data');
+        Queue::fake();
+        $this->travelTo(\Carbon\Carbon::parse('2026-10-21T16:22:00Z'));
+        $this->artisan('family:send-reminders')->assertSuccessful();
+        $this->assertNotNull(Reminder::findOrFail($due['id'])->notification_sent_at);
+        $this->assertNull(Reminder::findOrFail($later['id'])->notification_sent_at);
+        $this->artisan('family:send-event-notifications')->assertSuccessful();
+        Queue::assertPushed(\App\Jobs\TelegramNotificationJob::class, fn ($job) => $job->notificationType === 'EVENT_REMINDER' && ($job->payload['event_id'] ?? null) === $event['id']);
+    }
 }

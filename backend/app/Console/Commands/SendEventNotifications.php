@@ -16,7 +16,7 @@ class SendEventNotifications extends Command
     {
         $from = now()->addMinutes(29);
         $to = now()->addMinutes(30);
-        $events = Event::where('status', 'SCHEDULED')->whereBetween('start_at', [$from, $to])->get();
+        $events = Event::where('status', 'SCHEDULED')->whereBetween('start_at', [$from->toIso8601String(), $to->toIso8601String()])->get();
         foreach ($events as $event) {
             foreach (FamilyMember::where('family_id', $event->family_id)->where('status', 'ACTIVE')->get() as $member) {
                 TelegramNotificationService::notifyEventReminder($event, $member);

@@ -11,6 +11,7 @@ use Illuminate\Queue\SerializesModels;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Schema;
 
 class TelegramNotificationJob implements ShouldQueue
 {
@@ -134,15 +135,12 @@ class TelegramNotificationJob implements ShouldQueue
                 'updated_at' => now(),
             ]);
 
-        // Also update reminder_notifications if applicable
-        if (str_starts_with($this->idempotencyKey, 'reminder:') || str_starts_with($this->idempotencyKey, 'notification:')) {
-            try {
-                DB::table('reminder_notifications')
-                    ->where('idempotency_key', $this->idempotencyKey)
-                    ->update(['status' => 'SENT', 'sent_at' => now(), 'telegram_message_id' => $messageId, 'updated_at' => now()]);
-            } catch (\Throwable $e) {
-                // reminder_notifications may not have idempotency_key column — ignore
-            }
+        // Older reminder-delivery tables have no idempotency key. Avoid an invalid SQL
+        // statement: catching a PostgreSQL error does not restore its transaction.
+        if ((str_starts_with($this->idempotencyKey, 'reminder:') || str_starts_with($this->idempotencyKey, 'notification:'))
+            && Schema::hasColumn('reminder_notifications', 'idempotency_key')) {
+            DB::table('reminder_notifications')->where('idempotency_key', $this->idempotencyKey)
+                ->update(['status' => 'SENT', 'sent_at' => now(), 'telegram_message_id' => $messageId, 'updated_at' => now()]);
         }
     }
 
