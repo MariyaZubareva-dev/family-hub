@@ -212,3 +212,36 @@ test('missing total has a visible next step and item categories persist into exp
   await page.getByRole('button',{name:'Подтвердить расходы'}).click()
   expect(state.transactions[0]).toMatchObject({amount:100,category:'Продукты'})
 })
+
+for(const {width,height} of [{width:320,height:852},{width:393,height:852},{width:768,height:852},{width:320,height:480}])test(`all action dialogs fit the Family style at ${width}x${height}`,async({page})=>{
+  const state=await mockFinance(page)
+  state.receipts.push({id:'modal-receipt',file_name:'dialogs.jpg',can_edit:true,created_at:'2026-10-21',ocr_status:'COMPLETED',review_payload:{merchant:'Магазин',date:'2026-10-17',total:100,receipt_total:100,items:[{name:'Товар с длинным названием для проверки редактирования',qty:1,price:100,category:'Покупки',category_id:'e2'}]}})
+  await page.setViewportSize({width,height});await page.goto('/?section=finance')
+  await expect(page.getByRole('button',{name:'Обновить финансы'})).toBeEnabled()
+  const check=async(title:string,file:string)=>{
+    const d=page.getByRole('dialog',{name:title,exact:true});await expect(d).toBeVisible()
+    const first=d.locator('input:not([type=hidden]),textarea,select').first()
+    if(await first.count())await expect(first).toBeFocused()
+    const layout=await d.evaluate(el=>({width:el.getBoundingClientRect().width,scroll:el.scrollWidth,client:el.clientWidth,top:el.getBoundingClientRect().top,bottom:el.getBoundingClientRect().bottom}))
+    expect(layout.width).toBeLessThanOrEqual(Math.min(width,480));expect(layout.scroll).toBeLessThanOrEqual(layout.client)
+    expect(layout.top).toBeGreaterThanOrEqual(0);expect(layout.bottom).toBeLessThanOrEqual(height)
+    await page.keyboard.press('Shift+Tab')
+    expect(await d.evaluate(el=>el.contains(document.activeElement))).toBe(true)
+    const action=d.locator('.f-form>.button:last-child,.f-form>.f-actions:last-child .button').last()
+    await action.scrollIntoViewIfNeeded();await expect(action).toBeInViewport()
+    await page.screenshot({path:`test-results/action-${file}-${width}x${height}.png`})
+    await page.keyboard.press('Escape');await expect(d).toHaveCount(0)
+  }
+  for(const [button,title,file] of [['＋ Доход','Новый доход','income'],['＋ Расход','Новый расход','expense']]){
+    const trigger=page.getByRole('button',{name:button,exact:true});await trigger.click();await check(title,file);await expect(trigger).toBeFocused()
+  }
+  await tab(page,'Категории')
+  for(const [kind,title,file] of [['Расходы','Категория расхода','expense-category'],['Доходы','Категория дохода','income-category']]){
+    await page.getByRole('button',{name:kind,exact:true}).click();const trigger=page.getByRole('button',{name:'＋ Категория',exact:true});await trigger.click();await check(title,file);await expect(trigger).toBeFocused()
+  }
+  await tab(page,'Кредиты');await page.getByRole('button',{name:'＋ Добавить',exact:true}).click();await check('Новый кредит или рассрочка','credit')
+  await tab(page,'Чеки');await page.getByRole('button',{name:/Магазин.*Проверьте позиции/}).click()
+  await page.getByRole('button',{name:'Изменить данные чека',exact:true}).click();await check('Данные чека','receipt')
+  await page.getByRole('button',{name:'Изменить позицию 1',exact:true}).click();await check('Позиция 1','item')
+  await page.getByRole('button',{name:'Удалить черновик Магазин',exact:true}).click();await check('Удалить черновик?','delete')
+})

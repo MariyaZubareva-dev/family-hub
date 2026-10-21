@@ -47,7 +47,12 @@ function Help({text,label='Подсказка'}:{text:string;label?:string}) {
 }
 function Modal({title,onClose,busy,children}:{title:string;onClose:()=>void;busy?:boolean;children:ReactNode}) {
   const ref=useRef<HTMLDialogElement>(null), id=useId()
-  useEffect(()=>{const d=ref.current!;d.showModal();return()=>d.close()},[])
+  useEffect(()=>{
+    const d=ref.current!,previousFocus=document.activeElement as HTMLElement|null
+    d.showModal()
+    d.querySelector<HTMLElement>('input:not([type=hidden]):not(:disabled),textarea:not(:disabled),select:not(:disabled)')?.focus({preventScroll:true})
+    return()=>{d.close();window.requestAnimationFrame(()=>{if(previousFocus?.isConnected)previousFocus.focus({preventScroll:true})})}
+  },[])
   return <dialog className="finance-dialog" ref={ref} aria-label={title} onCancel={e=>{e.preventDefault();if(!busy)onClose()}} onClick={e=>{if(e.target===e.currentTarget&&!busy)onClose()}}><section><div className="f-head"><h2 id={id}>{title}</h2><button type="button" className="f-icon" onClick={onClose} disabled={busy} aria-label="Закрыть">×</button></div>{children}</section></dialog>
 }
 function Message({text,error=false}:{text:string;error?:boolean}) { return text?<div className={error?'f-message f-error':'f-message'} role={error?'alert':'status'}>{text}</div>:null }
