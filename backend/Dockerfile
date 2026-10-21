@@ -14,7 +14,10 @@ RUN composer install \
 
 FROM php:8.5-fpm-alpine
 
-RUN apk add --no-cache \
+ARG ALPINE_MIRROR=https://dl-cdn.alpinelinux.org/alpine
+
+RUN sed -i "s|https://dl-cdn.alpinelinux.org/alpine|${ALPINE_MIRROR%/}|g" /etc/apk/repositories \
+    && apk add --no-cache \
     bash \
     icu-dev \
     libzip-dev \

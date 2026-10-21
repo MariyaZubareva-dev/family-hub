@@ -73,6 +73,31 @@ Then test Telegram login, one read/write action in each affected feature,
 receipt upload, and a queued Telegram notification. Review backend,
 queue, scheduler, and Caddy logs. Do not announce success until the checks pass.
 
+## Slow Alpine package downloads
+
+The backend Dockerfile accepts `ALPINE_MIRROR`. Its default remains
+`https://dl-cdn.alpinelinux.org/alpine`. If downloads stall, verify another
+official Alpine mirror from the server before selecting it. The override keeps
+the base image's Alpine version, repository branches, and package signatures.
+
+After confirming that no previous build is still running, use a background
+build to survive SSH disconnects:
+
+```sh
+nohup sh -c '
+docker compose --progress=plain --env-file .env.production -f docker-compose.prod.yml build \
+  --build-arg ALPINE_MIRROR=https://mirror.yandex.ru/mirrors/alpine \
+  backend queue scheduler frontend
+build_result=$?
+echo "BUILD_EXIT=$build_result"
+exit "$build_result"
+' > /root/family-hub-build.log 2>&1 < /dev/null &
+```
+
+Follow progress with `tail -f /root/family-hub-build.log`. Interrupting `tail`
+does not stop the background build. Start the updated containers only after
+`BUILD_EXIT=0`; a successful image build does not update running containers.
+
 ## Recovery
 
 If the new application fails its smoke checks, restore the previous image/release
