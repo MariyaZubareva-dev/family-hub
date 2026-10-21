@@ -225,7 +225,7 @@ for(const {width,height} of [{width:320,height:852},{width:393,height:852},{widt
     const layout=await d.evaluate(el=>({width:el.getBoundingClientRect().width,scroll:el.scrollWidth,client:el.clientWidth,top:el.getBoundingClientRect().top,bottom:el.getBoundingClientRect().bottom}))
     expect(layout.width).toBeLessThanOrEqual(Math.min(width,480));expect(layout.scroll).toBeLessThanOrEqual(layout.client)
     expect(layout.top).toBeGreaterThanOrEqual(0);expect(layout.bottom).toBeLessThanOrEqual(height)
-    await page.keyboard.press('Shift+Tab')
+    await page.keyboard.press(await first.count()?'Shift+Tab':'Tab')
     expect(await d.evaluate(el=>el.contains(document.activeElement))).toBe(true)
     const action=d.locator('.f-form>.button:last-child,.f-form>.f-actions:last-child .button').last()
     await action.scrollIntoViewIfNeeded();await expect(action).toBeInViewport()

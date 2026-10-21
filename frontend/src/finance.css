@@ -152,3 +152,5 @@
 .f-receipts .f-receipt-total>.f-field{display:grid;grid-template-columns:minmax(0,1fr) minmax(88px,120px);align-items:center;gap:8px}
 .f-receipts .f-receipt-total input{min-height:36px;padding:6px 8px;text-align:right}
 .f-review-fix{align-self:flex-start;border:0;background:none;padding:4px 0;color:var(--primary);font:inherit;font-size:11px;text-align:left;cursor:pointer}
+
+.finance-dialog .button.f-danger-button{background:#BE123C;color:#fff}
