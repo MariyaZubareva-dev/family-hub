@@ -55,24 +55,26 @@ class PlannedPurchaseApiTest extends TestCase
             ->postJson('/api/v1/planned-purchases', ['type' => 'RECURRING', 'name' => 'Шампунь'])
             ->assertStatus(422);
     }
-    public function test_purchase_categories_are_shared_persistent_and_case_insensitive(): void
+    public function test_purchase_categories_use_finance_expenses_and_admin_creation(): void
     {
         $admin = User::create(['telegram_user_id' => 30104, 'first_name' => 'Admin']);
         $user = User::create(['telegram_user_id' => 30105, 'first_name' => 'Member']);
         $family = Family::create(['name' => 'Family', 'created_by' => $admin->id]);
         FamilyMember::create(['family_id' => $family->id, 'user_id' => $admin->id, 'role' => 'ADMIN', 'status' => 'ACTIVE']);
         FamilyMember::create(['family_id' => $family->id, 'user_id' => $user->id, 'role' => 'USER', 'status' => 'ACTIVE']);
-        $category = $this->withoutMiddleware(TelegramAuthenticate::class)->actingAs($user)
-            ->postJson('/api/v1/planned-purchases/categories', ['name' => '  Для дома  '])
-            ->assertCreated()->assertJsonPath('data.name', 'Для дома')->json('data');
-        $this->actingAs($admin)->postJson('/api/v1/planned-purchases/categories', ['name' => 'для ДОМА'])
-            ->assertOk()->assertJsonPath('data.id', $category['id']);
-        $this->getJson('/api/v1/planned-purchases/categories')->assertOk()->assertJsonCount(1, 'data')
-            ->assertJsonPath('data.0.name', 'Для дома');
-        $this->postJson('/api/v1/planned-purchases', ['type' => 'LARGE', 'name' => 'Забор', 'category' => 'Для дома'])
-            ->assertCreated()->assertJsonPath('data.category', 'Для дома');
-        $this->postJson('/api/v1/planned-purchases/categories', ['name' => '   '])->assertUnprocessable();
-        $this->postJson('/api/v1/planned-purchases/categories', ['name' => str_repeat('а', 121)])->assertUnprocessable();
+        $this->withoutMiddleware(TelegramAuthenticate::class)->actingAs($admin)
+            ->postJson('/api/v1/finance/categories', ['name' => 'Участок', 'transaction_type' => 'EXPENSE'])->assertCreated();
+        $this->postJson('/api/v1/finance/categories', ['name' => 'Особый доход', 'transaction_type' => 'INCOME'])->assertCreated();
+        $names = $this->actingAs($user)->getJson('/api/v1/planned-purchases/categories')->assertOk()->json('data');
+        $this->assertContains('Участок', array_column($names, 'name'));
+        $this->assertNotContains('Особый доход', array_column($names, 'name'));
+        $this->postJson('/api/v1/planned-purchases/categories', ['name' => 'Закрыто'])->assertForbidden();
+        $category = $this->actingAs($admin)->postJson('/api/v1/planned-purchases/categories', ['name' => '  Для дома  '])
+            ->assertCreated()->assertJsonPath('data.transaction_type', 'EXPENSE')->json('data');
+        $finance = $this->getJson('/api/v1/finance/categories')->assertOk()->json('data');
+        $this->assertContains($category['id'], array_column($finance, 'id'));
+        $this->postJson('/api/v1/planned-purchases/categories', ['name' => 'для ДОМА'])->assertUnprocessable();
+        $this->postJson('/api/v1/planned-purchases/categories', ['name' => str_repeat('а', 81)])->assertUnprocessable();
     }
 
     public function test_categories_are_isolated_between_families_and_respect_shopping_visibility(): void
@@ -84,9 +86,9 @@ class PlannedPurchaseApiTest extends TestCase
         FamilyMember::create(['family_id' => $a->id, 'user_id' => $first->id, 'role' => 'ADMIN', 'status' => 'ACTIVE']);
         $member = FamilyMember::create(['family_id' => $b->id, 'user_id' => $second->id, 'role' => 'USER', 'status' => 'ACTIVE']);
         $this->withoutMiddleware(TelegramAuthenticate::class)->actingAs($first)
-            ->postJson('/api/v1/planned-purchases/categories', ['name' => 'Подарки'])->assertCreated();
-        $this->actingAs($second)->getJson('/api/v1/planned-purchases/categories')->assertOk()->assertJsonCount(0, 'data');
-        $this->postJson('/api/v1/planned-purchases/categories', ['name' => 'Подарки'])->assertCreated();
+            ->postJson('/api/v1/planned-purchases/categories', ['name' => 'Только в первой семье'])->assertCreated();
+        $names = $this->actingAs($second)->getJson('/api/v1/planned-purchases/categories')->assertOk()->json('data');
+        $this->assertNotContains('Только в первой семье', array_column($names, 'name'));
         $member->update(['section_visibility' => ['shopping' => false]]);
         $this->getJson('/api/v1/planned-purchases/categories')->assertForbidden();
         $this->postJson('/api/v1/planned-purchases/categories', ['name' => 'Закрыто'])->assertForbidden();
@@ -103,8 +105,13 @@ class PlannedPurchaseApiTest extends TestCase
         \Illuminate\Support\Facades\Schema::drop('purchase_categories');
         $migration = require database_path('migrations/2026_10_21_000023_create_purchase_categories_table.php');
         $migration->up();
-        $this->getJson('/api/v1/planned-purchases/categories')->assertOk()->assertJsonCount(1, 'data')
-            ->assertJsonPath('data.0.name', 'Участок');
+        $merge = require database_path('migrations/2026_10_21_000024_merge_purchase_categories_into_finance.php');
+        $merge->up();
+        $merge->up();
+        $categories = $this->getJson('/api/v1/planned-purchases/categories')->assertOk()->json('data');
+        $this->assertContains('Участок', array_column($categories, 'name'));
+        $this->assertDatabaseCount('purchase_categories', 1);
+        $this->assertSame(1, \App\Models\ExpenseCategory::where('family_id', $family->id)->where('name', 'Участок')->count());
         $this->getJson('/api/v1/planned-purchases')->assertOk()->assertJsonPath('data.0.category', '  Участок  ');
     }
 }

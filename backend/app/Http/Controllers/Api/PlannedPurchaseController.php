@@ -6,35 +6,25 @@ use App\Models\PlannedPurchase;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Str;
+use App\Models\ExpenseCategory;
+use App\Services\Finance\CategoryCatalog;
 
 class PlannedPurchaseController extends BaseApiController
 {
     public function categories(Request $request): JsonResponse
     {
         $member = $this->membership($request);
-        return response()->json(['data' => DB::table('purchase_categories')
-            ->where('family_id', $member->family_id)->orderBy('name')->get(['id', 'name'])]);
+        CategoryCatalog::ensureDefaults($member->family_id, $member->user_id);
+        return response()->json(['data' => ExpenseCategory::query()
+            ->where('family_id', $member->family_id)->where('transaction_type', 'EXPENSE')
+            ->where('status', 'ACTIVE')->orderBy('name')->get(['id', 'name'])]);
     }
 
     public function createCategory(Request $request): JsonResponse
     {
-        $member = $this->membership($request);
-        $request->merge(['name' => is_string($request->input('name')) ? trim($request->input('name')) : $request->input('name')]);
-        $data = $request->validate(['name' => ['required', 'string', 'max:120']], [
-            'name.required' => 'Введите название категории.',
-            'name.max' => 'Название категории должно быть не длиннее 120 символов.',
-        ]);
-        $key = mb_strtolower($data['name']);
-        $created = DB::table('purchase_categories')->insertOrIgnore([
-            'id' => (string) Str::ulid(), 'family_id' => $member->family_id,
-            'name' => $data['name'], 'name_key' => $key,
-            'created_at' => now(), 'updated_at' => now(),
-        ]);
-        $category = DB::table('purchase_categories')->where('family_id', $member->family_id)
-            ->where('name_key', $key)->first(['id', 'name']);
-        return response()->json(['data' => $category], $created ? 201 : 200);
+        // Reuse Finance validation and admin permissions for the shared catalog.
+        $request->merge(['transaction_type' => 'EXPENSE']);
+        return app(FinanceCoreController::class)->createCategory($request);
     }
 
     public function index(Request $request): JsonResponse

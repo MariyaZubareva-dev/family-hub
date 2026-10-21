@@ -113,11 +113,13 @@ export default function App(){
   const [showReceiptConfirm,setShowReceiptConfirm]=useState(false)
   const [monthlyPlan,setMonthlyPlan]=useState(10000)
   const [access,setAccess]=useState<SectionVisibility|null>(null)
+  const [familyRole,setFamilyRole]=useState('')
   const [accessError,setAccessError]=useState('')
   useEffect(()=>{
     let active=true
     const refreshAccess=()=>apiGet('/me').then(result=>{
       if(!active)return
+      setFamilyRole(result.data?.family?.role||'')
       const v={...ALL_VISIBLE,...result.data?.family?.visibility}
       setAccess(result.data?.family?v:{calendar:false,shopping:false,finance:false})
       setAccessError('')
@@ -150,7 +152,7 @@ export default function App(){
       {!access&&!accessError&&<div className="family-loading">Загружаем пространство…</div>}
       {access&&section==='home' && <HomeView onGo={setSection} totalExpense={totalExpense} visibility={access} />}
       {access?.calendar&&section==='calendar' && <CalendarV07 />}
-      {access?.shopping&&section==='lists' && <ShoppingScreen />}
+      {access?.shopping&&section==='lists' && <ShoppingScreen isAdmin={familyRole==='ADMIN'} />}
       {access?.finance&&section==='finance' && <FinanceScreen />}
       {access&&section==='family' && <FamilyV07 />}
     </main>

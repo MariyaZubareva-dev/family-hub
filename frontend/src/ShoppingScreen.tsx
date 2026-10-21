@@ -29,7 +29,7 @@ async function request(path:string,body?:unknown){
 }
 const errorText=(e:unknown)=>e instanceof Error?e.message:'Не удалось выполнить действие. Попробуйте ещё раз.'
 
-export default function ShoppingScreen(){
+export default function ShoppingScreen({isAdmin=false}:{isAdmin?:boolean}){
   const [items,setItems]=useState<Purchase[]>([]),[categories,setCategories]=useState<Category[]>([])
   const [type,setType]=useState<Kind>('LARGE'),[show,setShow]=useState(false),[loading,setLoading]=useState(true)
   const [name,setName]=useState(''),[category,setCategory]=useState(''),[amount,setAmount]=useState(''),[due,setDue]=useState(''),[cadence,setCadence]=useState('3')
@@ -81,13 +81,13 @@ export default function ShoppingScreen(){
       <form className="f-form" onSubmit={add}>
         <div className="f-form-fields">
           <Field label="Название"><input value={name} onChange={e=>setName(e.target.value)} required maxLength={255} placeholder="Что купить" disabled={!!busy}/></Field>
-          <Field label="Категория"><select value={category} onChange={e=>{if(e.target.value==='__new__'){setAddingCategory(true);setCategoryError('')}else{setCategory(e.target.value);setAddingCategory(false)}}} disabled={!!busy}><option value="__new__">＋ Добавить новую категорию</option><option value="">Без категории</option>{categories.map(c=><option key={c.id} value={c.name}>{c.name}</option>)}</select></Field>
+          <Field label="Категория"><select value={category} onChange={e=>{if(e.target.value==='__new__'){setAddingCategory(true);setCategoryError('')}else{setCategory(e.target.value);setAddingCategory(false)}}} disabled={!!busy}>{isAdmin&&<option value="__new__">＋ Добавить новую категорию</option>}<option value="" disabled>Выберите категорию</option>{categories.map(c=><option key={c.id} value={c.name}>{c.name}</option>)}</select></Field>
           <Field label="Сумма, ₽"><input type="number" min="0" max="999999999999.99" step="0.01" inputMode="decimal" value={amount} onChange={e=>setAmount(e.target.value)} placeholder="Не задана" disabled={!!busy}/></Field>
           <Field label={type==='LARGE'?'Плановая дата':'Следующая дата'}><input type="date" value={due} onChange={e=>setDue(e.target.value)} required={type==='RECURRING'} disabled={!!busy}/></Field>
           {type==='RECURRING'&&<Field label="Каждые, мес."><input type="number" min="1" max="120" step="1" inputMode="numeric" value={cadence} onChange={e=>setCadence(e.target.value)} required disabled={!!busy}/></Field>}
         </div>
         {addingCategory&&<div className="s-new-category">
-          <div className="f-form-fields"><Field label="Новая категория"><input aria-label="Название новой категории" autoFocus value={categoryName} maxLength={120} placeholder="Например, Для дома" onChange={e=>setCategoryName(e.target.value)} disabled={!!busy} onKeyDown={e=>{if(e.key==='Enter'){e.preventDefault();void addCategory()}}}/></Field></div>
+          <div className="f-form-fields"><Field label="Новая категория"><input aria-label="Название новой категории" autoFocus value={categoryName} maxLength={80} placeholder="Например, Для дома" onChange={e=>setCategoryName(e.target.value)} disabled={!!busy} onKeyDown={e=>{if(e.key==='Enter'){e.preventDefault();void addCategory()}}}/></Field></div>
           {categoryError&&<div className="s-message s-error" role="alert">{categoryError}</div>}
           <div className="f-actions"><button type="button" className="button secondary" onClick={()=>{setAddingCategory(false);setCategoryError('')}} disabled={!!busy}>Отмена категории</button><button type="button" className="button primary" disabled={!!busy} onClick={()=>void addCategory()}>{busy==='category'?'Добавляем…':'Добавить категорию'}</button></div>
         </div>}
