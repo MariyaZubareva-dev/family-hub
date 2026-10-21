@@ -221,7 +221,10 @@ for(const {width,height} of [{width:320,height:852},{width:393,height:852},{widt
   const check=async(title:string,file:string)=>{
     const d=page.getByRole('dialog',{name:title,exact:true});await expect(d).toBeVisible()
     const first=d.locator('input:not([type=hidden]),textarea,select').first()
-    if(await first.count())await expect(first).toBeFocused()
+    if(await first.count()){
+      await expect(first).toBeFocused()
+      expect(await first.evaluate(el=>parseFloat(getComputedStyle(el).borderTopWidth))).toBe(0)
+    }
     const layout=await d.evaluate(el=>({width:el.getBoundingClientRect().width,scroll:el.scrollWidth,client:el.clientWidth,top:el.getBoundingClientRect().top,bottom:el.getBoundingClientRect().bottom}))
     expect(layout.width).toBeLessThanOrEqual(Math.min(width,480));expect(layout.scroll).toBeLessThanOrEqual(layout.client)
     expect(layout.top).toBeGreaterThanOrEqual(0);expect(layout.bottom).toBeLessThanOrEqual(height)

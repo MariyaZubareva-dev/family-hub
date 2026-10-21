@@ -195,10 +195,10 @@
 .finance-dialog .f-field>span,.f-prepayment-form .f-field>span,.f-budget-month .f-field>span{font-size:12px;font-weight:500;color:#475569}
 .finance-dialog .f-form-pair,.f-prepayment-form .f-form-pair{gap:12px}
 .finance-dialog .f-form-pair>.f-field,.f-prepayment-form .f-form-pair>.f-field{gap:0}
-.finance-dialog :is(input,select,textarea),.finance-page .f-prepayment-form :is(input,select),.finance-page .f-budget-month input{min-height:32px;height:32px;border:0;border-radius:0;background-color:transparent;box-shadow:none;padding:4px 0;font-size:14px;text-align:right}
-.finance-dialog select,.finance-page .f-prepayment-form select{padding-right:20px;background-position:right center}
-.finance-dialog textarea{height:auto;min-height:64px;text-align:left;resize:vertical}
-.finance-dialog :is(input,select,textarea):focus-visible,.finance-page .f-prepayment-form :is(input,select):focus-visible,.finance-page .f-budget-month input:focus-visible{outline:0;box-shadow:none}
+.finance-dialog .f-field :is(input,select,textarea),.finance-page .f-prepayment-form :is(input,select),.finance-page .f-budget-month input{min-height:32px;height:32px;border:0;border-radius:0;background-color:transparent;box-shadow:none;padding:4px 0;font-size:14px;text-align:right}
+.finance-dialog .f-field select,.finance-page .f-prepayment-form select{padding-right:20px;background-position:right center}
+.finance-dialog .f-field textarea{height:auto;min-height:64px;text-align:left;resize:vertical}
+.finance-dialog .f-field :is(input,select,textarea):focus-visible,.finance-page .f-prepayment-form :is(input,select):focus-visible,.finance-page .f-budget-month input:focus-visible{outline:0;box-shadow:none}
 .finance-dialog .f-field:focus-within,.f-prepayment-form .f-field:focus-within,.f-budget-month>.f-field:focus-within{border-bottom-color:var(--primary);box-shadow:0 1px 0 var(--primary)}
 .finance-dialog .f-form>.button:last-child,.finance-dialog .f-form>.f-actions:last-child,.f-prepayment-form>.button{margin-top:12px}
 .finance-dialog .f-form>.f-message{margin-top:8px}
@@ -207,13 +207,13 @@
 .finance-dialog .f-budget-limit:focus-within{border-bottom-color:var(--primary)}
 .f-budget-month>.f-field{margin-bottom:6px}
 @supports(-webkit-touch-callout:none){
-  .finance-dialog :is(input,select,textarea),.finance-page .f-prepayment-form :is(input,select),.finance-page .f-budget-month input{font-size:16px}
+  .finance-dialog .f-field :is(input,select,textarea),.finance-page .f-prepayment-form :is(input,select),.finance-page .f-budget-month input{font-size:16px}
 }
 .finance-dialog .f-head h2{font-size:14px;line-height:1.35}
-.finance-dialog :is(input,select,textarea),.finance-page .f-prepayment-form :is(input,select),.finance-page .f-budget-month input{font-size:13px}
+.finance-dialog .f-field :is(input,select,textarea),.finance-page .f-prepayment-form :is(input,select),.finance-page .f-budget-month input{font-size:13px}
 .f-budget-summary{display:flex;flex-direction:column;gap:0;margin:8px 0}
 .f-budget-summary>div{display:flex;flex-direction:row;align-items:center;justify-content:space-between;gap:8px;min-height:32px;padding:8px 0;border:0;border-bottom:1px solid #F1F1EF;border-radius:0;background:transparent}
 .f-budget-summary small{font-size:12px}
 .f-budget-summary strong{font-size:13px;white-space:nowrap}
-@media(pointer:coarse){.finance-dialog :is(input,select,textarea),.finance-page .f-prepayment-form :is(input,select),.finance-page .f-budget-month input{font-size:14px}}
-@supports(-webkit-touch-callout:none){.finance-dialog :is(input,select,textarea),.finance-page .f-prepayment-form :is(input,select),.finance-page .f-budget-month input{font-size:16px}}
+@media(pointer:coarse){.finance-dialog .f-field :is(input,select,textarea),.finance-page .f-prepayment-form :is(input,select),.finance-page .f-budget-month input{font-size:14px}}
+@supports(-webkit-touch-callout:none){.finance-dialog .f-field :is(input,select,textarea),.finance-page .f-prepayment-form :is(input,select),.finance-page .f-budget-month input{font-size:16px}}
