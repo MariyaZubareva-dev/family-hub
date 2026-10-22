@@ -23,6 +23,7 @@ RUN sed -i "s|https://dl-cdn.alpinelinux.org/alpine|${ALPINE_MIRROR%/}|g" /etc/a
     libzip-dev \
     libpng-dev \
     libjpeg-turbo-dev \
+    libwebp-dev \
     oniguruma-dev \
     postgresql-dev \
     su-exec \
@@ -30,7 +31,7 @@ RUN sed -i "s|https://dl-cdn.alpinelinux.org/alpine|${ALPINE_MIRROR%/}|g" /etc/a
     tesseract-ocr \
     tesseract-ocr-data-rus \
     tesseract-ocr-data-eng \
-    && docker-php-ext-configure gd --with-jpeg \
+    && docker-php-ext-configure gd --with-jpeg --with-webp \
     && docker-php-ext-install \
         gd \
         intl \

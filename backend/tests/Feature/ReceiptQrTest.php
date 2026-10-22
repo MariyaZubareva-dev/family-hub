@@ -53,6 +53,11 @@ class ReceiptQrTest extends TestCase
         try {
             $process=new Process(['qrencode','-o',$path,'-s','8','--',$raw]); $process->mustRun();
             $this->assertSame($this->qr,$fiscal->decode('data:image/png;base64,'.base64_encode(file_get_contents($path))));
+            $source=imagecreatefrompng($path);
+            try {
+                imagewebp($source,$path,100);
+                $this->assertSame($this->qr,$fiscal->decode('data:image/webp;base64,'.base64_encode(file_get_contents($path))));
+            } finally { imagedestroy($source); }
         } finally { @unlink($path); }
         foreach (['https://example.com/?'.$raw,str_replace('20261022','20260230',$raw),str_replace('s=199.80','s=-1',$raw),$raw.'&s=1'] as $invalid) $this->assertNull($fiscal->parse($invalid));
         Http::assertNothingSent();
