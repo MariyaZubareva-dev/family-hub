@@ -22,11 +22,11 @@ class StoreListService
                 foreach($purchases as $purchase) DB::transaction(function()use($purchase,$familyId,&$created,$today){
                     // Lock the source first everywhere (sync, checkbox and regular-purchase actions).
                     $source=PlannedPurchase::whereKey($purchase->id)->lockForUpdate()->first();
-                    if(!$source || $source->status!=='ACTIVE' || $source->type!=='RECURRING' || !$source->due_date || $source->due_date->toDateString()>$today)return;
+                    if(!$source || $source->status!=='ACTIVE' || $source->type!=='RECURRING' || !$source->cadence_months || !$source->due_date || $source->due_date->toDateString()>$today)return;
                     if(StoreListItem::where('recurring_purchase_id',$source->id)->where('is_completed',false)->exists())return;
                     $created+=DB::table('store_list_items')->insertOrIgnore([
                         'id'=>(string)Str::ulid(),'family_id'=>$familyId,'created_by'=>$source->created_by,'name'=>$source->name,
-                        'recurring_purchase_id'=>$source->id,'recurring_due_date'=>$source->due_date->toDateString(),
+                        'recurring_purchase_id'=>$source->id,'recurring_due_date'=>$source->due_date->toDateString(),'notes'=>$source->notes?mb_substr($source->notes,0,500):null,
                         'is_completed'=>false,'created_at'=>now(),'updated_at'=>now(),
                     ]);
                 });
@@ -39,7 +39,7 @@ class StoreListService
         $today=$this->today($item->family_id);
         if(array_key_exists('is_completed',$data))$data['is_completed']=(bool)$data['is_completed'];
         return DB::transaction(function()use($item,$data,$userId,$today){
-            $source=$item->recurring_purchase_id ? PlannedPurchase::whereKey($item->recurring_purchase_id)->lockForUpdate()->first() : null;
+            $source=$item->recurring_purchase_id ? PlannedPurchase::where('family_id',$item->family_id)->whereKey($item->recurring_purchase_id)->lockForUpdate()->first() : null;
             $row=StoreListItem::whereKey($item->id)->lockForUpdate()->firstOrFail();
             $changed=array_key_exists('is_completed',$data) && $data['is_completed']!==$row->is_completed;
             if($changed){

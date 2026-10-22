@@ -5,7 +5,7 @@ type Item={id:string;name:string;quantity?:string|null;notes?:string|null;is_com
 const endpoint='/planned-purchases/store-items'
 const errorText=(e:unknown)=>e instanceof Error?e.message:'Не удалось сохранить изменения. Попробуйте ещё раз.'
 
-export default function StoreList(){
+export default function StoreList({refreshVersion,onBusyChange}:{refreshVersion:number;onBusyChange:(busy:boolean)=>void}){
   const [items,setItems]=useState<Item[]>([]),[loading,setLoading]=useState(true),[busy,setBusy]=useState(false)
   const [error,setError]=useState(''),[formError,setFormError]=useState(''),[show,setShow]=useState(false),[editing,setEditing]=useState<Item|null>(null),[deleting,setDeleting]=useState<Item|null>(null)
   const [name,setName]=useState(''),[quantity,setQuantity]=useState(''),[notes,setNotes]=useState('')
@@ -14,7 +14,8 @@ export default function StoreList(){
     const version=revision.current
     try{const j=await request(endpoint);if(version===revision.current){setItems(j.data||[]);setError('')}}catch(e){if(version===revision.current)setError(errorText(e))}finally{if(version===revision.current)setLoading(false)}
   }
-  useEffect(()=>{void load();return()=>{revision.current++}},[])
+  useEffect(()=>{void load();return()=>{revision.current++}},[refreshVersion])
+  useEffect(()=>{onBusyChange(busy);return()=>onBusyChange(false)},[busy,onBusyChange])
   useEffect(()=>{
     if(busy||show)return
     const refresh=()=>{if(document.visibilityState==='visible')void load()}

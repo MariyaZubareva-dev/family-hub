@@ -32,6 +32,7 @@ const errorText=(e:unknown)=>e instanceof Error?e.message:'Не удалось �
 export default function ShoppingScreen({isAdmin=false}:{isAdmin?:boolean}){
   const [items,setItems]=useState<Purchase[]>([]),[categories,setCategories]=useState<Category[]>([])
   const [type,setType]=useState<Kind|'STORE'>('LARGE'),[show,setShow]=useState(false),[loading,setLoading]=useState(true)
+  const [storeReload,setStoreReload]=useState(0),[storeBusy,setStoreBusy]=useState(false)
   const [name,setName]=useState(''),[category,setCategory]=useState(''),[amount,setAmount]=useState(''),[due,setDue]=useState(''),[cadence,setCadence]=useState('3')
   const [addingCategory,setAddingCategory]=useState(false),[categoryName,setCategoryName]=useState(''),[categoryError,setCategoryError]=useState('')
   const [busy,setBusy]=useState(''),[error,setError]=useState(''),[formError,setFormError]=useState(''),[notice,setNotice]=useState('')
@@ -63,12 +64,12 @@ export default function ShoppingScreen({isAdmin=false}:{isAdmin?:boolean}){
   }
   const shown=items.filter(x=>x.type===type).sort((a,b)=>(a.due_date||'9999').localeCompare(b.due_date||'9999'))
   return <div className="shopping-page">
-    <div className="section-title"><h2>Покупки</h2><button className="s-icon" aria-label="Обновить покупки" disabled={loading||!!busy} onClick={()=>void refresh()}>↻</button></div>
+    <div className="section-title"><h2>Покупки</h2><button className="s-icon" aria-label="Обновить покупки" disabled={loading||!!busy||storeBusy} onClick={()=>{if(type==='STORE')setStoreReload(v=>v+1);else void refresh()}}>↻</button></div>
     <div className="s-tabs" role="tablist" aria-label="Виды покупок">{([['LARGE','Крупные и подарки'],['RECURRING','Регулярные'],['STORE','Магазин']] as [Kind|'STORE',string][]).map(([value,label])=><button key={value} id={'shopping-tab-'+value} role="tab" aria-selected={type===value} aria-controls="shopping-list" onClick={()=>{setType(value);setNotice('');if(value!=='STORE')void refresh()}}>{label}</button>)}</div>
     {error&&<div className="s-message s-error" role="alert">{error}</div>}
     {notice&&<div className="s-message" role="status">{notice}<button className="s-icon" aria-label="Закрыть уведомление" onClick={()=>setNotice('')}>×</button></div>}
     {loading&&<p className="s-empty" role="status">Загружаем покупки…</p>}
-    {type==='STORE'?<StoreList/>:<section className="card" id="shopping-list" role="tabpanel" aria-labelledby={'shopping-tab-'+type}>
+    {type==='STORE'?<StoreList refreshVersion={storeReload} onBusyChange={setStoreBusy}/>:<section className="card" id="shopping-list" role="tabpanel" aria-labelledby={'shopping-tab-'+type}>
       <div className="s-head"><h3>{type==='LARGE'?'Крупные покупки и подарки':'Регулярные покупки'} <span className="s-count">{shown.length}</span></h3><button className="s-add" onClick={open} disabled={loading}>＋ Добавить</button></div>
       {shown.map(x=><article className="s-item" key={x.id}>
         <span className="s-symbol" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d={type==='LARGE'?'M4 7h16v14H4z M8 7V5a4 4 0 0 1 8 0v2':'M4 8a8 8 0 0 1 13-3l3 3 M20 3v5h-5 M20 16a8 8 0 0 1-13 3l-3-3 M4 21v-5h5'}/></svg></span>
