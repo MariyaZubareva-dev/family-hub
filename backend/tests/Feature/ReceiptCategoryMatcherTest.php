@@ -45,16 +45,16 @@ class ReceiptCategoryMatcherTest extends TestCase
 
     public function test_mixed_basket_uses_existing_categories_and_preserves_recognized_values(): void
     {
-        foreach (['Продукты','Здоровье','Дом. хоз-во','Одежда','Покупки'] as $name) $this->category($name);
-        $names=['Молоко 3,2% 1л','Парацетамол 500мг','Шампунь молочный','Футболка хлопок','УЗИ органов','XQ-179'];
+        foreach (['Продукты','Здоровье','Дом. хоз-во','Одежда','Покупки','Мария','Автомобиль'] as $name) $this->category($name);
+        $names=['Молоко 3,2% 1л','Парацетамол 500мг','Шампунь молочный','Футболка хлопок','УЗИ органов','XQ-179','Печенье Мария','Игрушка автомобиль'];
         $result=$this->match($names);
-        $this->assertSame(['Продукты','Здоровье','Дом. хоз-во','Одежда','Здоровье','Покупки'],array_column($result['items'],'category'));
+        $this->assertSame(['Продукты','Здоровье','Дом. хоз-во','Одежда','Здоровье','Покупки','Продукты','Покупки'],array_column($result['items'],'category'));
         $this->assertSame($names,array_column($result['items'],'name'));
         $this->assertSame(123.45,$result['total']); $this->assertSame('2026-10-22',$result['date']);
         foreach ($result['items'] as $item) { $this->assertSame(1.25,$item['qty']); $this->assertSame(98.76,$item['price']); $this->assertTrue($item['needs_review']); }
         $this->assertTrue($result['items'][5]['category_needs_review']);
         $this->assertSame('MANUAL_REVIEW',$result['items'][5]['category_source']);
-        $this->assertDatabaseCount('expense_categories',5); $this->assertDatabaseCount('finance_transactions',0);
+        $this->assertDatabaseCount('expense_categories',7); $this->assertDatabaseCount('finance_transactions',0);
         Http::assertNothingSent();
     }
 

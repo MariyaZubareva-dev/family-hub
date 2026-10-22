@@ -13,6 +13,9 @@ class ReceiptCategoryMatcher
             ->where('transaction_type','EXPENSE')->where('status','ACTIVE')->whereNull('deleted_at')->get(['id','name']);
         $byId = $categories->keyBy('id');
         $byName = $categories->keyBy(fn($c)=>$this->normalize($c->name));
+        // Broad/default labels (including personal names) are not product keywords:
+        // "Печенье Мария" is food, "Игрушка автомобиль" is not a car expense.
+        $genericNames = array_map(fn($name)=>$this->normalize($name),[...CategoryCatalog::EXPENSE_NAMES,'Другое','Прочее']);
         // Learn only from actual expenses belonging to confirmed receipts in this family.
         // Latest confirmed choice wins, including a deliberate manual correction to "Покупки".
         $history = DB::table('finance_transactions as t')->join('receipts as r','r.id','=','t.receipt_id')
@@ -30,7 +33,7 @@ class ReceiptCategoryMatcher
             $source = $category ? 'HISTORY' : 'RULE';
             if (!$category && $name !== '') {
                 // Prefer an unambiguous, explicit custom category name (e.g. "Кофе").
-                $explicit = $categories->filter(fn($c)=>!in_array($this->normalize($c->name),['покупки','другое','прочее'],true)
+                $explicit = $categories->filter(fn($c)=>!in_array($this->normalize($c->name),$genericNames,true)
                     && mb_strlen($this->normalize($c->name))>=3 && $this->contains($name,preg_quote($this->normalize($c->name),'~')));
                 if ($explicit->count()===1) $category=$explicit->first();
                 elseif ($explicit->count()===0) {
