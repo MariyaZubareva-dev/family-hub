@@ -55,7 +55,8 @@ class ReceiptQrTest extends TestCase
             $this->assertSame($this->qr,$fiscal->decode('data:image/png;base64,'.base64_encode(file_get_contents($path))));
             $source=imagecreatefrompng($path);
             try {
-                imagewebp($source,$path,100);
+                imagepalettetotruecolor($source);
+                $this->assertTrue(imagewebp($source,$path,100));
                 $this->assertSame($this->qr,$fiscal->decode('data:image/webp;base64,'.base64_encode(file_get_contents($path))));
             } finally { imagedestroy($source); }
         } finally { @unlink($path); }
