@@ -119,7 +119,7 @@ test('receipt creates and selects expense categories in the list and item editor
   await expect(category).toHaveCount(0)
   await expect(item).toBeVisible()
   await expect(item.getByLabel('Категория',{exact:true})).toHaveValue(state.categories.find(c=>c.name==='Для детей')!.id)
-  await expect(item.getByLabel('Товар 1',{exact:true})).toHaveValue('Молоко')
+  await expect(item.getByRole('textbox',{name:/Товар 1/})).toHaveValue('Молоко')
   await item.getByRole('button',{name:'Готово',exact:true}).click()
   expect(state.transactions).toHaveLength(0)
   await page.getByRole('button',{name:'Подтвердить расходы',exact:true}).click()
