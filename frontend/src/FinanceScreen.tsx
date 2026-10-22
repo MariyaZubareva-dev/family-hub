@@ -1,16 +1,17 @@
 import { useEffect, useLayoutEffect, useId, useRef, useState, type ReactNode, type FormEvent } from 'react'
 import { createPortal } from 'react-dom'
 import './finance.css'
+import CashbackScreen from './CashbackScreen'
 
 type Kind = 'EXPENSE' | 'INCOME'
-type Tab = 'overview' | 'income' | 'categories' | 'receipts' | 'stocks' | 'credits' | 'budget'
+type Tab = 'overview' | 'income' | 'categories' | 'receipts' | 'stocks' | 'credits' | 'budget' | 'cashback'
 type Category = { id:string; name:string; transaction_type:Kind; icon?:string; color?:string }
 type Item = { name:string; qty:number; price:number; category:string; category_id?:string; needs_review?:boolean; category_needs_review?:boolean }
 const money = (value:unknown) => `${Number(value || 0).toLocaleString('ru-RU', { maximumFractionDigits:2 })} ₽`
 const today = () => new Date().toLocaleDateString('sv-SE')
 const dateLabel = (value:string) => value ? new Date(value.slice(0,10)+'T12:00:00').toLocaleDateString('ru-RU') : '—'
 const authorName = (creator?:{first_name?:string;last_name?:string;username?:string}|null) => [creator?.first_name,creator?.last_name].filter(Boolean).join(' ').trim() || (creator?.username?'@'+creator.username:'Не указан')
-const tabs: [Tab,string][] = [['overview','Обзор'],['income','Доходы'],['categories','Категории'],['receipts','Чеки'],['stocks','Запасы'],['credits','Кредиты'],['budget','Бюджет']]
+const tabs: [Tab,string][] = [['overview','Обзор'],['income','Доходы'],['categories','Категории'],['receipts','Чеки'],['stocks','Запасы'],['credits','Кредиты'],['budget','Бюджет'],['cashback','Кешбэк']]
 const inPeriod = (date:string,period:string) => {
   if(period==='all')return true
   const d=new Date(date.slice(0,10)+'T12:00:00'),n=new Date(),start=new Date(n.getFullYear(),period==='year'?0:n.getMonth()-(period==='3m'?2:period==='6m'?5:0),1)
@@ -30,6 +31,7 @@ export async function request(path:string, method='GET', body?:unknown) {
     if (response.status===401) throw new Error('Откройте приложение заново через Telegram.')
     if (response.status===403) throw new Error(json?.code==='SECTION_HIDDEN'?'Администратор ограничил доступ к этому разделу.':'Для этого действия нужны права администратора семьи.')
     if (response.status===413) throw new Error('Фото слишком большое. Выберите изображение меньшего размера.')
+    if (response.status===429) throw new Error('Слишком много запросов. Подождите минуту и попробуйте ещё раз.')
     if (response.status>=500) throw new Error('Сервер временно недоступен. Попробуйте ещё раз позже.')
     const message = Object.values(json?.errors || {}).flat()[0] || json?.message
     if (typeof message==='string' && /[а-яё]/i.test(message) && !/SQLSTATE|Exception|<|>/.test(message)) throw new Error(message)
@@ -100,7 +102,7 @@ function CategorySelect({categories,type='EXPENSE',admin,value,onSelect,onCreate
   </>
 }
 
-export default function FinanceScreen({initialTab='overview',initialReceiptFile,onReceiptConsumed}:{initialTab?:Tab;initialReceiptFile?:File|null;onReceiptConsumed?:()=>void}) {
+export default function FinanceScreen({initialTab='overview',initialReceiptFile,onReceiptConsumed,initialCashbackFiles,onCashbackConsumed}:{initialTab?:Tab;initialReceiptFile?:File|null;onReceiptConsumed?:()=>void;initialCashbackFiles?:File[]|null;onCashbackConsumed?:()=>void}) {
   const [tab,setTab]=useState<Tab>(initialTab), [kind,setKind]=useState<Kind>('EXPENSE')
   const [period,setPeriod]=useState('month'), [categories,setCategories]=useState<Category[]>([])
   const [incomePeriod,setIncomePeriod]=useState('all'),[incomeLimit,setIncomeLimit]=useState(20)
@@ -164,6 +166,7 @@ export default function FinanceScreen({initialTab='overview',initialReceiptFile,
     </section>}
     {tab==='receipts'&&<Receipts initialFile={initialReceiptFile} onConsumed={onReceiptConsumed} ready={!loading&&!error} categories={categories.filter(c=>c.transaction_type==='EXPENSE')} admin={admin} onCategoryCreated={rememberCategory} onSaved={done}/>}
     {tab==='stocks'&&<Stocks allowed={shopping}/>}
+    {tab==='cashback'&&<CashbackScreen initialFiles={initialCashbackFiles} onConsumed={onCashbackConsumed}/>}
     {tab==='credits'&&<Credits admin={admin}/>}
     {tab==='budget'&&<Budget categories={categories.filter(c=>c.transaction_type==='EXPENSE')} admin={admin} onCategoryCreated={rememberCategory} onSaved={done} periodControl={periodControl} income={income} expense={expense}/>}
     </div>

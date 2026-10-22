@@ -2,8 +2,9 @@ import { useEffect, useState } from 'react'
 import { Help, Modal } from './FinanceScreen'
 import { DEFAULT_TIMEZONE, zoneInput, zoneParts } from './lib/timezone'
 import './home.css'
+import { CashbackSummary } from './CashbackScreen'
 
-type Props={apiGet:(path:string)=>Promise<any>;visibility:{calendar:boolean;finance:boolean;shopping:boolean};onCalendar:(kind?:'EVENT'|'REMINDER')=>void;onFinance:(tab:'overview'|'credits')=>void;onReceipt:(file:File)=>void;onFamily:()=>void}
+type Props={apiGet:(path:string)=>Promise<any>;visibility:{calendar:boolean;finance:boolean;shopping:boolean};onCalendar:(kind?:'EVENT'|'REMINDER')=>void;onFinance:(tab:'overview'|'credits'|'cashback')=>void;onReceipt:(file:File)=>void;onCashbackUpload:(files:File[])=>void;onFamily:()=>void}
 const money=(n:unknown)=>Number(n||0).toLocaleString('ru-RU',{style:'currency',currency:'RUB',minimumFractionDigits:0,maximumFractionDigits:2})
 const colors=['#0F766E','#56A99A','#92C7B8','#E7B874','#B799BD','#7894B4']
 function Symbol({kind}:{kind:'camera'|'calendar'|'wallet'}){return <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d={kind==='camera'?'M3 7h4l2-3h6l2 3h4v14H3z M16 13a4 4 0 1 1-8 0 4 4 0 0 1 8 0':kind==='calendar'?'M5 5h14v16H5z M8 3v4 M16 3v4 M5 10h14 M8 14h2 M14 14h2':'M3 6h18v14H3z M3 10h18 M15 15h3 M6 3h12'}/></svg>}
@@ -48,6 +49,7 @@ export default function HomeScreen(p:Props){
       <div className="h-metrics" aria-label="Итоги месяца">{[['Доход',analytics.total_income],['Расход',analytics.total_expense],['Остаток',analytics.balance]].map(([title,value])=><div key={title}><small>{title}</small><strong className={title==='Остаток'?(Number(value)<0?'h-negative':'h-positive'):''}>{money(value)}</strong></div>)}</div></>}
       <label className="button primary h-photo"><Symbol kind="camera"/>Фото чека<input type="file" accept="image/jpeg,image/png,image/webp" capture="environment" aria-label="Фото чека" onChange={e=>{const file=e.target.files?.[0];e.target.value='';if(file)p.onReceipt(file)}}/></label>
     </section>}
+    {p.visibility.finance&&<CashbackSummary onOpen={()=>p.onFinance('cashback')} onUpload={p.onCashbackUpload}/>}
     {p.visibility.calendar&&<section className="card h-plans" aria-label="Планы на сегодня"><div className="h-head"><span className="h-symbol"><Symbol kind="calendar"/></span><h3>Сегодня <span className="h-count">{plans.length}</span></h3><button className="h-link" onClick={()=>p.onCalendar()}>Календарь →</button></div>
       {!loading&&!plans.length&&!errors.some(x=>/Встречи:|Напоминания:/.test(x))&&<p className="h-empty">На сегодня планов пока нет.</p>}
       {plans.map(x=><article className="h-plan" key={x.kind+x.id}><time dateTime={x.at}>{new Date(x.at).toLocaleTimeString('ru-RU',{timeZone:timezone,hour:'2-digit',minute:'2-digit'})}</time><div><small>{x.kind}</small><strong>{x.title}</strong></div></article>)}

@@ -67,8 +67,8 @@ jobs:
           DB_DATABASE: family_hub
           DB_USERNAME: family_hub
           DB_PASSWORD: family_hub
-      - name: Check store and recurring purchase APIs before OCR tool setup
-        run: vendor/bin/phpunit --filter 'StoreListTest|PlannedPurchaseApiTest'
+      - name: Check shopping and cashback APIs before OCR tool setup
+        run: vendor/bin/phpunit --filter 'StoreListTest|PlannedPurchaseApiTest|CashbackBankTest'
         env:
           DB_CONNECTION: pgsql
           DB_HOST: 127.0.0.1
