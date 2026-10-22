@@ -9,6 +9,7 @@ type Item = { name:string; qty:number; price:number; category:string; category_i
 const money = (value:unknown) => `${Number(value || 0).toLocaleString('ru-RU', { maximumFractionDigits:2 })} ₽`
 const today = () => new Date().toLocaleDateString('sv-SE')
 const dateLabel = (value:string) => value ? new Date(value.slice(0,10)+'T12:00:00').toLocaleDateString('ru-RU') : '—'
+const authorName = (creator?:{first_name?:string;last_name?:string;username?:string}|null) => [creator?.first_name,creator?.last_name].filter(Boolean).join(' ').trim() || (creator?.username?'@'+creator.username:'Не указан')
 const tabs: [Tab,string][] = [['overview','Обзор'],['categories','Категории'],['receipts','Чеки'],['stocks','Запасы'],['credits','Кредиты'],['budget','Бюджет']]
 const errorText = (error:unknown) => error instanceof Error ? error.message : 'Не удалось выполнить действие. Попробуйте ещё раз.'
 export async function request(path:string, method='GET', body?:unknown) {
@@ -127,7 +128,7 @@ export default function FinanceScreen({initialTab='overview',initialReceiptFile,
       <section className="card"><Head title="Операции"><Help text="Показаны последние 20 операций выбранного периода. Добавить доход или расход можно кнопками над обзором."/></Head>{transactions.filter(t=>{
         const d=new Date(t.occurred_on),n=new Date(),start=new Date(n.getFullYear(),period==='year'?0:n.getMonth()-(period==='3m'?2:period==='6m'?5:0),1)
         return d>=start&&d<=new Date(n.getFullYear(),n.getMonth()+1,0,23,59,59)&&(!selected||t.type==='EXPENSE'&&t.category===selected)
-      }).slice(0,20).map(t=><div className="f-row" key={t.id}><div className="f-copy"><strong>{t.category}</strong><small>{dateLabel(t.occurred_on)}{t.description?' · '+t.description:''}</small></div><b className={t.type==='INCOME'?'f-positive':''}>{t.type==='INCOME'?'+':'−'}{money(t.amount)}</b></div>)}{!transactions.length&&<Empty>Операций пока нет.</Empty>}</section>
+      }).slice(0,20).map(t=><div className="f-row" key={t.id}><div className="f-copy"><strong>{t.category}</strong><small>{dateLabel(t.occurred_on)}{t.description?' · '+t.description:''} · Автор: {authorName(t.creator)}</small></div><b className={t.type==='INCOME'?'f-positive':''}>{t.type==='INCOME'?'+':'−'}{money(t.amount)}</b></div>)}{!transactions.length&&<Empty>Операций пока нет.</Empty>}</section>
     </>}
     {tab==='categories'&&<section className="card"><Head title="Категории"><Help text={admin?'Здесь создаются категории. Операции вносятся во вкладке «Обзор». Доходы и расходы используют отдельные списки.':'Категории создаёт администратор семьи. Операции можно вносить во вкладке «Обзор».'}/></Head>
       <div className="f-segment"><button aria-pressed={kind==='EXPENSE'} onClick={()=>setKind('EXPENSE')}>Расходы</button><button aria-pressed={kind==='INCOME'} onClick={()=>setKind('INCOME')}>Доходы</button></div>

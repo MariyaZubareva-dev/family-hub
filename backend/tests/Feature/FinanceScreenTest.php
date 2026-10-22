@@ -64,6 +64,27 @@ class FinanceScreenTest extends TestCase
         $this->assertDatabaseCount('finance_transactions',2);
     }
 
+    public function test_transaction_authors_come_from_saved_users_and_are_family_scoped(): void
+    {
+        foreach (['INCOME', 'EXPENSE'] as $type) {
+            $this->actingAs($this->member)->postJson('/api/v1/finances', [
+                'type'=>$type, 'category'=>$type==='INCOME'?'ЗП':'Продукты',
+                'amount'=>100, 'occurred_on'=>today()->toDateString(),
+                'created_by'=>$this->admin->id,
+            ])->assertCreated();
+        }
+        $this->actingAs($this->admin);
+        $other = Family::create(['name'=>'Чужая семья', 'created_by'=>$this->admin->id]);
+        \App\Models\FinanceTransaction::create(['family_id'=>$other->id, 'created_by'=>$this->admin->id, 'type'=>'EXPENSE', 'category'=>'Чужое', 'amount'=>999, 'occurred_on'=>today()->toDateString()]);
+        $rows = $this->getJson('/api/v1/finances')->assertOk()->json('data');
+        $this->assertCount(2, $rows);
+        foreach ($rows as $row) {
+            $this->assertSame($this->member->id, $row['creator']['id']);
+            $this->assertSame('Андрей', $row['creator']['first_name']);
+            $this->assertArrayNotHasKey('telegram_user_id', $row['creator']);
+        }
+    }
+
     public function test_foreign_category_cannot_be_used(): void
     {
         $other = Family::create(['name'=>'Другая','created_by'=>$this->admin->id]);

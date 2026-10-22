@@ -45,6 +45,22 @@ async function mockFinance(page:Page) {
 }
 const tab=(page:Page,name:string)=>page.getByRole('tab',{name,exact:true}).click()
 
+test('transaction list shows authors for income and expenses without overflowing on mobile',async({page})=>{
+  const state=await mockFinance(page)
+  const date=new Date().toLocaleDateString('sv-SE')
+  state.transactions.push(
+    {id:'income',type:'INCOME',category:'ЗП',amount:50000,occurred_on:date,creator:{first_name:'Мария',last_name:'Оченьдлиннаяфамилиябезпробелов'}},
+    {id:'expense',type:'EXPENSE',category:'Продукты',amount:500,occurred_on:date,creator:{username:'andrey'}},
+    {id:'legacy',type:'EXPENSE',category:'Покупки',amount:100,occurred_on:date,creator:null},
+  )
+  await page.setViewportSize({width:320,height:640})
+  await page.goto('/?section=finance')
+  await expect(page.getByText(/Автор: Мария Оченьдлиннаяфамилиябезпробелов/)).toBeVisible()
+  await expect(page.getByText(/Автор: @andrey/)).toBeVisible()
+  await expect(page.getByText(/Автор: Не указан/)).toBeVisible()
+  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth)).toBe(true)
+})
+
 for(const [type,button,title,name] of [['INCOME','＋ Доход','Новый доход','Аренда'],['EXPENSE','＋ Расход','Новый расход','Здоровье']]){
   test(`create ${type} category from transaction without submitting or losing draft`,async({page})=>{
     const state=await mockFinance(page)
