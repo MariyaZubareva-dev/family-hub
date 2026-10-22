@@ -67,7 +67,7 @@ jobs:
           DB_DATABASE: family_hub
           DB_USERNAME: family_hub
           DB_PASSWORD: family_hub
-      - run: sudo apt-get update -qq && sudo apt-get install -y tesseract-ocr tesseract-ocr-rus tesseract-ocr-eng
+      - run: sudo apt-get update -qq && sudo apt-get install -y tesseract-ocr tesseract-ocr-rus tesseract-ocr-eng zbar-tools qrencode
       - run: vendor/bin/phpunit
         env:
           DB_CONNECTION: pgsql

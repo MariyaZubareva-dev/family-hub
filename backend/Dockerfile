@@ -26,6 +26,7 @@ RUN sed -i "s|https://dl-cdn.alpinelinux.org/alpine|${ALPINE_MIRROR%/}|g" /etc/a
     oniguruma-dev \
     postgresql-dev \
     su-exec \
+    zbar \
     tesseract-ocr \
     tesseract-ocr-data-rus \
     tesseract-ocr-data-eng \

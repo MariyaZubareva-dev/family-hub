@@ -335,10 +335,12 @@ class FinanceCoreController extends FinanceBaseController
             if ($reviewPayload) $insert['review_payload'] = $reviewPayload;
         } catch(\Throwable $e){}
         DB::table('receipts')->insert($insert);
-        $this->tryAnalyzeReceipt($id,$m->family_id);
+        $originalId=$id;
+        $id=$this->tryAnalyzeReceipt($id,$m->family_id);
         $row=DB::table('receipts')->where('id',$id)->first();
         $arr = (array)$row;
         $arr['can_edit'] = $m->role === 'ADMIN' || $row->uploaded_by === $m->user_id;
+        $arr['duplicate'] = $id !== $originalId;
         unset($arr['image_data']);
         $arr['ai_result']=$row->ai_result?json_decode($row->ai_result,true):null;
         if (isset($row->review_payload) && $row->review_payload) $arr['review_payload']=is_string($row->review_payload)?json_decode($row->review_payload,true):$row->review_payload;
@@ -378,7 +380,7 @@ class FinanceCoreController extends FinanceBaseController
         // Try to update review_payload if column exists, else fallback to ai_result
         $updated = false;
         try {
-            DB::table('receipts')->where('id',$receipt)->whereNull('deleted_at')->update(['review_payload'=>json_encode($payload,JSON_UNESCAPED_UNICODE),'updated_at'=>now()]);
+            DB::table('receipts')->where('id',$receipt)->whereNull('deleted_at')->update(['review_payload'=>json_encode($payload,JSON_UNESCAPED_UNICODE),'qr_state'=>$row->qr_state==='WAITING'?'MANUAL':$row->qr_state,'qr_next_attempt_at'=>null,'updated_at'=>now()]);
             $updated = true;
         } catch(\Throwable $e){
             // Fallback: store in ai_result under review key
@@ -406,6 +408,8 @@ class FinanceCoreController extends FinanceBaseController
         if ($status === 'CONFIRMED') {
             return response()->json(['message'=>'Чек уже подтверждён','data'=>(array)$row], 409);
         }
+        $qr=json_decode($row->qr_data ?? '',true);
+        abort_if($qr && ($qr['n'] ?? '1') !== '1',422,'Это чек возврата или другой операции. Его нельзя сохранить как расход по покупке.');
         $d=$request->validate([
             'merchant'=>'nullable|string|max:255',
             'total'=>'nullable|numeric|min:0',
@@ -471,7 +475,7 @@ class FinanceCoreController extends FinanceBaseController
                 $createdIds[] = $id;
             }
             // Update receipt as confirmed
-            $update = ['ocr_status'=>'CONFIRMED','updated_at'=>now()];
+            $update = ['ocr_status'=>'CONFIRMED','qr_state'=>$locked->qr_state==='WAITING'?'MANUAL':$locked->qr_state,'qr_next_attempt_at'=>null,'updated_at'=>now()];
             try { $update['confirmed_at']=now(); } catch(\Throwable $e){}
             // Store review_payload final
             $payload = ['receipt_total'=>$d['receipt_total'],'merchant'=>$d['merchant']??null,'total'=>$d['total']??null,'date'=>$date,'currency'=>$d['currency']??'RUB','items'=>$d['items']];
@@ -519,19 +523,46 @@ class FinanceCoreController extends FinanceBaseController
         $row = $this->ownedRow('receipts', $receipt, $m->family_id);
         abort_unless($m->role === 'ADMIN' || $row->uploaded_by === $m->user_id, 403);
         abort_if($row->ocr_status === 'CONFIRMED', 409, 'Чек уже подтверждён.');
-        $this->tryAnalyzeReceipt($receipt, $m->family_id);
-        return $this->receiptShow($request, $receipt);
+        $resolved=$this->tryAnalyzeReceipt($receipt, $m->family_id);
+        return $this->receiptShow($request, $resolved);
     }
 
-    private function tryAnalyzeReceipt(string $id, string $familyId): void
+    private function tryAnalyzeReceipt(string $id, string $familyId): string
     {
         $row = DB::table('receipts')->where('id', $id)->where('family_id', $familyId)->whereNull('deleted_at')->first();
-        if (!$row) return;
-        $result = app(\App\Services\Finance\ReceiptRecognizer::class)->recognize($row->image_data);
-        DB::table('receipts')->where('id', $id)->whereNull('deleted_at')->where('ocr_status', '!=', 'CONFIRMED')->update([
-            'ocr_status' => $result['status'], 'ocr_text' => $result['text'],
-            'review_payload' => json_encode($result['payload'], JSON_UNESCAPED_UNICODE), 'updated_at' => now(),
-        ]);
+        if (!$row) return $id;
+        $qr=app(\App\Services\Finance\FiscalQr::class)->decode($row->image_data);
+        if ($qr) {
+            $existing=DB::table('receipts')->where('family_id',$familyId)->where('qr_fingerprint',app(\App\Services\Finance\FiscalQr::class)->fingerprint($qr))->whereNull('deleted_at')->where('id','!=',$id)->first();
+            if ($existing) {
+                DB::table('receipts')->where('id',$id)->whereNull('deleted_at')->where('ocr_status','!=','CONFIRMED')->update(['deleted_at'=>now(),'image_data'=>null,'qr_next_attempt_at'=>null,'updated_at'=>now()]);
+                return $existing->id;
+            }
+        }
+        $result = app(\App\Services\Finance\ReceiptRecognizer::class)->recognize($row->image_data,$qr);
+        return DB::transaction(function() use ($result,$id,$familyId,$row) {
+            // Serialize fingerprint assignment within this family, including parallel uploads.
+            DB::table('families')->where('id',$familyId)->lockForUpdate()->first();
+            $current=DB::table('receipts')->where('id',$id)->whereNull('deleted_at')->lockForUpdate()->first();
+            if (!$current || $current->ocr_status==='CONFIRMED' || $current->updated_at!==$row->updated_at || $current->qr_state!==$row->qr_state) return $id;
+            $qr=$result['qr_data'] ?? null;
+            $fingerprint=$qr?app(\App\Services\Finance\FiscalQr::class)->fingerprint($qr):null;
+            if ($fingerprint) {
+                $existing=DB::table('receipts')->where('family_id',$familyId)->where('qr_fingerprint',$fingerprint)->whereNull('deleted_at')->where('id','!=',$id)->first();
+                if ($existing) {
+                    DB::table('receipts')->where('id',$id)->update(['deleted_at'=>now(),'image_data'=>null,'qr_next_attempt_at'=>null,'updated_at'=>now()]);
+                    return $existing->id;
+                }
+            }
+            DB::table('receipts')->where('id',$id)->update([
+                'ocr_status'=>$result['status'],'ocr_text'=>$result['text'],
+                'review_payload'=>json_encode($result['payload'],JSON_UNESCAPED_UNICODE),
+                'qr_data'=>$qr?json_encode($qr):null,'qr_fingerprint'=>$fingerprint,
+                'qr_state'=>$result['qr_state'] ?? null,'qr_attempts'=>1,
+                'qr_next_attempt_at'=>($result['qr_state'] ?? '')==='WAITING'?now()->addMinute():null,'updated_at'=>now(),
+            ]);
+            return $id;
+        });
     }
 
     private function ownedRow(string $table,string $id,string $familyId): object { $query=DB::table($table)->where('id',$id)->where('family_id',$familyId); if ($table === 'receipts') $query->whereNull('deleted_at'); $row=$query->first(); abort_unless($row,404); return $row; }

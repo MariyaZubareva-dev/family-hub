@@ -7,8 +7,17 @@ use Symfony\Component\Process\Process;
 
 class ReceiptRecognizer
 {
-    public function recognize(string $image): array
+    public function recognize(string $image, ?array $knownQr=null): array
     {
+        $qr = $knownQr ?? app(FiscalQr::class)->decode($image);
+        $lookup = $qr ? app(QrReceiptProvider::class)->fetch($qr) : null;
+        if ($qr && $qr['n'] !== '1') $lookup = ['state'=>'UNSUPPORTED'];
+        if ($qr && $lookup['state'] !== 'NOT_CONFIGURED') {
+            $payload = $lookup['payload'] ?? app(FiscalQr::class)->payload($qr);
+            $payload['recognizer_version'] = 'qr-v1';
+            return ['text'=>'', 'payload'=>$payload, 'qr_data'=>$qr, 'qr_state'=>$lookup['state'],
+                'status'=>$lookup['state']==='WAITING'?'AWAITING_DATA':($this->isBalanced($payload)?'COMPLETED':'NEEDS_REVIEW')];
+        }
         $text = '';
         $tmp = tempnam(sys_get_temp_dir(), 'receipt_');
         try {
@@ -54,7 +63,13 @@ class ReceiptRecognizer
         }
         $payload['recognizer_version'] = 'numbered-v2';
         $payload['receipt_total'] = $payload['total'];
-        return ['text' => $text, 'payload' => $payload, 'status' => $this->isBalanced($payload) ? 'COMPLETED' : 'NEEDS_REVIEW'];
+        $payload['recognition_source'] = 'OCR';
+        if ($qr) {
+            // The QR amount and calendar date are exact even when an API token is not configured.
+            $fiscal = app(FiscalQr::class)->payload($qr);
+            $payload['total'] = $fiscal['total']; $payload['receipt_total'] = $fiscal['total']; $payload['date'] = $fiscal['date'];
+        }
+        return ['text' => $text, 'payload' => $payload, 'status' => $this->isBalanced($payload) ? 'COMPLETED' : 'NEEDS_REVIEW', 'qr_data'=>$qr, 'qr_state'=>$lookup['state'] ?? null];
     }
 
     private function prepareOcrImage(string $path, string $bytes): void
