@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { Field, Help, Modal, request } from './FinanceScreen'
-import { bankKey, bestCashback, categoryKey, flattenCashback, isCurrentCashback, mergeCashback, ownerName, unitLabel, type CashbackBank, type CashbackEntry } from './lib/cashback'
+import { bankKey, bestCashback, categoryKey, flattenCashback, isCurrentCashback, mergeCashback, ownerName, unitLabel, type CashbackBank, type CashbackEntry, type CashbackRow } from './lib/cashback'
 import './cashback.css'
 
 const endpoint='/finance/cashback-banks'
@@ -28,6 +28,7 @@ export function CashbackSummary({onOpen,onUpload}:{onOpen:()=>void;onUpload:(fil
 export default function CashbackScreen({initialFiles,onConsumed}:{initialFiles?:File[]|null;onConsumed?:()=>void}){
   const [month,setMonth]=useState(''),[meta,setMeta]=useState<Meta|null>(null),[banks,setBanks]=useState<CashbackBank[]>([]),[loading,setLoading]=useState(true),[error,setError]=useState(''),[notice,setNotice]=useState('')
   const [mine,setMine]=useState(false),[bank,setBank]=useState(''),[search,setSearch]=useState('')
+  const [showAll,setShowAll]=useState(false)
   const [draft,setDraft]=useState<Draft|null>(null),[busy,setBusy]=useState(false),[progress,setProgress]=useState(''),[formError,setFormError]=useState(''),[review,setReview]=useState(false),[deleting,setDeleting]=useState<CashbackBank|null>(null)
   const [importNotice,setImportNotice]=useState('')
   const generation=useRef(0),consumed=useRef<File[]|null>(null)
@@ -87,7 +88,10 @@ export default function CashbackScreen({initialFiles,onConsumed}:{initialFiles?:
     try{await request(endpoint+'/'+deleting.id,'DELETE',{revision:deleting.revision});setDeleting(null);setDraft(null);setNotice('Категории банка за этот месяц удалены.');await load()}catch(e){setFormError(failure(e))}finally{setBusy(false)}
   }
   const filtered=banks.filter(row=>(!mine||row.created_by===meta?.user_id)&&(!bank||bankKey(row.bank_name)===bank))
-  const rows=flattenCashback(filtered).filter(row=>(row.category+' '+row.bank.bank_name+' '+ownerName(row.bank)).toLocaleLowerCase().includes(search.toLocaleLowerCase())).sort((a,b)=>categoryKey(a.category).localeCompare(categoryKey(b.category),'ru')||Number(b.rate)-Number(a.rate))
+  const eligible=(row:CashbackRow)=>!!meta&&(row.bank.month===meta.today.slice(0,7)?isCurrentCashback(row,meta.today):row.active&&Number(row.cap_amount??1)>0)
+  const rows=flattenCashback(filtered).filter(row=>(showAll||eligible(row))&&(row.category+' '+row.bank.bank_name+' '+ownerName(row.bank)).toLocaleLowerCase().includes(search.toLocaleLowerCase())).sort((a,b)=>Number(eligible(b))-Number(eligible(a))||Number(b.reward_unit==='RUB')-Number(a.reward_unit==='RUB')||Number(b.rate)-Number(a.rate))
+  const groups=new Map<string,CashbackRow[]>()
+  for(const row of rows){const key=categoryKey(row.category);groups.set(key,[...(groups.get(key)||[]),row])}
   const winners=new Set(meta?bestCashback(flattenCashback(filtered),meta.today).map(row=>row.bank.id+':'+row.index):[])
   return <div className="cb-page">
     <section className="card"><div className="f-head"><h3>Кешбэк семьи</h3><Help label="Как пользоваться кешбэком" text="Добавьте название банка и скриншоты выбранных категорий. Автор станет владельцем записи. Все участники с доступом к Финансам видят сводку; изменить её может автор или администратор. Лучшей отмечаем ставку в рублях среди действующих выбранных категорий. Лимит, MCC и условия банка проверяйте перед оплатой. Баллы и мили сравнивайте отдельно."/></div>
@@ -97,12 +101,14 @@ export default function CashbackScreen({initialFiles,onConsumed}:{initialFiles?:
     </section>
     <section className="card"><div className="f-head"><h3>Сводка по категориям</h3><button className="f-icon" aria-label="Обновить кешбэк" disabled={loading||busy} onClick={()=>void load()}>↻</button></div>
       <div className="cb-filters"><Field label="Поиск кешбэка"><input type="search" placeholder="Категория, банк или имя" value={search} onChange={e=>setSearch(e.target.value)}/></Field><Field label="Банк в сводке"><select value={bank} onChange={e=>setBank(e.target.value)}><option value="">Все банки</option>{Array.from(new Map(banks.map(row=>[bankKey(row.bank_name),row.bank_name])).entries()).map(([key,name])=><option key={key} value={key}>{name}</option>)}</select></Field></div>
-      {loading?<p className="f-loading" role="status">Загружаем категории…</p>:rows.length?<table className="cb-table"><caption className="cb-sr">Кешбэк банков за {currentMonth&&monthLabel(currentMonth)}</caption><thead><tr><th>Категория</th><th>Банк</th><th>Ставка</th><th>Владелец</th><th>Условия</th></tr></thead><tbody>{rows.map(row=><tr key={row.bank.id+':'+row.index} className={winners.has(row.bank.id+':'+row.index)?'cb-winner':''}>
-        <td className="cb-category"><strong>{row.category}</strong>{winners.has(row.bank.id+':'+row.index)&&<small>Лучшая ставка</small>}</td>
-        <td className="cb-bank">{row.bank.can_edit?<button aria-label={`Изменить кешбэк: ${row.bank.bank_name}, ${ownerName(row.bank)}`} onClick={()=>start(row.bank)}>{row.bank.bank_name} ✎</button>:row.bank.bank_name}</td>
-        <td className="cb-rate"><b>{row.rate}%</b><small>{unitLabel(row.reward_unit)}</small></td><td className="cb-owner">{ownerName(row.bank)}</td>
-        <td className="cb-terms"><details><summary>{!row.active?'Не выбрана в банке':meta&&row.bank.month===meta.today.slice(0,7)&&!isCurrentCashback(row,meta.today)?'Сейчас не действует':'Условия'}</summary><p>{row.active?'Выбрана в банке.':'Не участвует в рекомендациях до выбора в банке.'}</p><p>{row.valid_from||row.bank.month+'-01'} — {row.valid_to||new Date(Number(row.bank.month.slice(0,4)),Number(row.bank.month.slice(5,7)),0).toLocaleDateString('sv-SE')}</p><p>{row.cap_amount===null?'Лимит не указан':`Лимит вознаграждения: ${row.cap_amount} ${row.reward_unit==='RUB'?'₽':unitLabel(row.reward_unit)}`}. Остаток лимита неизвестен.</p>{row.notes&&<p>{row.notes}</p>}</details></td>
-      </tr>)}</tbody></table>:<p className="f-empty">{banks.length?'По этим фильтрам категорий нет.':'Добавьте банк и категории кешбэка на выбранный месяц.'}</p>}
+      <div className="f-segment" aria-label="Статус категорий кешбэка"><button aria-pressed={!showAll} onClick={()=>setShowAll(false)}>{meta&&currentMonth!==meta.today.slice(0,7)?'Выбранные':'Действующие'}</button><button aria-pressed={showAll} onClick={()=>setShowAll(true)}>Все</button></div>
+      {loading?<p className="f-loading" role="status">Загружаем категории…</p>:rows.length?<div className="cb-groups" role="list" aria-label="Категории кешбэка">{[...groups.entries()].sort(([a],[b])=>a.localeCompare(b,'ru')).map(([key,offers])=>{
+        const lead=offers[0],winner=winners.has(lead.bank.id+':'+lead.index)
+        return <div role="listitem" key={key}><details className="cb-group"><summary className="cb-group-head"><span className="cb-group-copy"><strong>{lead.category}</strong><small>{lead.bank.bank_name} · {ownerName(lead.bank)}</small><span className="cb-group-hint">{offers.length>1?`Сравнить предложения · ${offers.length}`:'Условия и редактирование'}</span></span><span className={'cb-group-rate'+(winner?' cb-group-best':'')}><b>{Number(lead.rate).toLocaleString('ru-RU')}%</b><small>{unitLabel(lead.reward_unit)}</small>{!eligible(lead)&&<small>Не действует</small>}</span><span className="cb-chevron" aria-hidden="true">⌄</span></summary>
+          <div className="cb-offers">{offers.map(row=><article className="cb-offer" key={row.bank.id+':'+row.index}><div className="cb-offer-head"><div className="cb-group-copy"><strong>{row.bank.bank_name}</strong><small>{ownerName(row.bank)}{winners.has(row.bank.id+':'+row.index)?' · Лучшая ставка':''}</small></div><span className="cb-group-rate"><b>{Number(row.rate).toLocaleString('ru-RU')}%</b><small>{unitLabel(row.reward_unit)}</small></span>{row.bank.can_edit&&<button className="cb-edit" aria-label={`Изменить кешбэк: ${row.bank.bank_name}, ${ownerName(row.bank)}`} onClick={()=>start(row.bank)}>✎</button>}</div>
+          <details className="cb-terms"><summary>{!row.active?'Не выбрана в банке':!eligible(row)?'Сейчас не действует':'Лимит и условия'}</summary><p>{row.valid_from||row.bank.month+'-01'} — {row.valid_to||new Date(Number(row.bank.month.slice(0,4)),Number(row.bank.month.slice(5,7)),0).toLocaleDateString('sv-SE')}</p><p>{row.cap_amount===null?'Лимит не указан':`Лимит вознаграждения: ${row.cap_amount} ${row.reward_unit==='RUB'?'₽':row.reward_unit==='POINTS'?'баллов':'миль'}`}. Остаток лимита неизвестен.</p>{row.notes&&<p>{row.notes}</p>}</details></article>)}</div>
+        </details></div>
+      })}</div>:<p className="f-empty">{banks.length?'По этим фильтрам категорий нет. Другие предложения доступны в режиме «Все».':'Добавьте банк и категории кешбэка на выбранный месяц.'}</p>}
     </section>
     {draft&&<Modal title={draft.record?'Изменить кешбэк банка':'Добавить кешбэк банка'} onClose={()=>{setDraft(null);setFormError('')}} busy={busy}><form className="f-form cb-editor" onSubmit={save}>
       {importNotice&&<p className="f-message" role="status">{importNotice}</p>}
