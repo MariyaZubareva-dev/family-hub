@@ -83,7 +83,7 @@ class PlannedPurchaseController extends BaseApiController
             return response()->json(['message' => 'Для регулярной покупки укажите дату и периодичность.'], 422);
         }
 
-        $plannedPurchase->update($data);
+        $plannedPurchase->update([...$data,'purchase_revision'=>\Illuminate\Support\Facades\DB::raw('purchase_revision + 1')]);
         return response()->json(['data' => $plannedPurchase->fresh()->load('creator')]);
     }
 
@@ -101,14 +101,10 @@ class PlannedPurchaseController extends BaseApiController
         abort_unless($plannedPurchase->type === 'RECURRING', 422, 'Отметить покупку можно только в регулярном списке.');
         abort_if(!$plannedPurchase->cadence_months, 422, 'Укажите периодичность перед отметкой о покупке.');
 
-        $data = $request->validate(['purchased_on' => ['nullable', 'date', 'before_or_equal:today']]);
-        $purchasedOn = Carbon::parse($data['purchased_on'] ?? today());
-        $plannedPurchase->update([
-            'last_purchased_at' => $purchasedOn->toDateString(),
-            'due_date' => $purchasedOn->copy()->addMonthsNoOverflow((int) $plannedPurchase->cadence_months)->toDateString(),
-        ]);
-
-        return response()->json(['data' => $plannedPurchase->fresh()->load('creator')]);
+        $service=app(\App\Services\StoreListService::class);
+        $today=$service->today($member->family_id);
+        $data = $request->validate(['purchased_on' => ['nullable', 'date', 'before_or_equal:'.$today]]);
+        return response()->json(['data'=>$service->purchased($plannedPurchase,$data['purchased_on'] ?? $today,$member->user_id)]);
     }
 
     private function validated(Request $request, bool $required = true): array

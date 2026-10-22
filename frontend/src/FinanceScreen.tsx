@@ -11,7 +11,7 @@ const today = () => new Date().toLocaleDateString('sv-SE')
 const dateLabel = (value:string) => value ? new Date(value.slice(0,10)+'T12:00:00').toLocaleDateString('ru-RU') : '—'
 const tabs: [Tab,string][] = [['overview','Обзор'],['categories','Категории'],['receipts','Чеки'],['stocks','Запасы'],['credits','Кредиты'],['budget','Бюджет']]
 const errorText = (error:unknown) => error instanceof Error ? error.message : 'Не удалось выполнить действие. Попробуйте ещё раз.'
-async function request(path:string, method='GET', body?:unknown) {
+export async function request(path:string, method='GET', body?:unknown) {
   const headers:Record<string,string> = { 'Content-Type':'application/json', Accept:'application/json' }
   const initData = (window as any).Telegram?.WebApp?.initData
   if (initData) headers['X-Telegram-Init-Data'] = initData
