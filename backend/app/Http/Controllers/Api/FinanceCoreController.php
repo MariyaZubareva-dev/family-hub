@@ -366,6 +366,7 @@ class FinanceCoreController extends FinanceBaseController
             'items.*.price'=>'required_with:items|numeric|min:0',
             'items.*.category'=>'nullable|string|max:120',
             'items.*.category_id'=>'nullable|string',
+            'items.*.category_needs_review'=>'sometimes|boolean',
         ]);
         $previous = $row->review_payload ? json_decode($row->review_payload, true) : [];
         $receiptTotal = array_key_exists('receipt_total', $d) ? $d['receipt_total'] : ($previous['receipt_total'] ?? $previous['total'] ?? null);
@@ -540,6 +541,7 @@ class FinanceCoreController extends FinanceBaseController
             }
         }
         $result = app(\App\Services\Finance\ReceiptRecognizer::class)->recognize($row->image_data,$qr);
+        $result['payload'] = app(\App\Services\Finance\ReceiptCategoryMatcher::class)->categorize($familyId,$result['payload']);
         return DB::transaction(function() use ($result,$id,$familyId,$row) {
             // Serialize fingerprint assignment within this family, including parallel uploads.
             DB::table('families')->where('id',$familyId)->lockForUpdate()->first();

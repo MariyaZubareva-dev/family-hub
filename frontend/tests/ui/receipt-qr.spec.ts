@@ -1,5 +1,41 @@
 import { expect, test } from '@playwright/test'
 
+test('suggested item categories stay editable and an unmatched item requires a deliberate choice',async({page})=>{
+  let confirms=0
+  const receipt={id:'classified',can_edit:true,ocr_status:'COMPLETED',qr_state:'READY',created_at:'2026-10-22',review_payload:{merchant:'Магазин',date:'2026-10-22',receipt_total:300,total:300,items:[
+    {name:'Молоко',qty:1,price:100,category:'Продукты',category_id:'c0',category_needs_review:false},
+    {name:'Таблетки',qty:1,price:100,category:'Здоровье',category_id:'c1',category_needs_review:false},
+    {name:'XQ-179',qty:1,price:100,category:'',category_id:null,category_needs_review:true},
+  ]}}
+  await page.route('**/api/v1/**',async route=>{
+    const req=route.request(),path=new URL(req.url()).pathname.replace('/api/v1','')
+    let data:any=[]
+    if(path==='/me')data={family:{id:'f1',role:'ADMIN'}}
+    else if(path==='/finance/categories')data=['Продукты','Здоровье','Покупки'].map((name,i)=>({id:'c'+i,name,transaction_type:'EXPENSE'}))
+    else if(path==='/finance/analytics')data={total_income:0,total_expense:0,ranked:[],trend:[]}
+    else if(path==='/finance/receipts')data=[receipt]
+    else if(path==='/finance/receipts/classified')data=receipt
+    else if(path==='/finance/receipts/classified/confirm'){
+      expect(req.postDataJSON().items.map((i:any)=>i.category_id)).toEqual(['c0','c2','c2'])
+      confirms++;data={total_amount:300,created_count:3}
+    }
+    await route.fulfill({json:{data}})
+  })
+  await page.goto('/?section=finance');await page.getByRole('tab',{name:'Чеки',exact:true}).click()
+  await page.getByRole('button',{name:/Магазин.*Проверьте позиции/}).click()
+  await expect(page.getByLabel('Категория позиции 1',{exact:true})).toHaveValue('c0')
+  await expect(page.getByLabel('Категория позиции 2',{exact:true})).toHaveValue('c1')
+  await expect(page.getByLabel('Категория позиции 3',{exact:true})).toHaveValue('')
+  await expect(page.getByText('Выберите категорию позиции 3.',{exact:true})).toBeVisible()
+  await expect(page.getByRole('button',{name:'Подтвердить расходы',exact:true})).toBeDisabled()
+  expect(confirms).toBe(0)
+  await page.getByLabel('Категория позиции 2',{exact:true}).selectOption('c2')
+  await page.getByLabel('Категория позиции 3',{exact:true}).selectOption('c2')
+  await page.getByRole('button',{name:'Подтвердить расходы',exact:true}).click()
+  await expect(page.getByText('Чек подтверждён. Добавлены расходы на 300 ₽.',{exact:true})).toBeVisible()
+  expect(confirms).toBe(1)
+})
+
 test('waiting electronic receipt updates to editable positions and confirms once',async({page})=>{
   await page.setViewportSize({width:320,height:852})
   await page.clock.install()

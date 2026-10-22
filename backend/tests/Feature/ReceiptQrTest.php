@@ -66,9 +66,11 @@ class ReceiptQrTest extends TestCase
 
     public function test_receipt_uses_electronic_items_and_requires_confirmation(): void
     {
+        $categories=$this->getJson('/api/v1/finance/categories')->assertOk()->json('data');
+        $food=collect($categories)->firstWhere('name','Продукты');
         $this->mockQr(); Http::fake(['proverkacheka.com/*'=>Http::response(['code'=>1,'data'=>['json'=>$this->data()]])]);
         $id=$this->upload()->assertCreated()->assertJsonPath('data.qr_state','READY')->assertJsonPath('data.review_payload.items.0.qty',2)
-            ->assertJsonPath('data.review_payload.items.0.price',99.9)->assertJsonPath('data.review_payload.receipt_total',199.8)->json('data.id');
+            ->assertJsonPath('data.review_payload.items.0.price',99.9)->assertJsonPath('data.review_payload.items.0.category_id',$food['id'])->assertJsonPath('data.review_payload.receipt_total',199.8)->json('data.id');
         $this->assertDatabaseCount('finance_transactions',0);
         Http::assertSent(fn($request)=>$request->url()==='https://proverkacheka.com/api/v1/check/get' && $request['fd']==='123' && $request['token']==='secret-test-token' && !isset($request['image_data']));
         $this->getJson('/api/v1/finance/categories')->assertOk();
@@ -105,11 +107,12 @@ class ReceiptQrTest extends TestCase
 
     public function test_waiting_receipt_is_refreshed_in_background_without_creating_expenses(): void
     {
+        $this->getJson('/api/v1/finance/categories')->assertOk();
         $this->mockQr(); Http::fake(['proverkacheka.com/*'=>Http::sequence()->push(['code'=>2])->push(['code'=>1,'data'=>['json'=>$this->data()]])]);
         $id=$this->upload()->assertCreated()->assertJsonPath('data.ocr_status','AWAITING_DATA')->assertJsonPath('data.review_payload.items',[])->json('data.id');
         $this->travel(2)->minutes();
         $this->artisan('family:refresh-qr-receipts')->assertSuccessful();
-        $this->getJson("/api/v1/finance/receipts/$id")->assertJsonPath('data.qr_state','READY')->assertJsonPath('data.review_payload.items.0.name','Молоко');
+        $this->getJson("/api/v1/finance/receipts/$id")->assertJsonPath('data.qr_state','READY')->assertJsonPath('data.review_payload.items.0.name','Молоко')->assertJsonPath('data.review_payload.items.0.category','Продукты');
         $this->assertDatabaseCount('finance_transactions',0);
     }
 
