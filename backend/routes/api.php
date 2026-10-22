@@ -3,6 +3,11 @@ use App\Http\Controllers\Api\CreditController;use App\Http\Controllers\Api\Event
 Route::prefix('v1')->group(function(){
  Route::get('/health',fn()=>response()->json(['ok'=>true,'service'=>'family-hub-api','version'=>'0.6.0']));
  Route::middleware([TelegramAuthenticate::class, \App\Http\Middleware\FamilySectionAccess::class])->group(function(){
+  Route::post('/credits/{credit}/payments',[\App\Http\Controllers\Api\CreditLedgerController::class,'storePayment']);
+  Route::patch('/credit-payments/{payment}',[\App\Http\Controllers\Api\CreditLedgerController::class,'updatePayment']);
+  Route::delete('/credit-payments/{payment}',[\App\Http\Controllers\Api\CreditLedgerController::class,'destroyPayment']);
+  Route::put('/credits/{credit}/bank-schedule',[\App\Http\Controllers\Api\CreditLedgerController::class,'bankSchedule']);
+  Route::post('/credits/{credit}/forecast',[\App\Http\Controllers\Api\CreditLedgerController::class,'forecast']);
   Route::get('/finance/cashback-banks',[\App\Http\Controllers\Api\CashbackBankController::class,'index']);
   Route::post('/finance/cashback-banks/recognize',[\App\Http\Controllers\Api\CashbackBankController::class,'recognize'])->middleware('throttle:12,1');
   Route::post('/finance/cashback-banks',[\App\Http\Controllers\Api\CashbackBankController::class,'store']);

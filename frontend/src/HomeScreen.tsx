@@ -36,6 +36,7 @@ export default function HomeScreen(p:Props){
   const sum=cats.reduce((s:number,c:any)=>s+c.amount,0);let offset=0
   const gradient=cats.map((c:any,i:number)=>{const start=offset;offset+=c.amount/sum*100;return `${colors[i]} ${start}% ${offset}%`}).join(',')
   const next=credits.map(c=>{
+    if(c.summary){const next=c.summary.next_payment;return next?{...c,date:new Date(next.date+'T12:00:00'),amount:Number(next.amount)}:null}
     const [y,m,day]=String(c.first_payment_date).slice(0,10).split('-').map(Number);if(!y||!m||!day)return null
     const n=zoneParts(new Date(),timezone);const add=(i:number)=>{const ix=y*12+m-1+i,yr=Math.floor(ix/12),mo=ix%12;return new Date(yr,mo,Math.min(day,new Date(yr,mo+1,0).getDate()))}
     let i=Math.max(0,(n.year-y)*12+n.month-m);let date=add(i);if(date<new Date(n.year,n.month-1,n.day)){date=add(++i)}

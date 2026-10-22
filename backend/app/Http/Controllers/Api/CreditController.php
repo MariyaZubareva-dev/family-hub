@@ -16,11 +16,12 @@ class CreditController extends BaseApiController
 
         $credits = Credit::where('family_id', $membership->family_id)
             ->where('status', 'ACTIVE')
-            ->with(['prepayments' => fn ($query) => $query->orderBy('paid_on')])
+            ->with(['prepayments' => fn ($query) => $query->orderBy('paid_on'), 'payments'=>fn($query)=>$query->orderByDesc('paid_on')])
             ->orderBy('created_at')
             ->get();
 
-        return response()->json(['data' => $credits]);
+        $today=now($membership->family->timezone?:'Europe/Moscow')->toDateString();
+        return response()->json(['data' => $credits->map(fn($credit)=>[...$credit->toArray(),'summary'=>app(\App\Services\Finance\CreditSchedule::class)->summary($credit,$today)])]);
     }
 
     public function store(Request $request): JsonResponse
@@ -52,18 +53,18 @@ class CreditController extends BaseApiController
                 $from = (int) $segment['from_month'];
                 $to = (int) $segment['to_month'];
                 if ($from !== $expectedMonth) {
-                    return response()->json(['message' => "Payment schedule row #" . ($index + 1) . ": expected from_month {$expectedMonth}."], 422);
+                    return response()->json(['message' => "Строка " . ($index + 1) . ": период должен начинаться с месяца {$expectedMonth}."], 422);
                 }
                 if ($from > $to) {
-                    return response()->json(['message' => "Payment schedule row #" . ($index + 1) . ": from_month must be <= to_month."], 422);
+                    return response()->json(['message' => "Строка " . ($index + 1) . ": конец периода не может быть раньше начала."], 422);
                 }
                 if ($to > (int) $data['term_months']) {
-                    return response()->json(['message' => "Payment schedule row #" . ($index + 1) . ": to_month cannot exceed term_months."], 422);
+                    return response()->json(['message' => "Строка " . ($index + 1) . ": период выходит за срок кредита."], 422);
                 }
                 $expectedMonth = $to + 1;
             }
             if ($expectedMonth !== ((int) $data['term_months'] + 1)) {
-                return response()->json(['message' => 'Payment schedule must cover all months of the loan term.'], 422);
+                return response()->json(['message' => 'График платежей должен охватывать все месяцы кредита.'], 422);
             }
         }
 
@@ -102,37 +103,41 @@ class CreditController extends BaseApiController
         $effectiveStartDate = Carbon::parse($data['start_date'] ?? $credit->start_date);
         $effectiveFirstPaymentDate = Carbon::parse($data['first_payment_date'] ?? $credit->first_payment_date);
         if ($effectiveFirstPaymentDate->lt($effectiveStartDate)) {
-            return response()->json(['message' => 'First payment date cannot be before the credit start date.'], 422);
+            return response()->json(['message' => 'Первый платёж не может быть раньше даты договора.'], 422);
         }
 
-        if (array_key_exists('payment_schedule', $data) && !empty($data['payment_schedule'])) {
+        $effectiveSchedule=$data['payment_schedule']??$credit->payment_schedule;
+        if(array_key_exists('payment_schedule',$data))$effectiveSchedule=$data['payment_schedule'];
+        abort_if($credit->type==='INSTALLMENT' && (float)($data['annual_rate']??$credit->annual_rate)!==0.0,422,'Для рассрочки ставка должна быть равна нулю.');
+        if (!empty($effectiveSchedule)) {
             $effectiveTermMonths = (int) ($data['term_months'] ?? $credit->term_months);
             $expectedMonth = 1;
-            foreach ($data['payment_schedule'] as $index => $segment) {
+            foreach ($effectiveSchedule as $index => $segment) {
                 $from = (int) $segment['from_month'];
                 $to = (int) $segment['to_month'];
                 if ($from !== $expectedMonth) {
-                    return response()->json(['message' => "Payment schedule row #" . ($index + 1) . ": expected from_month {$expectedMonth}."], 422);
+                    return response()->json(['message' => "Строка " . ($index + 1) . ": период должен начинаться с месяца {$expectedMonth}."], 422);
                 }
                 if ($from > $to) {
-                    return response()->json(['message' => "Payment schedule row #" . ($index + 1) . ": from_month must be <= to_month."], 422);
+                    return response()->json(['message' => "Строка " . ($index + 1) . ": конец периода не может быть раньше начала."], 422);
                 }
                 if ($to > $effectiveTermMonths) {
-                    return response()->json(['message' => "Payment schedule row #" . ($index + 1) . ": to_month cannot exceed term_months."], 422);
+                    return response()->json(['message' => "Строка " . ($index + 1) . ": период выходит за срок кредита."], 422);
                 }
                 $expectedMonth = $to + 1;
             }
             if ($expectedMonth !== ($effectiveTermMonths + 1)) {
-                return response()->json(['message' => 'Payment schedule must cover all months of the loan term.'], 422);
+                return response()->json(['message' => 'График платежей должен охватывать все месяцы кредита.'], 422);
             }
         }
 
         $earliestPrepayment = $credit->prepayments()->min('paid_on');
         if ($earliestPrepayment && $effectiveFirstPaymentDate->gt(Carbon::parse($earliestPrepayment))) {
-            return response()->json(['message' => 'First payment date cannot be moved after an existing historical prepayment.'], 422);
+            return response()->json(['message' => 'Первый платёж не может быть позже уже внесённого досрочного платежа.'], 422);
         }
 
         $credit->update($data);
+        app(\App\Services\Finance\CreditSchedule::class)->invalidate($credit);
         return response()->json(['data' => $credit->fresh()->load(['prepayments' => fn ($query) => $query->orderBy('paid_on')])]);
     }
 
@@ -151,7 +156,7 @@ class CreditController extends BaseApiController
 
         $data = $request->validate([
             'amount' => ['required', 'numeric', 'gt:0'],
-            'paid_on' => ['required', 'date', 'after_or_equal:' . $credit->start_date, 'before_or_equal:today'],
+            'paid_on' => ['required', 'date', 'after_or_equal:' . $credit->start_date, 'before_or_equal:'.now($credit->family->timezone?:'Europe/Moscow')->toDateString()],
             'recalculation_mode' => ['sometimes', 'in:TERM,PAYMENT'],
             'comment' => ['nullable', 'string', 'max:255'],
         ]);
@@ -163,6 +168,8 @@ class CreditController extends BaseApiController
             'created_by' => $membership->user_id,
         ]);
 
+        app(\App\Services\Finance\CreditSchedule::class)->invalidate($credit);
+
         return response()->json(['data' => $prepayment], 201);
     }
 
@@ -173,11 +180,12 @@ class CreditController extends BaseApiController
         $this->assertAdmin($membership);
         $data = $request->validate([
             'amount' => ['sometimes', 'numeric', 'gt:0'],
-            'paid_on' => ['sometimes', 'date', 'after_or_equal:' . $credit->start_date, 'before_or_equal:today'],
+            'paid_on' => ['sometimes', 'date', 'after_or_equal:' . $credit->start_date, 'before_or_equal:'.now($credit->family->timezone?:'Europe/Moscow')->toDateString()],
             'recalculation_mode' => ['sometimes', 'in:TERM,PAYMENT'],
             'comment' => ['sometimes', 'nullable', 'string', 'max:255'],
         ]);
         $prepayment->update($data);
+        app(\App\Services\Finance\CreditSchedule::class)->invalidate($credit);
         return response()->json(['data' => $prepayment->fresh()]);
     }
 
@@ -187,6 +195,7 @@ class CreditController extends BaseApiController
         $membership = $this->membership($request, $credit->family_id);
         $this->assertAdmin($membership);
         $prepayment->delete();
+        app(\App\Services\Finance\CreditSchedule::class)->invalidate($credit);
         return response()->json([], 204);
     }
 }

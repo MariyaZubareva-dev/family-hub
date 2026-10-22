@@ -23,6 +23,8 @@ class Credit extends Model
         'standard_payment' => 'decimal:2',
         'term_months' => 'integer',
         'payment_schedule' => 'array',
+        'bank_schedule' => 'array',
+        'first_payment_date' => 'date',
         'start_date' => 'date',
         'recalculation_mode' => 'string',
         'status' => 'string',
@@ -36,4 +38,5 @@ class Credit extends Model
     public function family(): BelongsTo { return $this->belongsTo(Family::class); }
     public function creator(): BelongsTo { return $this->belongsTo(User::class, 'created_by'); }
     public function prepayments(): HasMany { return $this->hasMany(CreditPrepayment::class); }
+    public function payments(): HasMany { return $this->hasMany(CreditPayment::class); }
 }

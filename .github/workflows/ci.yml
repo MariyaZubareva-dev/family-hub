@@ -68,7 +68,7 @@ jobs:
           DB_USERNAME: family_hub
           DB_PASSWORD: family_hub
       - name: Check shopping and cashback APIs before OCR tool setup
-        run: vendor/bin/phpunit --filter 'StoreListTest|PlannedPurchaseApiTest|CashbackBankTest'
+        run: vendor/bin/phpunit --filter 'StoreListTest|PlannedPurchaseApiTest|CashbackBankTest|CreditLedgerTest'
         env:
           DB_CONNECTION: pgsql
           DB_HOST: 127.0.0.1

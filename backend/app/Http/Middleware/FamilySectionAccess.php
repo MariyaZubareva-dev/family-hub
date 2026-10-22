@@ -13,7 +13,7 @@ class FamilySectionAccess
         $section = match ($request->segment(3)) {
             'events', 'reminders' => 'calendar',
             'lists', 'planned-purchases' => 'shopping',
-            'finance', 'finances', 'credits', 'credit-prepayments' => 'finance',
+            'finance', 'finances', 'credits', 'credit-prepayments', 'credit-payments' => 'finance',
             default => null,
         };
         if ($section !== null) {
