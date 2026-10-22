@@ -38,7 +38,7 @@ export default function StoreList({refreshVersion,onBusyChange}:{refreshVersion:
   }
   const pending=items.filter(x=>!x.is_completed),done=items.filter(x=>x.is_completed)
   const row=(item:Item)=><article className={'s-store-item'+(item.is_completed?' s-store-done':'')} key={item.id}>
-    <label className="s-store-check"><input type="checkbox" aria-label={'Куплено: '+item.name} checked={!!item.is_completed} disabled={busy} onChange={()=>void toggle(item)}/><span className="s-copy"><strong>{item.name}</strong>{item.quantity&&<small>{item.quantity}</small>}{item.notes&&<small>{item.notes}</small>}{item.recurring_purchase_id&&<small>Из регулярных покупок</small>}</span></label>
+    <label className="s-store-check"><input type="checkbox" aria-label={'Куплено: '+item.name} checked={!!item.is_completed} disabled={busy} onChange={()=>void toggle(item)}/><span className="s-copy"><span className="s-store-title"><strong>{item.name}</strong>{item.quantity&&<span className="s-store-quantity">{item.quantity}</span>}</span>{item.notes&&<small>{item.notes}</small>}{item.recurring_purchase_id&&<small>Из регулярных покупок</small>}</span></label>
     <button className="s-icon" aria-label={'Изменить товар: '+item.name} disabled={busy} onClick={()=>open(item)}>✎</button>
   </article>
   return <>
