@@ -19,9 +19,16 @@ class QrReceiptProvider
                     'n'=>$qr['n'],'s'=>$qr['s'],'qr'=>1,'token'=>config('services.receipts.token'),
                 ]);
             if (in_array($response->status(), [401,403])) return ['state'=>'ACCESS_ERROR'];
+            if ($response->status() === 429) return ['state'=>'LIMIT_EXCEEDED'];
             if (!$response->successful() || strlen($response->body()) > 2*1024*1024) return ['state'=>'WAITING'];
             $result = $response->json();
-            if ((int)($result['code'] ?? 0) !== 1) return ['state'=>'WAITING'];
+            // Codes follow the provider's API contract; a quota failure is not a pending receipt.
+            if (!is_array($result) || !isset($result['code']) || !is_numeric($result['code'])) return ['state'=>'INVALID_DATA'];
+            $code = (int)$result['code'];
+            if ($code === 0) return ['state'=>'INVALID_QR'];
+            if ($code === 3) return ['state'=>'LIMIT_EXCEEDED'];
+            if (in_array($code, [2,4,5], true)) return ['state'=>'WAITING'];
+            if ($code !== 1) return ['state'=>'INVALID_DATA'];
             $data = $result['data']['json'] ?? null;
             if (!is_array($data)) return ['state'=>'INVALID_DATA'];
             $payload = $this->normalize($data, $qr);

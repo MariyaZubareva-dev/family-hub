@@ -105,7 +105,7 @@ class ReceiptQrTest extends TestCase
 
     public function test_waiting_receipt_is_refreshed_in_background_without_creating_expenses(): void
     {
-        $this->mockQr(); Http::fake(['proverkacheka.com/*'=>Http::sequence()->push(['code'=>3])->push(['code'=>1,'data'=>['json'=>$this->data()]])]);
+        $this->mockQr(); Http::fake(['proverkacheka.com/*'=>Http::sequence()->push(['code'=>2])->push(['code'=>1,'data'=>['json'=>$this->data()]])]);
         $id=$this->upload()->assertCreated()->assertJsonPath('data.ocr_status','AWAITING_DATA')->assertJsonPath('data.review_payload.items',[])->json('data.id');
         $this->travel(2)->minutes();
         $this->artisan('family:refresh-qr-receipts')->assertSuccessful();
@@ -115,7 +115,7 @@ class ReceiptQrTest extends TestCase
 
     public function test_saving_manual_edits_stops_background_overwrite(): void
     {
-        $this->mockQr(); Http::fake(['proverkacheka.com/*'=>Http::response(['code'=>3])]);
+        $this->mockQr(); Http::fake(['proverkacheka.com/*'=>Http::response(['code'=>2])]);
         $id=$this->upload()->assertCreated()->json('data.id');
         $this->patchJson("/api/v1/finance/receipts/$id",['merchant'=>'Мои правки','receipt_total'=>199.8,'items'=>[]])->assertOk()->assertJsonPath('data.qr_state','MANUAL');
         $this->travel(2)->minutes();
@@ -126,7 +126,7 @@ class ReceiptQrTest extends TestCase
 
     public function test_deleted_draft_is_not_refetched(): void
     {
-        $this->mockQr(); Http::fake(['proverkacheka.com/*'=>Http::response(['code'=>3])]);
+        $this->mockQr(); Http::fake(['proverkacheka.com/*'=>Http::response(['code'=>2])]);
         $id=$this->upload()->assertCreated()->json('data.id');
         $this->deleteJson("/api/v1/finance/receipts/$id")->assertNoContent(); $this->travel(2)->minutes();
         $this->assertSame(0,app(ReceiptQrRefresh::class)->run()); Http::assertSentCount(1);
@@ -167,11 +167,32 @@ class ReceiptQrTest extends TestCase
 
     public function test_retries_are_bounded_and_respect_next_attempt_time(): void
     {
-        $this->mockQr(); Http::fake(['proverkacheka.com/*'=>Http::response(['code'=>3])]);
+        $this->mockQr(); Http::fake(['proverkacheka.com/*'=>Http::response(['code'=>2])]);
         $id=$this->upload()->assertCreated()->json('data.id');
         $this->assertSame(0,app(ReceiptQrRefresh::class)->run());
         for($i=0;$i<5;$i++) { $this->travel(7)->hours(); app(ReceiptQrRefresh::class)->run(); }
         $this->assertDatabaseHas('receipts',['id'=>$id,'qr_state'=>'UNAVAILABLE','qr_attempts'=>6,'qr_next_attempt_at'=>null]);
         $this->travel(7)->hours(); $this->assertSame(0,app(ReceiptQrRefresh::class)->run()); Http::assertSentCount(6);
+    }
+
+    public function test_provider_codes_distinguish_pending_receipts_from_terminal_errors(): void
+    {
+        $provider = new QrReceiptProvider();
+        foreach ([0=>'INVALID_QR',2=>'WAITING',3=>'LIMIT_EXCEEDED',4=>'WAITING',5=>'WAITING',99=>'INVALID_DATA'] as $code=>$state) {
+            Http::fake(['proverkacheka.com/*'=>Http::response(['code'=>$code])]);
+            $this->assertSame($state,$provider->fetch($this->qr)['state']);
+        }
+        Http::fake(['proverkacheka.com/*'=>Http::response([],429)]);
+        $this->assertSame('LIMIT_EXCEEDED',$provider->fetch($this->qr)['state']);
+        $this->mockQr(); Http::fake(['proverkacheka.com/*'=>Http::response(['code'=>3])]);
+        $this->upload()->assertCreated()->assertJsonPath('data.qr_state','LIMIT_EXCEEDED');
+        $this->travel(7)->hours();
+        $this->assertSame(0,app(ReceiptQrRefresh::class)->run());
+    }
+
+    public function test_installed_decoder_self_check_reads_the_packaged_fixture(): void
+    {
+        $this->artisan('family:check-receipt-qr')->expectsOutput('{"QR_DECODE_OK":true}')->assertSuccessful();
+        Http::assertNothingSent();
     }
 }

@@ -18,9 +18,14 @@ class FiscalQr
             $source = @imagecreatefromstring($bytes);
             if (!$source) return null;
             try { imagepng($source, $path); } finally { imagedestroy($source); }
-            $process = new Process(['zbarimg', '--quiet', '--raw', '--set', '*.enable=0', '--set', 'qrcode.enable=1', $path]);
+            $process = new Process(['/usr/bin/zbarimg', '--quiet', '--raw', '--set', '*.enable=0', '--set', 'qrcode.enable=1', $path]);
             $process->setTimeout(8);
             $process->run();
+            if (!in_array($process->getExitCode(), [0, 4], true)) {
+                // Do not log the photo, fiscal identifiers or decoder output.
+                \Illuminate\Support\Facades\Log::warning('Receipt QR decoder failed', ['exit_code'=>$process->getExitCode()]);
+                return null;
+            }
             $found = [];
             foreach (preg_split('/\R/', trim($process->getOutput())) as $line) {
                 $qr = $this->parse($line);
@@ -29,6 +34,7 @@ class FiscalQr
             // Several different fiscal QRs on one photo are ambiguous: retain manual/OCR review.
             return count($found) === 1 ? array_values($found)[0] : null;
         } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::warning('Receipt QR decoder unavailable', ['exception_type'=>get_class($e)]);
             return null;
         } finally { @unlink($path); }
     }

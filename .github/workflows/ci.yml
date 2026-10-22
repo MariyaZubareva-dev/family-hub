@@ -83,6 +83,8 @@ jobs:
       - uses: actions/checkout@v4
       - uses: docker/setup-buildx-action@v3
       - run: docker build -t family-hub-backend-ci ./backend
+      - name: Decode a fiscal QR using the production image and application user
+        run: docker run --rm family-hub-backend-ci php artisan family:check-receipt-qr
       - run: docker build -t family-hub-frontend-ci ./frontend
       - run: docker build -f backend/Dockerfile.nginx -t family-hub-backend-nginx-ci .
       - run: cp .env.production.example .env.production
