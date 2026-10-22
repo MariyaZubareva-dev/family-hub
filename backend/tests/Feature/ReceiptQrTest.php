@@ -178,13 +178,16 @@ class ReceiptQrTest extends TestCase
     public function test_provider_codes_distinguish_pending_receipts_from_terminal_errors(): void
     {
         $provider = new QrReceiptProvider();
-        foreach ([0=>'INVALID_QR',2=>'WAITING',3=>'LIMIT_EXCEEDED',4=>'WAITING',5=>'WAITING',99=>'INVALID_DATA'] as $code=>$state) {
-            Http::fake(['proverkacheka.com/*'=>Http::response(['code'=>$code])]);
+        $codes = [0=>'INVALID_QR',2=>'WAITING',3=>'LIMIT_EXCEEDED',4=>'WAITING',5=>'WAITING',99=>'INVALID_DATA'];
+        $sequence = Http::sequence();
+        foreach ($codes as $code=>$state) $sequence->push(['code'=>$code]);
+        $sequence->push([],429)->push(['code'=>3]);
+        Http::fake(['proverkacheka.com/*'=>$sequence]);
+        foreach ($codes as $code=>$state) {
             $this->assertSame($state,$provider->fetch($this->qr)['state']);
         }
-        Http::fake(['proverkacheka.com/*'=>Http::response([],429)]);
         $this->assertSame('LIMIT_EXCEEDED',$provider->fetch($this->qr)['state']);
-        $this->mockQr(); Http::fake(['proverkacheka.com/*'=>Http::response(['code'=>3])]);
+        $this->mockQr();
         $this->upload()->assertCreated()->assertJsonPath('data.qr_state','LIMIT_EXCEEDED');
         $this->travel(7)->hours();
         $this->assertSame(0,app(ReceiptQrRefresh::class)->run());
