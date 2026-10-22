@@ -1,16 +1,21 @@
-import { useEffect, useId, useRef, useState, type ReactNode, type FormEvent } from 'react'
+import { useEffect, useLayoutEffect, useId, useRef, useState, type ReactNode, type FormEvent } from 'react'
 import { createPortal } from 'react-dom'
 import './finance.css'
 
 type Kind = 'EXPENSE' | 'INCOME'
-type Tab = 'overview' | 'categories' | 'receipts' | 'stocks' | 'credits' | 'budget'
+type Tab = 'overview' | 'income' | 'categories' | 'receipts' | 'stocks' | 'credits' | 'budget'
 type Category = { id:string; name:string; transaction_type:Kind; icon?:string; color?:string }
 type Item = { name:string; qty:number; price:number; category:string; category_id?:string; needs_review?:boolean; category_needs_review?:boolean }
 const money = (value:unknown) => `${Number(value || 0).toLocaleString('ru-RU', { maximumFractionDigits:2 })} ₽`
 const today = () => new Date().toLocaleDateString('sv-SE')
 const dateLabel = (value:string) => value ? new Date(value.slice(0,10)+'T12:00:00').toLocaleDateString('ru-RU') : '—'
 const authorName = (creator?:{first_name?:string;last_name?:string;username?:string}|null) => [creator?.first_name,creator?.last_name].filter(Boolean).join(' ').trim() || (creator?.username?'@'+creator.username:'Не указан')
-const tabs: [Tab,string][] = [['overview','Обзор'],['categories','Категории'],['receipts','Чеки'],['stocks','Запасы'],['credits','Кредиты'],['budget','Бюджет']]
+const tabs: [Tab,string][] = [['overview','Обзор'],['income','Доходы'],['categories','Категории'],['receipts','Чеки'],['stocks','Запасы'],['credits','Кредиты'],['budget','Бюджет']]
+const inPeriod = (date:string,period:string) => {
+  if(period==='all')return true
+  const d=new Date(date.slice(0,10)+'T12:00:00'),n=new Date(),start=new Date(n.getFullYear(),period==='year'?0:n.getMonth()-(period==='3m'?2:period==='6m'?5:0),1)
+  return d>=start&&d<=new Date(n.getFullYear(),n.getMonth()+1,0,23,59,59)
+}
 const errorText = (error:unknown) => error instanceof Error ? error.message : 'Не удалось выполнить действие. Попробуйте ещё раз.'
 export async function request(path:string, method='GET', body?:unknown) {
   const headers:Record<string,string> = { 'Content-Type':'application/json', Accept:'application/json' }
@@ -38,6 +43,19 @@ export function Help({text,label='Подсказка'}:{text:string;label?:strin
   const [open,setOpen]=useState(false)
   const id=useId()
   const ref=useRef<HTMLSpanElement>(null)
+  const [position,setPosition]=useState({left:0,width:240})
+  useLayoutEffect(()=>{
+    if(!open)return
+    const place=()=>{
+      const anchor=ref.current?.getBoundingClientRect()
+      if(!anchor)return
+      const width=Math.min(240,window.innerWidth-24)
+      const left=Math.max(12,Math.min(anchor.left+anchor.width/2-width/2,window.innerWidth-width-12))
+      setPosition({left:left-anchor.left,width})
+    }
+    place();window.addEventListener('resize',place)
+    return()=>window.removeEventListener('resize',place)
+  },[open])
   useEffect(()=>{
     if(!open)return
     const outside=(e:PointerEvent)=>{if(!ref.current?.contains(e.target as Node))setOpen(false)}
@@ -45,7 +63,7 @@ export function Help({text,label='Подсказка'}:{text:string;label?:strin
     document.addEventListener('pointerdown',outside);document.addEventListener('keydown',escape)
     return()=>{document.removeEventListener('pointerdown',outside);document.removeEventListener('keydown',escape)}
   },[open])
-  return <span className="f-help" ref={ref}><button type="button" className="f-help-button" aria-label={label} aria-expanded={open} aria-describedby={open?id:undefined} onClick={()=>setOpen(v=>!v)}>?</button>{open&&<span id={id} role="tooltip" className="f-tooltip">{text}</span>}</span>
+  return <span className="f-help" ref={ref}><button type="button" className="f-help-button" aria-label={label} aria-expanded={open} aria-describedby={open?id:undefined} onClick={()=>setOpen(v=>!v)}>?</button>{open&&<span id={id} role="tooltip" className="f-tooltip" style={position}>{text}</span>}</span>
 }
 function ActionSymbol({title}:{title:string}) {
   const kind=title.startsWith('Удалить')?'delete':title.startsWith('Категория')?'category':title.includes('доход')?'income':title.includes('расход')?'expense':title.includes('кредит')?'credit':title.includes('бюджет')?'budget':title.includes('покупку')?'shopping':(title.includes('событие')||title.includes('встреча'))?'calendar':title.includes('напоминание')?'reminder':'receipt'
@@ -85,6 +103,7 @@ function CategorySelect({categories,type='EXPENSE',admin,value,onSelect,onCreate
 export default function FinanceScreen({initialTab='overview',initialReceiptFile,onReceiptConsumed}:{initialTab?:Tab;initialReceiptFile?:File|null;onReceiptConsumed?:()=>void}) {
   const [tab,setTab]=useState<Tab>(initialTab), [kind,setKind]=useState<Kind>('EXPENSE')
   const [period,setPeriod]=useState('month'), [categories,setCategories]=useState<Category[]>([])
+  const [incomePeriod,setIncomePeriod]=useState('all'),[incomeLimit,setIncomeLimit]=useState(20)
   const [analytics,setAnalytics]=useState<any>(null), [transactions,setTransactions]=useState<any[]>([])
   const [admin,setAdmin]=useState(false), [shopping,setShopping]=useState(false)
   const [error,setError]=useState(''), [notice,setNotice]=useState(''), [loading,setLoading]=useState(true)
@@ -106,6 +125,7 @@ export default function FinanceScreen({initialTab='overview',initialReceiptFile,
   const rows=categories.filter(c=>(c.transaction_type||'EXPENSE')===kind && c.name.toLocaleLowerCase().includes(search.toLocaleLowerCase()))
   const ranked:any[]=analytics?.ranked||[]
   const income=Number(analytics?.total_income)||0, expense=Number(analytics?.total_expense)||0
+  const incomeRows=transactions.filter(t=>t.type==='INCOME'&&inPeriod(t.occurred_on,incomePeriod))
   const createCategory=async(e:FormEvent)=>{
     e.preventDefault();if(saving)return;setSaving(true);setCategoryError('')
     try {const j=await request('/finance/categories','POST',{name:categoryName.trim(),transaction_type:kind});setCategories(c=>[...c,j.data].sort((a,b)=>a.name.localeCompare(b.name,'ru')));setAddingCategory(false);setCategoryName('');setNotice('Категория «'+j.data.name+'» добавлена.')}catch(err){setCategoryError(errorText(err))}finally{setSaving(false)}
@@ -126,10 +146,17 @@ export default function FinanceScreen({initialTab='overview',initialReceiptFile,
       </section>
       <section className="card"><Head title="Динамика за 6 месяцев"><Help text="Каждая пара столбиков показывает доходы и расходы за месяц. Суммы рассчитываются по сохранённым операциям."/></Head><div className="f-trend">{(analytics?.trend||[]).map((m:any)=>{const max=Math.max(1,...(analytics?.trend||[]).flatMap((x:any)=>[Number(x.income),Number(x.expense)]));return <div key={m.month}><div className="f-trend-bars"><i title={`Доходы: ${money(m.income)}`} style={{height:`${Math.max(0,Number(m.income)/max*100)}%`}}/><i title={`Расходы: ${money(m.expense)}`} style={{height:`${Math.max(0,Number(m.expense)/max*100)}%`}}/></div><small>{m.label}</small><Help label={`Суммы за ${m.label}`} text={`Доходы: ${money(m.income)}. Расходы: ${money(m.expense)}.`}/></div>})}</div><div className="f-legend"><span>● Доходы</span><span>● Расходы</span></div></section>
       <section className="card"><Head title="Операции"><Help text="Показаны последние 20 операций выбранного периода. Добавить доход или расход можно кнопками над обзором."/></Head>{transactions.filter(t=>{
-        const d=new Date(t.occurred_on),n=new Date(),start=new Date(n.getFullYear(),period==='year'?0:n.getMonth()-(period==='3m'?2:period==='6m'?5:0),1)
-        return d>=start&&d<=new Date(n.getFullYear(),n.getMonth()+1,0,23,59,59)&&(!selected||t.type==='EXPENSE'&&t.category===selected)
+        return inPeriod(t.occurred_on,period)&&(!selected||t.type==='EXPENSE'&&t.category===selected)
       }).slice(0,20).map(t=><div className="f-row" key={t.id}><div className="f-copy"><strong>{t.category}</strong><small>{dateLabel(t.occurred_on)}{t.description?' · '+t.description:''} · Автор: {authorName(t.creator)}</small></div><b className={t.type==='INCOME'?'f-positive':''}>{t.type==='INCOME'?'+':'−'}{money(t.amount)}</b></div>)}{!transactions.length&&<Empty>Операций пока нет.</Empty>}</section>
     </>}
+    {tab==='income'&&<section className="card">
+      <Head title="История доходов"><button className="button secondary" onClick={()=>setTx({type:'INCOME'})}>＋ Доход</button></Head>
+      <Field label="Период доходов"><select value={incomePeriod} onChange={e=>{setIncomePeriod(e.target.value);setIncomeLimit(20)}}>{[['all','За всё время'],['month','Этот месяц'],['3m','Последние 3 месяца'],['6m','Последние 6 месяцев'],['year','Этот год']].map(([value,label])=><option key={value} value={value}>{label}</option>)}</select></Field>
+      <div className="f-income-summary"><small>Всего за период · Записей: {incomeRows.length}</small><strong className="f-positive">{money(incomeRows.reduce((sum,t)=>sum+Number(t.amount),0))}</strong></div>
+      {incomeRows.slice(0,incomeLimit).map(t=><div className="f-row" key={t.id}><div className="f-copy"><strong>{t.category}</strong><small>{dateLabel(t.occurred_on)} · Автор: {authorName(t.creator)}</small>{t.created_at&&<small>Добавлено: {new Date(t.created_at).toLocaleString('ru-RU',{dateStyle:'short',timeStyle:'short'})}</small>}{t.description&&<small>{t.description}</small>}</div><b className="f-positive">+{money(t.amount)}</b></div>)}
+      {!incomeRows.length&&<Empty>Доходов за этот период пока нет.</Empty>}
+      {incomeRows.length>incomeLimit&&<button className="button secondary" onClick={()=>setIncomeLimit(n=>n+20)}>Показать ещё</button>}
+    </section>}
     {tab==='categories'&&<section className="card"><Head title="Категории"><Help text={admin?'Здесь создаются категории. Операции вносятся во вкладке «Обзор». Доходы и расходы используют отдельные списки.':'Категории создаёт администратор семьи. Операции можно вносить во вкладке «Обзор».'}/></Head>
       <div className="f-segment"><button aria-pressed={kind==='EXPENSE'} onClick={()=>setKind('EXPENSE')}>Расходы</button><button aria-pressed={kind==='INCOME'} onClick={()=>setKind('INCOME')}>Доходы</button></div>
       <div className="f-search"><input aria-label="Поиск категории" placeholder="Поиск категории" value={search} onChange={e=>setSearch(e.target.value)}/>{admin&&<button className="button secondary" onClick={()=>{setCategoryName('');setCategoryError('');setAddingCategory(true)}}>＋ Категория</button>}</div>

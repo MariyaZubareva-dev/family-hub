@@ -45,6 +45,51 @@ async function mockFinance(page:Page) {
 }
 const tab=(page:Page,name:string)=>page.getByRole('tab',{name,exact:true}).click()
 
+test('monthly chart tooltips stay inside the viewport at both edges and after resize',async({page})=>{
+  await mockFinance(page)
+  await page.route('**/api/v1/finance/analytics?*',route=>route.fulfill({json:{data:{total_income:135001,total_expense:24055.7,ranked:[],trend:['Май','Июн','Июл','Авг','Сен','Окт'].map((label,i)=>({month:String(i),label,income:135001,expense:24055.7}))}}}))
+  await page.goto('/?section=finance')
+  for(const width of [320,393,768]){
+    await page.setViewportSize({width,height:852})
+    for(const label of ['Май','Июн','Июл','Авг','Сен','Окт']){
+      await page.getByRole('button',{name:`Суммы за ${label}`,exact:true}).click()
+      const tip=page.getByRole('tooltip')
+      await expect(tip).toContainText('135')
+      const bounds=await tip.boundingBox()
+      expect(bounds!.x).toBeGreaterThanOrEqual(11)
+      expect(bounds!.x+bounds!.width).toBeLessThanOrEqual(width-11)
+      expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true)
+      if(label==='Окт')await page.screenshot({path:`test-results/chart-tooltip-${width}.png`,fullPage:true})
+      await page.keyboard.press('Escape')
+    }
+  }
+})
+
+test('income history lists authors, excludes expenses, filters dates and loads older entries',async({page})=>{
+  const state=await mockFinance(page),date=new Date().toLocaleDateString('sv-SE'),old=`${new Date().getFullYear()-1}-01-15`
+  for(let i=0;i<20;i++)state.transactions.push({id:'i'+i,type:'INCOME',category:'ЗП',amount:100,occurred_on:date,creator:{first_name:'Мария'},description:'Текущий доход '+i})
+  state.transactions.push({id:'old',type:'INCOME',category:'Премия',amount:500,occurred_on:old,created_at:'2026-10-22T14:30:00Z',creator:{first_name:'Андрей'},description:'Прошлогодняя премия'},{id:'expense',type:'EXPENSE',category:'Продукты',amount:999,occurred_on:date,creator:{first_name:'Другой автор'}})
+  await page.setViewportSize({width:320,height:640});await page.goto('/?section=finance');await tab(page,'Доходы')
+  const panel=page.getByRole('tabpanel',{name:'Доходы',exact:true})
+  await expect(panel.locator('.f-income-summary')).toContainText('Записей: 21')
+  await expect(panel.locator('.f-income-summary')).toContainText('2 500 ₽')
+  await expect(panel.getByText('Прошлогодняя премия')).toHaveCount(0)
+  await panel.getByRole('button',{name:'Показать ещё'}).click()
+  await expect(panel.getByText('Прошлогодняя премия')).toBeVisible()
+  await expect(panel.getByText(/Автор: Андрей/)).toContainText('15.01.')
+  await expect(panel.getByText(/Добавлено:/)).toContainText('22.10.2026')
+  await expect(panel.getByText(/Другой автор/)).toHaveCount(0)
+  await panel.getByLabel('Период доходов').selectOption('month')
+  await expect(panel.getByText('Прошлогодняя премия')).toHaveCount(0)
+  await expect(panel.locator('.f-income-summary')).toContainText('2 000 ₽')
+  await panel.getByRole('button',{name:'＋ Доход',exact:true}).click()
+  const dialog=page.getByRole('dialog',{name:'Новый доход'})
+  await dialog.getByLabel('Сумма, ₽').fill('250');await dialog.getByLabel('Категория',{exact:true}).selectOption('i1')
+  await dialog.getByRole('button',{name:'Сохранить доход'}).click();await expect(dialog).toHaveCount(0)
+  await expect(panel.locator('.f-income-summary')).toContainText('2 250 ₽')
+  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true)
+})
+
 test('transaction list shows authors for income and expenses without overflowing on mobile',async({page})=>{
   const state=await mockFinance(page)
   const date=new Date().toLocaleDateString('sv-SE')
