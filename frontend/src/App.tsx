@@ -120,7 +120,6 @@ export default function App(){
   const [calendarAction,setCalendarAction]=useState<'EVENT'|'REMINDER'|undefined>()
   const [financeTarget,setFinanceTarget]=useState<'overview'|'receipts'|'credits'|'cashback'>('overview')
   const [homeReceipt,setHomeReceipt]=useState<File|null>(null)
-  const [cashbackFiles,setCashbackFiles]=useState<File[]|null>(null)
   const [accessError,setAccessError]=useState('')
   useEffect(()=>{
     let active=true
@@ -157,10 +156,10 @@ export default function App(){
     <main className="page">
       {accessError&&<div className="family-alert" role="alert">{accessError}</div>}
       {!access&&!accessError&&<div className="family-loading">Загружаем пространство…</div>}
-      {access&&section==='home' && <HomeScreen apiGet={apiGet} visibility={access} onFamily={()=>setSection('family')} onCalendar={kind=>{setCalendarAction(kind);setSection('calendar')}} onFinance={tab=>{setFinanceTarget(tab);setSection('finance')}} onReceipt={file=>{setHomeReceipt(file);setFinanceTarget('receipts');setSection('finance')}} onCashbackUpload={files=>{setCashbackFiles(files);setFinanceTarget('cashback');setSection('finance')}} />}
+      {access&&section==='home' && <HomeScreen apiGet={apiGet} visibility={access} onFamily={()=>setSection('family')} onCalendar={kind=>{setCalendarAction(kind);setSection('calendar')}} onFinance={tab=>{setFinanceTarget(tab);setSection('finance')}} onReceipt={file=>{setHomeReceipt(file);setFinanceTarget('receipts');setSection('finance')}} />}
       {access?.calendar&&section==='calendar' && <CalendarScreen initialKind={calendarAction} onActionConsumed={()=>setCalendarAction(undefined)} />}
       {access?.shopping&&section==='lists' && <ShoppingScreen isAdmin={familyRole==='ADMIN'} />}
-      {access?.finance&&section==='finance' && <FinanceScreen initialTab={financeTarget} initialReceiptFile={homeReceipt} onReceiptConsumed={()=>setHomeReceipt(null)} initialCashbackFiles={cashbackFiles} onCashbackConsumed={()=>setCashbackFiles(null)} />}
+      {access?.finance&&section==='finance' && <FinanceScreen initialTab={financeTarget} initialReceiptFile={homeReceipt} onReceiptConsumed={()=>setHomeReceipt(null)} />}
       {access&&section==='family' && <FamilyV07 />}
     </main>
 

@@ -7,9 +7,9 @@ export function bankKey(name:string){const key=categoryKey(name).replace(/[^\p{L
 export const unitLabel=(unit:CashbackEntry['reward_unit'])=>({RUB:'рублями',POINTS:'баллами',MILES:'милями',UNKNOWN:'тип не указан'}[unit])
 export const flattenCashback=(banks:CashbackBank[]):CashbackRow[]=>banks.flatMap(bank=>bank.entries.map((entry,index)=>({...entry,bank,index})))
 export const isCurrentCashback=(entry:CashbackRow,today:string)=>entry.active&&entry.bank.month===today.slice(0,7)&&(!entry.valid_from||entry.valid_from<=today)&&(!entry.valid_to||entry.valid_to>=today)&&entry.cap_amount!==0&&entry.cap_amount!=='0'
-export function bestCashback(rows:CashbackRow[],today:string){
+export function bestCashback(rows:CashbackRow[],today:string,includeNonCash=false){
   const groups=new Map<string,CashbackRow>()
-  for(const row of rows.filter(row=>isCurrentCashback(row,today)&&row.reward_unit==='RUB').sort((a,b)=>Number(b.rate)-Number(a.rate)||a.bank.bank_name.localeCompare(b.bank.bank_name,'ru')||a.bank.id.localeCompare(b.bank.id))){const key=categoryKey(row.category);if(!groups.has(key))groups.set(key,row)}
+  for(const row of rows.filter(row=>isCurrentCashback(row,today)&&(includeNonCash||row.reward_unit==='RUB')).sort((a,b)=>Number(b.rate)-Number(a.rate)||a.bank.bank_name.localeCompare(b.bank.bank_name,'ru')||a.bank.id.localeCompare(b.bank.id))){const key=categoryKey(row.category);if(!groups.has(key))groups.set(key,row)}
   return [...groups.values()]
 }
 export function mergeCashback(base:CashbackEntry[],added:CashbackEntry[]){

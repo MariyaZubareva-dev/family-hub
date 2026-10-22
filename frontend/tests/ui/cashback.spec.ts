@@ -56,15 +56,18 @@ for(const width of [320,393,768])test(`cashback comparison and editing fit ${wid
   expect(state.calls.filter(c=>c.path.includes('/cards'))).toHaveLength(0)
 })
 
-test('home compares active ruble categories only and imports multiple screenshots into one reviewed bank',async({page})=>{
+test('home shows all unique current categories; screenshots are imported from Finance',async({page})=>{
   const state=await mockCashback(page);await page.setViewportSize({width:320,height:852});await page.goto('/')
   const summary=page.getByRole('region',{name:'Где выгоднее кешбэк'})
   await expect(summary).toContainText('Альфа-Банк');await expect(summary).toContainText('Андрей');await expect(summary).toContainText('7%')
   await expect(summary.getByRole('columnheader')).toHaveCount(3)
   await summary.scrollIntoViewIfNeeded();await page.screenshot({path:'test-results/cashback-home-table-320.png'})
-  for(const absent of ['Балльная категория','Неактивная','Истекла','Позже','Без лимита'])await expect(summary).not.toContainText(absent)
+  for(const absent of ['Неактивная','Истекла','Позже','Без лимита'])await expect(summary).not.toContainText(absent)
+  await expect(summary).toContainText('Балльная категория')
+  await expect(summary.getByText('Загрузить категории',{exact:true})).toHaveCount(0)
   await summary.getByRole('button',{name:'Мои банки',exact:true}).click();await expect(summary).not.toContainText('Андрей');await expect(summary).toContainText('5%')
-  await page.getByLabel('Загрузить категории кешбэка с главной').setInputFiles([fixture,{...fixture,name:'categories-2.png'}])
+  await summary.getByRole('button',{name:'Весь кешбэк →'}).click()
+  await page.getByLabel('Загрузить скриншоты кешбэка').setInputFiles([fixture,{...fixture,name:'categories-2.png'}])
   const dialog=page.getByRole('dialog',{name:'Изменить кешбэк банка'})
   await expect(dialog.getByRole('button',{name:'Сохранить категории'})).toBeDisabled()
   await expect(dialog.getByLabel('Категория банка',{exact:true})).toHaveCount(3)
@@ -81,6 +84,19 @@ test('home compares active ruble categories only and imports multiple screenshot
   expect(state.records[0].entries).toHaveLength(3)
   expect(state.calls.filter(c=>c.path.endsWith('/recognize'))).toHaveLength(2)
   await page.getByRole('button',{name:'Главная',exact:true}).click();await expect(page.getByRole('region',{name:'Где выгоднее кешбэк'})).toContainText('7%')
+})
+
+test('home cashback has no four-category limit and keeps the highest rate for duplicates',async({page})=>{
+  const state=await mockCashback(page)
+  for(let i=0;i<7;i++)state.records[0].entries.push(entry('Дополнительная категория '+i,2+i))
+  state.records[0].entries.push(entry(' супермаркеты ',4))
+  await page.setViewportSize({width:320,height:852});await page.goto('/')
+  const table=page.getByRole('table',{name:'Лучшие ставки кешбэка'})
+  await expect(table.locator('tbody tr')).toHaveCount(10)
+  const duplicate=table.getByRole('row').filter({hasText:/Супермаркеты/i})
+  await expect(duplicate).toHaveCount(1);await expect(duplicate).toContainText('7%');await expect(duplicate).toContainText('Андрей')
+  await expect(table).toContainText('Дополнительная категория 6')
+  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true)
 })
 
 test('manual entry, month archive and deletion preserve another month',async({page})=>{

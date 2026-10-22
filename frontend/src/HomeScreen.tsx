@@ -4,13 +4,15 @@ import { DEFAULT_TIMEZONE, zoneInput, zoneParts } from './lib/timezone'
 import './home.css'
 import { CashbackSummary } from './CashbackScreen'
 
-type Props={apiGet:(path:string)=>Promise<any>;visibility:{calendar:boolean;finance:boolean;shopping:boolean};onCalendar:(kind?:'EVENT'|'REMINDER')=>void;onFinance:(tab:'overview'|'credits'|'cashback')=>void;onReceipt:(file:File)=>void;onCashbackUpload:(files:File[])=>void;onFamily:()=>void}
+type Props={apiGet:(path:string)=>Promise<any>;visibility:{calendar:boolean;finance:boolean;shopping:boolean};onCalendar:(kind?:'EVENT'|'REMINDER')=>void;onFinance:(tab:'overview'|'credits'|'cashback')=>void;onReceipt:(file:File)=>void;onFamily:()=>void}
 const money=(n:unknown)=>Number(n||0).toLocaleString('ru-RU',{style:'currency',currency:'RUB',minimumFractionDigits:0,maximumFractionDigits:2})
 const colors=['#0F766E','#56A99A','#92C7B8','#E7B874','#B799BD','#7894B4']
 function Symbol({kind}:{kind:'camera'|'calendar'|'wallet'}){return <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d={kind==='camera'?'M3 7h4l2-3h6l2 3h4v14H3z M16 13a4 4 0 1 1-8 0 4 4 0 0 1 8 0':kind==='calendar'?'M5 5h14v16H5z M8 3v4 M16 3v4 M5 10h14 M8 14h2 M14 14h2':'M3 6h18v14H3z M3 10h18 M15 15h3 M6 3h12'}/></svg>}
 export default function HomeScreen(p:Props){
   const [analytics,setAnalytics]=useState<any>(null),[events,setEvents]=useState<any[]>([]),[reminders,setReminders]=useState<any[]>([]),[credits,setCredits]=useState<any[]>([])
   const [timezone,setTimezone]=useState(DEFAULT_TIMEZONE),[loading,setLoading]=useState(true),[errors,setErrors]=useState<string[]>([]),[adding,setAdding]=useState(false),[retry,setRetry]=useState(0)
+  const [choosingReceipt,setChoosingReceipt]=useState(false)
+  const takeReceipt=(file?:File)=>{if(file){setChoosingReceipt(false);p.onReceipt(file)}}
   useEffect(()=>{
     let active=true
     const load=async()=>{
@@ -47,9 +49,9 @@ export default function HomeScreen(p:Props){
     {p.visibility.finance&&<section className="card h-budget" aria-label="Бюджет за месяц"><div className="h-head"><span className="h-symbol"><Symbol kind="wallet"/></span><div><h3>Бюджет за месяц</h3><small>{new Date().toLocaleDateString('ru-RU',{timeZone:timezone,month:'long',year:'numeric'})}</small></div><button className="h-link" onClick={()=>p.onFinance('overview')}>Финансы →</button></div>
       {analytics&&<><div className="h-chart" aria-label="Расходы по категориям"><div className="h-donut" role="img" aria-label={`Расходы по категориям, всего ${money(sum)}`} style={{background:sum?`conic-gradient(${gradient})`:'#EAF0ED'}}><div><small>Расходы</small><strong>{money(sum)}</strong></div></div><ul className="h-legend">{cats.map((c:any,i:number)=><li key={c.id||c.name}><i style={{background:colors[i]}}/><span>{c.name}<small>{Math.round(c.amount/sum*100)}%</small></span><b>{money(c.amount)}</b></li>)}{!cats.length&&<li className="h-empty">Расходов пока нет</li>}</ul></div>
       <div className="h-metrics" aria-label="Итоги месяца">{[['Доход',analytics.total_income],['Расход',analytics.total_expense],['Остаток',analytics.balance]].map(([title,value])=><div key={title}><small>{title}</small><strong className={title==='Остаток'?(Number(value)<0?'h-negative':'h-positive'):''}>{money(value)}</strong></div>)}</div></>}
-      <label className="button primary h-photo"><Symbol kind="camera"/>Фото чека<input type="file" accept="image/jpeg,image/png,image/webp" capture="environment" aria-label="Фото чека" onChange={e=>{const file=e.target.files?.[0];e.target.value='';if(file)p.onReceipt(file)}}/></label>
+      <button className="button primary h-photo" onClick={()=>setChoosingReceipt(true)}><Symbol kind="camera"/>Фото чека</button>
     </section>}
-    {p.visibility.finance&&<CashbackSummary onOpen={()=>p.onFinance('cashback')} onUpload={p.onCashbackUpload}/>}
+    {p.visibility.finance&&<CashbackSummary onOpen={()=>p.onFinance('cashback')}/>}
     {p.visibility.calendar&&<section className="card h-plans" aria-label="Планы на сегодня"><div className="h-head"><span className="h-symbol"><Symbol kind="calendar"/></span><h3>Сегодня <span className="h-count">{plans.length}</span></h3><button className="h-link" onClick={()=>p.onCalendar()}>Календарь →</button></div>
       {!loading&&!plans.length&&!errors.some(x=>/Встречи:|Напоминания:/.test(x))&&<p className="h-empty">На сегодня планов пока нет.</p>}
       {plans.map(x=><article className="h-plan" key={x.kind+x.id}><time dateTime={x.at}>{new Date(x.at).toLocaleTimeString('ru-RU',{timeZone:timezone,hour:'2-digit',minute:'2-digit'})}</time><div><small>{x.kind}</small><strong>{x.title}</strong></div></article>)}
@@ -57,6 +59,7 @@ export default function HomeScreen(p:Props){
     </section>}
     {p.visibility.finance&&next.length>0&&<section className="card" aria-label="Ближайшие платежи"><div className="h-head"><h3>Ближайшие платежи</h3><button className="h-link" onClick={()=>p.onFinance('credits')}>Кредиты →</button></div>{next.map(c=><article key={c.id} className="h-credit"><div><strong>{c.name||'Кредит'}</strong><small>{c.date.toLocaleDateString('ru-RU',{day:'numeric',month:'long'})}</small></div><b>{money(c.amount)}</b></article>)}</section>}
     {!p.visibility.finance&&!p.visibility.calendar&&<section className="card"><button className="button secondary" onClick={p.onFamily}>Открыть семью</button></section>}
+    {choosingReceipt&&<Modal title="Добавить чек" onClose={()=>setChoosingReceipt(false)}><div className="h-add"><label className="button primary cb-upload">Сфотографировать чек<input type="file" accept="image/jpeg,image/png,image/webp" capture="environment" aria-label="Сфотографировать чек" onChange={e=>{const file=e.target.files?.[0];e.target.value='';takeReceipt(file)}}/></label><label className="button secondary cb-upload">Загрузить с устройства<input type="file" accept="image/jpeg,image/png,image/webp" aria-label="Загрузить чек с устройства" onChange={e=>{const file=e.target.files?.[0];e.target.value='';takeReceipt(file)}}/></label></div></Modal>}
     {adding&&<Modal title="Добавить план" onClose={()=>setAdding(false)}><div className="h-add"><button className="button primary" onClick={()=>p.onCalendar('EVENT')}>＋ Встреча</button><button className="button secondary" onClick={()=>p.onCalendar('REMINDER')}>＋ Напоминание</button></div></Modal>}
   </div>
 }

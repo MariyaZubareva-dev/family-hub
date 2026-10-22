@@ -22,14 +22,13 @@ function CashbackTable({rows,onOpen,label,winners=new Set<string>()}:{rows:Cashb
   </tr>)}</tbody></table>
 }
 
-export function CashbackSummary({onOpen,onUpload}:{onOpen:()=>void;onUpload:(files:File[])=>void}){
+export function CashbackSummary({onOpen}:{onOpen:()=>void}){
   const [banks,setBanks]=useState<CashbackBank[]>([]),[meta,setMeta]=useState<Meta|null>(null),[mine,setMine]=useState(false),[error,setError]=useState(''),[loading,setLoading]=useState(true),[retry,setRetry]=useState(0)
   useEffect(()=>{let active=true;setLoading(true);setError('');request(endpoint).then(j=>{if(active){setBanks(j.data||[]);setMeta(j.meta||null)}}).catch(e=>{if(active)setError(failure(e))}).finally(()=>{if(active)setLoading(false)});return()=>{active=false}},[retry])
-  const best=meta?bestCashback(flattenCashback(banks.filter(bank=>!mine||bank.created_by===meta.user_id)),meta.today).slice(0,4):[]
+  const best=meta?bestCashback(flattenCashback(banks.filter(bank=>!mine||bank.created_by===meta.user_id)),meta.today,true).sort((a,b)=>categoryKey(a.category).localeCompare(categoryKey(b.category),'ru')):[]
   return <section className="card cb-summary" aria-label="Где выгоднее кешбэк"><div className="h-head"><h3>Где выгоднее кешбэк</h3><button className="h-link" onClick={onOpen}>Весь кешбэк →</button></div>
-    <div className="cb-summary-tools"><div className="f-segment">{[false,true].map(value=><button key={String(value)} aria-pressed={mine===value} onClick={()=>setMine(value)}>{value?'Мои банки':'Вся семья'}</button>)}</div><Help label="Как сравнивается кешбэк" text="Показаны лучшие ставки в рублях для подтверждённых действующих категорий. Баллы и мили смотрите в полном списке. Лимиты и условия могут изменить выгоду; их остаток по скриншоту неизвестен. Категория продавца определяется банком по MCC, а не по товарам в чеке."/></div>
-    {loading?<p className="h-empty" role="status">Загружаем кешбэк…</p>:error?<div className="h-error" role="alert">{error}<button className="button secondary" onClick={()=>setRetry(n=>n+1)}>Повторить</button></div>:best.length?<CashbackTable rows={best} onOpen={onOpen} label="Лучшие ставки кешбэка" winners={new Set(best.map(row=>row.bank.id+':'+row.index))}/>:<p className="h-empty">Подтверждённых категорий с кешбэком рублями на этот месяц пока нет.</p>}
-    <label className="button secondary cb-upload">Загрузить категории<input type="file" accept="image/png,image/jpeg,image/webp" multiple aria-label="Загрузить категории кешбэка с главной" onChange={e=>{const files=Array.from(e.target.files||[]);e.target.value='';if(files.length)onUpload(files)}}/></label>
+    <div className="cb-summary-tools"><div className="f-segment">{[false,true].map(value=><button key={String(value)} aria-pressed={mine===value} onClick={()=>setMine(value)}>{value?'Мои банки':'Вся семья'}</button>)}</div><Help label="Как сравнивается кешбэк" text="Показаны все подтверждённые действующие категории. При совпадении названий оставляем максимальный процент. Баллы и мили подписаны отдельно и не переведены в рубли. Лимиты и условия могут изменить выгоду; их остаток по скриншоту неизвестен. Категория продавца определяется банком по MCC, а не по товарам в чеке. Добавить категории можно в Финансах → Кешбэк."/></div>
+    {loading?<p className="h-empty" role="status">Загружаем кешбэк…</p>:error?<div className="h-error" role="alert">{error}<button className="button secondary" onClick={()=>setRetry(n=>n+1)}>Повторить</button></div>:best.length?<CashbackTable rows={best} onOpen={onOpen} label="Лучшие ставки кешбэка"/>:<p className="h-empty">Подтверждённых действующих категорий на этот месяц пока нет.</p>}
   </section>
 }
 

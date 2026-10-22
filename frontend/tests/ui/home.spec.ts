@@ -80,13 +80,17 @@ for(const width of [320,393])test(`home layout and creation work at ${width}px`,
   await expect(page.getByRole('tab',{name:'Кредиты',exact:true})).toHaveAttribute('aria-selected','true')
 })
 
-test('home photo uploads once and confirmation creates expense',async({page})=>{
+for(const source of ['camera','gallery'])test(`home ${source} photo uploads once and confirmation creates expense`,async({page})=>{
   await page.setViewportSize({width:393,height:852})
   const state=await mockHome(page);await page.goto('/')
-  const photo=page.getByLabel('Фото чека',{exact:true})
-  await expect(photo).toHaveAttribute('capture','environment')
+  await page.getByRole('button',{name:'Фото чека',exact:true}).click()
+  const picker=page.getByRole('dialog',{name:'Добавить чек'})
+  const photo=picker.getByLabel(source==='camera'?'Сфотографировать чек':'Загрузить чек с устройства',{exact:true})
+  if(source==='camera')await expect(photo).toHaveAttribute('capture','environment')
+  else await expect(photo).not.toHaveAttribute('capture')
   const image=Buffer.from(readFileSync('../backend/tests/Fixtures/receipt.png.b64','utf8'),'base64')
   await photo.setInputFiles({name:'home-receipt.png',mimeType:'image/png',buffer:image})
+  await expect(picker).toHaveCount(0)
   await expect(page.getByRole('tab',{name:'Чеки',exact:true})).toHaveAttribute('aria-selected','true')
   await expect(page.getByText('Молоко',{exact:true})).toBeVisible()
   await expect(page.getByLabel('Категория позиции 1')).toHaveValue('c0')
