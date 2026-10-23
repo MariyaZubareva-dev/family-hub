@@ -106,4 +106,41 @@ class CreditLedgerTest extends TestCase
         $this->postJson($this->url('forecast'),$this->forecast())->assertNotFound();
         $this->putJson($this->url('bank-schedule'),$this->graph())->assertNotFound();
     }
+    public function test_pdf_rows_keep_decimal_thousands_and_column_order_for_manual_mapping(): void
+    {
+        $service=app(\App\Services\Finance\CreditPdfImporter::class);
+        $result=$service->parseText("Дата Платёж Долг Проценты Остаток\n1 22.11.2026    11 500,25    10 000,00    1 500,25    90 000,00\n2 22.12.2026    11 500,25    10 125,50    1 374,75    79 874,50");
+        $this->assertSame(4,$result['column_count']);$this->assertCount(2,$result['rows']);
+        $this->assertSame('2026-11-22',$result['rows'][0]['date']);
+        $this->assertEquals([11500.25,10000,1500.25,90000],$result['rows'][0]['values']);
+        $bad=$service->parseText('31.02.2026   200.00   100.00   10.00   0.00');$this->assertCount(0,$bad['rows']);
+    }
+    public function test_pdf_upload_rejects_invalid_files_and_non_admin_before_processing(): void
+    {
+        $this->postJson($this->url('bank-schedule/import-pdf'),['pdf_data'=>'data:application/pdf;base64,'.base64_encode('not a pdf')])->assertUnprocessable();
+        $user=User::create(['telegram_user_id'=>76107,'first_name'=>'Участник']);FamilyMember::create(['family_id'=>$this->credit->family_id,'user_id'=>$user->id,'role'=>'USER','status'=>'ACTIVE']);
+        $this->actingAs($user)->postJson($this->url('bank-schedule/import-pdf'),['pdf_data'=>'bad'])->assertForbidden();
+        $this->assertNull($this->credit->fresh()->bank_schedule);
+    }
+    public function test_real_multipage_pdf_extracts_all_rows_without_saving_graph_or_document(): void
+    {
+        if(!is_executable('/usr/bin/pdftotext'))$this->markTestSkipped('Poppler is installed before the full test suite.');
+        $pdf=trim(file_get_contents(__DIR__.'/../Fixtures/credit-schedule.pdf.b64'));
+        $this->postJson($this->url('bank-schedule/import-pdf'),['pdf_data'=>'data:application/pdf;base64,'.$pdf])->assertOk()->assertJsonPath('data.source','PDF_TEXT')->assertJsonPath('data.pages',2)->assertJsonPath('data.column_count',5)->assertJsonCount(3,'data.rows')->assertJsonPath('data.rows.2.date','2027-01-22')->assertJsonPath('data.rows.0.values.0',200);
+        $this->assertNull($this->credit->fresh()->bank_schedule);$this->assertDatabaseCount('credit_payments',0);
+    }
+    public function test_scanned_pdf_uses_local_ocr_and_does_not_save_a_credit_graph(): void
+    {
+        if(!is_executable('/usr/bin/pdftoppm')||!is_executable('/usr/bin/tesseract'))$this->markTestSkipped('OCR tools are installed before the full test suite.');
+        // Synthetic image-only PDF: no account numbers or personal data.
+        $image=imagecreatetruecolor(1400,260);$white=imagecolorallocate($image,255,255,255);$black=imagecolorallocate($image,0,0,0);imagefill($image,0,0,$white);
+        foreach([30=>'22.11.2026',300=>'200.00',550=>'200.00',800=>'0.00',1000=>'0.00',1200=>'0.00'] as $x=>$value)imagestring($image,5,$x,100,$value,$black);
+        ob_start();imagejpeg($image,null,100);$jpeg=ob_get_clean();imagedestroy($image);
+        $content='q 700 0 0 130 0 0 cm /Im0 Do Q';
+        $objects=['<< /Type /Catalog /Pages 2 0 R >>','<< /Type /Pages /Kids [3 0 R] /Count 1 >>','<< /Type /Page /Parent 2 0 R /MediaBox [0 0 700 130] /Resources << /XObject << /Im0 4 0 R >> >> /Contents 5 0 R >>',"<< /Type /XObject /Subtype /Image /Width 1400 /Height 260 /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ".strlen($jpeg)." >>\nstream\n".$jpeg."\nendstream","<< /Length ".strlen($content)." >>\nstream\n".$content."\nendstream"];
+        $pdf="%PDF-1.4\n";$offsets=[0];foreach($objects as $i=>$object){$offsets[]=strlen($pdf);$pdf.=($i+1)." 0 obj\n".$object."\nendobj\n";}
+        $xref=strlen($pdf);$pdf.="xref\n0 6\n0000000000 65535 f \n";foreach(array_slice($offsets,1) as $offset)$pdf.=sprintf('%010d 00000 n ',$offset)."\n";$pdf.="trailer\n<< /Size 6 /Root 1 0 R >>\nstartxref\n".$xref."\n%%EOF\n";
+        $this->postJson($this->url('bank-schedule/import-pdf'),['pdf_data'=>'data:application/pdf;base64,'.base64_encode($pdf)])->assertOk()->assertJsonPath('data.source','PDF_OCR')->assertJsonCount(1,'data.rows')->assertJsonPath('data.rows.0.date','2026-11-22')->assertJsonPath('data.rows.0.values.0',200);
+        $this->assertNull($this->credit->fresh()->bank_schedule);
+    }
 }

@@ -7,6 +7,7 @@ Route::prefix('v1')->group(function(){
   Route::patch('/credit-payments/{payment}',[\App\Http\Controllers\Api\CreditLedgerController::class,'updatePayment']);
   Route::delete('/credit-payments/{payment}',[\App\Http\Controllers\Api\CreditLedgerController::class,'destroyPayment']);
   Route::put('/credits/{credit}/bank-schedule',[\App\Http\Controllers\Api\CreditLedgerController::class,'bankSchedule']);
+  Route::post('/credits/{credit}/bank-schedule/import-pdf',[\App\Http\Controllers\Api\CreditLedgerController::class,'importPdf'])->middleware('throttle:6,1');
   Route::post('/credits/{credit}/forecast',[\App\Http\Controllers\Api\CreditLedgerController::class,'forecast']);
   Route::get('/finance/cashback-banks',[\App\Http\Controllers\Api\CashbackBankController::class,'index']);
   Route::post('/finance/cashback-banks/recognize',[\App\Http\Controllers\Api\CashbackBankController::class,'recognize'])->middleware('throttle:12,1');

@@ -40,6 +40,8 @@ RUN sed -i "s|https://dl-cdn.alpinelinux.org/alpine|${ALPINE_MIRROR%/}|g" /etc/a
         pdo_pgsql \
         zip
 
+RUN apk add --no-cache poppler-utils
+
 RUN printf "post_max_size=16M\nmemory_limit=256M\nmax_execution_time=120\n" > /usr/local/etc/php/conf.d/finance-uploads.ini
 
 WORKDIR /var/www/html

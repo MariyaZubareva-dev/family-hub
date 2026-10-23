@@ -1,4 +1,5 @@
 import {expect,test,type Page} from '@playwright/test'
+import {readFileSync} from 'node:fs'
 
 async function setup(page:Page){
   const today=new Date().toLocaleDateString('sv-SE')
@@ -61,5 +62,26 @@ test('bank CSV validates columns, saves graph and requires an explicit interest 
   await page.getByRole('button',{name:'Расчёт досрочного погашения',exact:true}).click();dialog=page.getByRole('dialog',{name:'Расчёт досрочного погашения',exact:true})
   await dialog.getByLabel('Досрочная сумма, ₽').fill('100');await dialog.getByLabel('Как банк списывает накопленные проценты').selectOption('FROM_PREPAYMENT');await dialog.getByRole('button',{name:'Рассчитать',exact:true}).click()
   await expect(dialog).toContainText('Предварительный расчёт');expect(state.requests.find(r=>r.path.endsWith('/forecast')).body.interest_policy).toBe('FROM_PREPAYMENT')
+  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true)
+})
+
+test('PDF upload shows progress, maps bank columns, preserves existing data on a wrong mapping and saves only after review',async({page})=>{
+  const state=await setup(page)
+  let release!:()=>void;const pending=new Promise<void>(resolve=>{release=resolve})
+  await page.route('**/api/v1/credits/c1/bank-schedule/import-pdf',async route=>{await pending;await route.fulfill({json:{data:{source:'PDF_TEXT',pages:2,column_count:5,skipped_lines:0,warnings:['Сверьте график с документом.'],rows:[{date:'2026-11-22',values:[0,400,200,200,0]},{date:'2026-12-22',values:[0,200,200,200,0]},{date:'2027-01-22',values:[0,0,200,200,0]}]}}})})
+  await page.setViewportSize({width:320,height:700});await page.getByRole('button',{name:'Добавить график',exact:true}).click()
+  const dialog=page.getByRole('dialog',{name:'График банка',exact:true})
+  await dialog.getByLabel('Загрузить PDF').setInputFiles({name:'schedule.pdf',mimeType:'application/pdf',buffer:Buffer.from(readFileSync('../backend/tests/Fixtures/credit-schedule.pdf.b64','utf8').trim(),'base64')})
+  await expect(dialog.getByRole('status')).toContainText('Извлекаем график из PDF')
+  await expect(dialog.getByRole('button',{name:'Сохранить график'})).toBeDisabled();release()
+  const review=dialog.getByRole('region',{name:'Проверка PDF'})
+  await expect(review).toBeVisible();await expect(review).toContainText('3 строк')
+  await review.getByLabel('Платёж',{exact:true}).selectOption('2');await review.getByLabel('Основной долг',{exact:true}).selectOption('3');await review.getByLabel('Проценты',{exact:true}).selectOption('0');await review.getByLabel('Услуги',{exact:true}).selectOption('4');await review.getByLabel('Остаток после платежа',{exact:true}).selectOption('4')
+  await review.getByRole('button',{name:'Перенести в график'}).click();await expect(dialog.getByRole('alert')).toContainText('разные столбцы')
+  expect(state.requests.some(r=>r.path==='/credits/c1/bank-schedule'&&r.method==='PUT')).toBe(false)
+  await review.getByLabel('Остаток после платежа',{exact:true}).selectOption('1');await review.getByRole('button',{name:'Перенести в график'}).click()
+  await expect(review).toHaveCount(0);await expect(dialog.getByLabel('Основной долг, ₽')).toHaveValue('600');await expect(dialog.getByLabel('Дата остатка')).toHaveValue('')
+  await dialog.getByLabel('Дата остатка').fill(state.today);await dialog.getByRole('checkbox').check();await dialog.getByRole('button',{name:'Сохранить график'}).click()
+  await expect(dialog).toHaveCount(0);expect(state.credit.bank_schedule.rows).toHaveLength(3);expect(state.credit.bank_schedule.rows[0]).toMatchObject({principal:200,interest:0,payment:200,balance:400})
   expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true)
 })

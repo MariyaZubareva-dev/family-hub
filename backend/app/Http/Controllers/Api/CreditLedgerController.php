@@ -70,4 +70,14 @@ class CreditLedgerController extends BaseApiController
             'recalculation_mode'=>['required','in:TERM,PAYMENT'],'interest_policy'=>['required','in:NEXT_PAYMENT,FROM_PREPAYMENT']]);
         return response()->json(['data'=>$schedule->forecast($loan,$data,now($loan->family->timezone?:'Europe/Moscow')->toDateString())]);
     }
+    public function importPdf(Request $request,string $credit,\App\Services\Finance\CreditPdfImporter $importer): JsonResponse
+    {
+        $this->credit($request,$credit,true);
+        $data=$request->validate(['pdf_data'=>['required','string','max:11200000']]);
+        $parts=explode(',',$data['pdf_data'],2);
+        abort_unless(count($parts)===2 && $parts[0]==='data:application/pdf;base64',422,'Выберите PDF-файл.');
+        $bytes=base64_decode($parts[1],true);
+        abort_unless($bytes!==false && strlen($bytes)<=8*1024*1024,422,'Выберите PDF размером до 8 МБ.');
+        return response()->json(['data'=>$importer->import($bytes)]);
+    }
 }
