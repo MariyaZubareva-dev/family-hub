@@ -159,6 +159,7 @@ class CreditController extends BaseApiController
             'paid_on' => ['required', 'date', 'after_or_equal:' . $credit->start_date, 'before_or_equal:'.now($credit->family->timezone?:'Europe/Moscow')->toDateString()],
             'recalculation_mode' => ['sometimes', 'in:TERM,PAYMENT'],
             'comment' => ['nullable', 'string', 'max:255'],
+            'interest_policy' => ['nullable', 'in:NEXT_PAYMENT,FROM_PREPAYMENT'],
         ]);
 
         $prepayment = CreditPrepayment::create([
@@ -168,7 +169,7 @@ class CreditController extends BaseApiController
             'created_by' => $membership->user_id,
         ]);
 
-        app(\App\Services\Finance\CreditSchedule::class)->invalidate($credit);
+        app(\App\Services\Finance\CreditSchedule::class)->invalidate($credit,'PREPAYMENTS');
 
         return response()->json(['data' => $prepayment], 201);
     }
@@ -183,9 +184,10 @@ class CreditController extends BaseApiController
             'paid_on' => ['sometimes', 'date', 'after_or_equal:' . $credit->start_date, 'before_or_equal:'.now($credit->family->timezone?:'Europe/Moscow')->toDateString()],
             'recalculation_mode' => ['sometimes', 'in:TERM,PAYMENT'],
             'comment' => ['sometimes', 'nullable', 'string', 'max:255'],
+            'interest_policy' => ['sometimes', 'nullable', 'in:NEXT_PAYMENT,FROM_PREPAYMENT'],
         ]);
         $prepayment->update($data);
-        app(\App\Services\Finance\CreditSchedule::class)->invalidate($credit);
+        app(\App\Services\Finance\CreditSchedule::class)->invalidate($credit,'PREPAYMENTS');
         return response()->json(['data' => $prepayment->fresh()]);
     }
 
@@ -195,7 +197,7 @@ class CreditController extends BaseApiController
         $membership = $this->membership($request, $credit->family_id);
         $this->assertAdmin($membership);
         $prepayment->delete();
-        app(\App\Services\Finance\CreditSchedule::class)->invalidate($credit);
+        app(\App\Services\Finance\CreditSchedule::class)->invalidate($credit,'PREPAYMENTS');
         return response()->json([], 204);
     }
 }

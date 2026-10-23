@@ -12,6 +12,7 @@ async function setup(page:Page){
     else if(path==='/credits')data=[credit]
     else if(path==='/credits/c1'&&method==='PATCH'){Object.assign(credit,body);data=credit}
     else if(path==='/credits/c1/payments'){data={...body,id:'pay1'};credit.payments.push(data);credit.summary.last_paid_on=body.paid_on}
+    else if(path==='/credits/c1/prepayments'){data={...body,id:'early2'};credit.prepayments.push(data)}
     else if(path==='/credit-payments/pay1'){if(method==='DELETE')credit.payments=[];else{Object.assign(credit.payments[0],body);data=credit.payments[0]}}
     else if(path==='/credit-prepayments/early'){if(method==='DELETE')credit.prepayments=[];else{Object.assign(credit.prepayments[0],body);data=credit.prepayments[0]}}
     else if(path==='/credits/c1/bank-schedule'){credit.bank_schedule={...body,version:1,complete:true,stale:false};data=credit.bank_schedule}
@@ -25,9 +26,10 @@ async function setup(page:Page){
 }
 test('monthly payment can be created, corrected and deleted; early payment can be deleted',async({page})=>{
   const state=await setup(page)
-  await expect(page.getByText('Последний платёж по графику',{exact:true})).toBeVisible()
+  await expect(page.getByText('Окончание по договору',{exact:true})).toBeVisible()
   await page.getByRole('button',{name:'＋ Ежемесячный платёж',exact:true}).click()
   let dialog=page.getByRole('dialog',{name:'Ежемесячный платёж',exact:true})
+  await expect(dialog.getByLabel('Дата по графику',{exact:true})).toHaveValue('');await dialog.getByLabel('Дата по графику',{exact:true}).fill(state.today)
   await dialog.getByLabel('Комментарий').fill('Банк списал платёж');await dialog.getByRole('button',{name:'Сохранить оплату'}).click()
   await expect(dialog).toHaveCount(0);expect(state.credit.payments).toHaveLength(1)
   const payment=page.locator('.credit-payment').filter({hasText:'Банк списал платёж'})
@@ -39,6 +41,27 @@ test('monthly payment can be created, corrected and deleted; early payment can b
   await page.getByRole('button',{name:'Удалить досрочный платёж от 01.03.2026'}).click();await page.getByRole('dialog').getByRole('button',{name:'Удалить платёж',exact:true}).click()
   await expect(page.getByText('Досрочных платежей пока нет.',{exact:true})).toBeVisible();expect(state.credit.prepayments).toHaveLength(0)
   expect(state.requests.some(r=>r.path==='/finances'&&r.method==='POST')).toBe(false)
+})
+test('bank payment is shown in full separately from remaining amount and the projected end date',async({page})=>{
+  const state=await setup(page)
+  state.credit.bank_schedule={as_of:'2026-10-04',complete:true,stale:true,rows:[{date:'2048-03-04',payment:56592.34,principal:50000,interest:6592.34,fees:0,balance:0}]}
+  state.credit.summary={last_payment_date:'2048-03-04',last_paid_on:'2026-10-04',next_payment:{date:'2026-11-04',planned_amount:56592.34,paid_amount:49174.71,amount:7417.63},estimated_last_payment_date:'2045-02-04',estimated_next_payment:{date:'2026-11-04',payment:56592.34}}
+  await page.reload();await page.getByRole('tab',{name:'Кредиты',exact:true}).click();await page.setViewportSize({width:320,height:852})
+  await expect(page.locator('.f-row').filter({hasText:'По графику ·'})).toContainText('56 592,34 ₽')
+  await expect(page.locator('.f-row').filter({hasText:'Осталось внести'})).toContainText('7 417,63 ₽')
+  await expect(page.locator('.f-row').filter({hasText:'Дата полного погашения'})).toContainText('04.03.2048')
+  await expect(page.locator('.f-row').filter({hasText:'Расчётное окончание'})).toContainText('04.02.2045')
+  await page.getByRole('button',{name:'＋ Ежемесячный платёж',exact:true}).click();const dialog=page.getByRole('dialog',{name:'Ежемесячный платёж',exact:true})
+  await expect(dialog.getByLabel('Сумма оплаты, ₽')).toHaveValue('56592.34');await expect(dialog.getByLabel('Дата по графику',{exact:true})).toHaveValue('')
+  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true)
+})
+test('new and edited prepayments save the bank interest policy',async({page})=>{
+  const state=await setup(page);const entry=page.locator('.credit-prepayment-entry')
+  await entry.getByLabel('Сумма, ₽',{exact:true}).fill('100');await entry.getByLabel('Проценты при досрочном платеже').selectOption('FROM_PREPAYMENT');await entry.getByRole('button',{name:'Сохранить платёж',exact:true}).click()
+  await expect.poll(()=>state.requests.find(r=>r.path==='/credits/c1/prepayments')?.body.interest_policy).toBe('FROM_PREPAYMENT')
+  await page.getByRole('button',{name:'Изменить досрочный платёж от 01.03.2026'}).click();const dialog=page.getByRole('dialog',{name:'Изменить досрочный платёж',exact:true})
+  await dialog.getByLabel('Проценты при досрочном платеже').selectOption('NEXT_PAYMENT');await dialog.getByRole('button',{name:'Сохранить оплату'}).click()
+  await expect(dialog).toHaveCount(0);expect(state.credit.prepayments[0].interest_policy).toBe('NEXT_PAYMENT')
 })
 test('monthly contractual amount is editable and persists on reload',async({page})=>{
   const state=await setup(page)

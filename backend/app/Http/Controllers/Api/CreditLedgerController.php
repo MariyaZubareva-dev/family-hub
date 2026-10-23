@@ -53,12 +53,13 @@ class CreditLedgerController extends BaseApiController
             'rows.*.fees'=>['nullable','numeric','min:0'],'rows.*.balance'=>['required','numeric','min:0'],
         ]);
         $validated=$schedule->validateGraph($data);
-        $loan=DB::transaction(function()use($loan,$validated){
+        $loan=DB::transaction(function()use($loan,$validated,$schedule){
             $locked=Credit::whereKey($loan->id)->lockForUpdate()->firstOrFail();
             abort_unless((int)$validated['base_version']===(int)($locked->bank_schedule['version']??0),409,'График уже изменился. Обновите кредит перед сохранением.');
             $latest=$locked->prepayments()->max('paid_on');
             abort_if($latest && $validated['as_of']<$latest,422,'Остаток и график должны учитывать последний досрочный платёж. Выберите дату остатка не раньше него.');
             $graph=$validated;unset($graph['base_version']);$graph['version']=(int)($locked->bank_schedule['version']??0)+1;
+            $graph['prepayment_basis']=$schedule->prepaymentBasis($locked,$graph['as_of']);
             $locked->update(['bank_schedule'=>$graph]);return $locked;
         });
         return response()->json(['data'=>$loan->bank_schedule]);

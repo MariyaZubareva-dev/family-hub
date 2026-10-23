@@ -38,7 +38,7 @@ class CreditLedgerTest extends TestCase
         $id=$this->postJson($this->url('payments'),$data)->assertCreated()->assertJsonPath('data.created_by',$this->admin->id)->json('data.id');
         $this->getJson('/api/v1/credits')->assertJsonPath('data.0.summary.last_paid_on','2026-10-22')->assertJsonPath('data.0.summary.next_payment.date','2026-12-22');
         $this->patchJson('/api/v1/credit-payments/'.$id,[...$data,'amount'=>150])->assertOk();
-        $this->getJson('/api/v1/credits')->assertJsonPath('data.0.summary.next_payment.amount',50);
+        $this->getJson('/api/v1/credits')->assertJsonPath('data.0.summary.next_payment.amount',50)->assertJsonPath('data.0.summary.next_payment.planned_amount',200)->assertJsonPath('data.0.summary.next_payment.paid_amount',150);
         $this->deleteJson('/api/v1/credit-payments/'.$id)->assertNoContent();
         $this->getJson('/api/v1/credits')->assertJsonPath('data.0.summary.last_paid_on',null)->assertJsonCount(0,'data.0.payments');
         $this->assertDatabaseCount('finance_transactions',0);
@@ -92,6 +92,67 @@ class CreditLedgerTest extends TestCase
         $this->getJson('/api/v1/credits')->assertJsonPath('data.0.summary.bank_schedule_stale',true);
         $this->deleteJson('/api/v1/credit-prepayments/'.$id)->assertNoContent();
         $this->getJson('/api/v1/credits')->assertJsonCount(0,'data.0.prepayments');
+    }
+    public function test_saved_prepayments_recalculate_end_date_and_edits_deletes_replay_from_bank_basis(): void
+    {
+        $graph=$this->graph();$graph['as_of']='2026-10-01';
+        $this->putJson($this->url('bank-schedule'),$graph)->assertOk()->assertJsonPath('data.as_of','2026-10-01');
+        $early=$this->postJson($this->url('prepayments'),['paid_on'=>'2026-10-04','amount'=>200,'recalculation_mode'=>'TERM','interest_policy'=>'NEXT_PAYMENT'])->assertCreated()->json('data.id');
+        $this->getJson('/api/v1/credits')->assertJsonPath('data.0.summary.last_payment_date','2027-01-22')->assertJsonPath('data.0.summary.estimated_last_payment_date','2026-12-22');
+        $second=$this->postJson($this->url('prepayments'),['paid_on'=>'2026-10-20','amount'=>200,'recalculation_mode'=>'TERM','interest_policy'=>'NEXT_PAYMENT'])->assertCreated()->json('data.id');
+        $this->getJson('/api/v1/credits')->assertJsonPath('data.0.summary.estimated_last_payment_date','2026-11-22');
+        $this->patchJson('/api/v1/credit-prepayments/'.$second,['amount'=>100])->assertOk();
+        $this->getJson('/api/v1/credits')->assertJsonPath('data.0.summary.estimated_last_payment_date','2026-12-22');
+        $this->deleteJson('/api/v1/credit-prepayments/'.$second)->assertNoContent();
+        $this->deleteJson('/api/v1/credit-prepayments/'.$early)->assertNoContent();
+        $this->getJson('/api/v1/credits')->assertJsonPath('data.0.summary.estimated_last_payment_date','2027-01-22');
+        $this->assertEquals($graph['rows'],$this->credit->fresh()->bank_schedule['rows']);
+    }
+    public function test_reimport_includes_existing_prepayments_once_and_changed_basis_requires_bank_graph(): void
+    {
+        $graph=$this->graph();$graph['as_of']='2026-10-01';$this->putJson($this->url('bank-schedule'),$graph)->assertOk();
+        $id=$this->postJson($this->url('prepayments'),['paid_on'=>'2026-10-04','amount'=>200,'recalculation_mode'=>'TERM'])->json('data.id');
+        $new=$this->graph();$new['as_of']='2026-10-05';$new['base_version']=1;$new['opening_balance']=400;array_pop($new['rows']);$new['rows'][0]['balance']=200;$new['rows'][1]['balance']=0;
+        $this->putJson($this->url('bank-schedule'),$new)->assertOk();
+        $this->getJson('/api/v1/credits')->assertJsonPath('data.0.summary.last_payment_date','2026-12-22')->assertJsonPath('data.0.summary.estimated_last_payment_date',null);
+        $this->postJson($this->url('prepayments'),['paid_on'=>'2026-10-22','amount'=>200,'recalculation_mode'=>'TERM'])->assertCreated();
+        $this->getJson('/api/v1/credits')->assertJsonPath('data.0.summary.estimated_last_payment_date','2026-11-22');
+        $this->patchJson('/api/v1/credit-prepayments/'.$id,['amount'=>150])->assertOk();
+        $this->getJson('/api/v1/credits')->assertJsonPath('data.0.summary.estimated_last_payment_date',null)->assertJsonPath('data.0.summary.projection_error','Изменён платёж, уже учтённый в исходном остатке. Обновите график банка.');
+    }
+    public function test_interest_policy_and_actual_event_dates_drive_projection_without_using_upload_date(): void
+    {
+        $graph=['as_of'=>'2026-10-01','opening_balance'=>1000,'base_version'=>0,'rows'=>[
+            ['date'=>'2026-11-01','payment'=>515,'principal'=>500,'interest'=>10,'fees'=>5,'balance'=>500],
+            ['date'=>'2026-12-01','payment'=>510,'principal'=>500,'interest'=>7,'fees'=>3,'balance'=>0],
+        ]];
+        $this->putJson($this->url('bank-schedule'),$graph)->assertOk();
+        $id=$this->postJson($this->url('prepayments'),['paid_on'=>'2026-10-11','amount'=>200,'recalculation_mode'=>'TERM'])->json('data.id');
+        $this->getJson('/api/v1/credits')->assertJsonPath('data.0.summary.projection_available',false);
+        $this->patchJson('/api/v1/credit-prepayments/'.$id,['interest_policy'=>'NEXT_PAYMENT'])->assertOk();
+        $service=app(\App\Services\Finance\CreditSchedule::class);$next=$service->projection($this->credit->fresh());
+        $expected=round(1000*.01*10/31+800*.01*21/31,2);
+        $this->assertEquals($expected,$next['rows'][0]['interest']);$this->assertEquals(5,$next['rows'][0]['fees']);
+        $this->patchJson('/api/v1/credit-prepayments/'.$id,['interest_policy'=>'FROM_PREPAYMENT'])->assertOk();
+        $from=$service->projection($this->credit->fresh());$this->assertLessThan($next['rows'][0]['interest'],$from['rows'][0]['interest']);
+        $this->patchJson('/api/v1/credit-prepayments/'.$id,['paid_on'=>'2026-10-21','interest_policy'=>'NEXT_PAYMENT'])->assertOk();
+        $later=$service->projection($this->credit->fresh());$this->assertGreaterThan($next['rows'][0]['interest'],$later['rows'][0]['interest']);
+        $this->postJson($this->url('prepayments'),['paid_on'=>'2026-10-22','amount'=>100,'recalculation_mode'=>'TERM','interest_policy'=>'NEXT_PAYMENT'])->assertCreated();
+        $multiple=$service->projection($this->credit->fresh());
+        $this->assertEquals(round(1000*.01*20/31+800*.01*1/31+700*.01*10/31,2),$multiple['rows'][0]['interest']);
+        $this->assertEqualsWithDelta(700,array_sum(array_column($multiple['rows'],'principal')),0.02);
+        $this->assertEquals(0,end($multiple['rows'])['balance']);
+    }
+    public function test_same_day_regular_payment_precedes_early_payment_and_payment_mode_preserves_term(): void
+    {
+        $graph=$this->graph();$graph['as_of']='2026-10-01';$graph['rows'][0]['date']='2026-10-10';$this->putJson($this->url('bank-schedule'),$graph)->assertOk();
+        $this->postJson($this->url('prepayments'),['paid_on'=>'2026-10-10','amount'=>200,'recalculation_mode'=>'TERM'])->assertCreated();
+        $this->getJson('/api/v1/credits')->assertJsonPath('data.0.summary.estimated_last_payment_date','2026-12-22');
+        $this->postJson($this->url('prepayments'),['paid_on'=>'2026-10-20','amount'=>100,'recalculation_mode'=>'PAYMENT'])->assertCreated();
+        $result=app(\App\Services\Finance\CreditSchedule::class)->projection($this->credit->fresh());
+        $this->assertSame('2026-12-22',$result['last_payment_date']);$this->assertEqualsWithDelta(100,$result['rows'][1]['payment'],0.01);
+        $this->patchJson('/api/v1/credits/'.$this->credit->id,['standard_payment'=>210,'first_payment_date'=>'2026-10-10'])->assertOk();
+        $this->getJson('/api/v1/credits')->assertJsonPath('data.0.summary.projection_available',false)->assertJsonPath('data.0.summary.estimated_last_payment_date',null);
     }
     public function test_members_cannot_write_and_other_family_cannot_read_or_change_ledger(): void
     {
