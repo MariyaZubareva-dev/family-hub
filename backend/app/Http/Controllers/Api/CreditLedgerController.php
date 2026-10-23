@@ -42,7 +42,10 @@ class CreditLedgerController extends BaseApiController
             $locked=Credit::whereKey($loan->id)->lockForUpdate()->firstOrFail();
             abort_unless((int)($locked->bank_schedule['version']??0)===(int)$data['base_version'],409,'График изменился. Обновите кредит и отметьте оплату ещё раз.');
             $row=collect($schedule->regularSchedule($locked,$today))->firstWhere('date',$data['scheduled_on']);
-            if(!$data['paid']){$locked->payments()->whereDate('scheduled_on',$data['scheduled_on'])->delete();return;}
+            if(!$data['paid']){
+                if($row)$locked->payments()->whereIn('id',$row['payment_ids'])->delete();
+                return;
+            }
             abort_unless($row,422,'Такой даты нет в графике. Для другой даты используйте ручную запись оплаты.');
             if($row['remaining_amount']>0)$locked->payments()->create(['scheduled_on'=>$row['date'],'paid_on'=>$data['paid_on'],'amount'=>$row['remaining_amount'],'created_by'=>$request->user()->id]);
         });
@@ -76,6 +79,7 @@ class CreditLedgerController extends BaseApiController
             abort_if($latest && $validated['as_of']<$latest,422,'Остаток и график должны учитывать последний досрочный платёж. Выберите дату остатка не раньше него.');
             $graph=$validated;unset($graph['base_version']);$graph['version']=(int)($locked->bank_schedule['version']??0)+1;
             $graph['prepayment_basis']=$schedule->prepaymentBasis($locked,$graph['as_of']);
+            $graph['included_payment_ids']=$locked->payments()->whereDate('paid_on','<=',$graph['as_of'])->pluck('id')->all();
             $locked->update(['bank_schedule'=>$graph]);return $locked;
         });
         return response()->json(['data'=>$loan->bank_schedule]);

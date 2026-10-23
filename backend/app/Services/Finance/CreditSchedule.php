@@ -36,7 +36,17 @@ class CreditSchedule
         foreach($candidates as $row)if($row['date']>=$today&&$row['status']!=='PAID'){$next=['date'=>$row['date'],'amount'=>$row['remaining_amount'],'planned_amount'=>$row['payment'],'paid_amount'=>$row['paid_amount']];break;}
         return ['last_payment_date'=>$end,'last_paid_on'=>$paidDates->max(),'next_payment'=>$next,'bank_schedule_stale'=>(bool)($graph['stale']??false),'schedule_source'=>$graph?'BANK':'CONTRACT',
             'estimated_last_payment_date'=>$projection['last_payment_date']??null,'estimated_next_payment'=>collect($projection['rows']??[])->first(fn($r)=>$r['date']>=$today),
-            'projection_error'=>$projectionError,'projection_available'=>$projection!==null,'regular_schedule'=>$candidates];
+            'projection_error'=>$projectionError,'projection_available'=>$projection!==null,'regular_schedule'=>$candidates,
+            'payment_history'=>$credit->payments->map(fn($p)=>[...$p->toArray(),'included_in_bank_snapshot'=>$this->includedInSnapshot($credit,$p),'display_scheduled_on'=>$this->includedInSnapshot($credit,$p)?$p->paid_on->toDateString():$p->scheduled_on->toDateString()])->values()->all(),
+            'bank_balance_as_of'=>$graph['as_of']??null,'bank_opening_balance'=>$graph['opening_balance']??null];
+    }
+    public function includedInSnapshot(Credit $credit,$payment): bool
+    {
+        $graph=$credit->bank_schedule;
+        if(!$graph||$payment->paid_on->toDateString()>$graph['as_of'])return false;
+        if(array_key_exists('included_payment_ids',$graph))return in_array($payment->id,$graph['included_payment_ids'],true);
+        // Older imports did not retain the journal IDs. Only records existing before the snapshot qualify.
+        return !empty($graph['saved_at'])&&$payment->created_at&&$payment->created_at->lt(CarbonImmutable::parse($graph['saved_at']));
     }
     public function regularSchedule(Credit $credit,string $today): array
     {
@@ -46,7 +56,7 @@ class CreditSchedule
             foreach($credit->payment_schedule??[] as $segment)if($i+1>=$segment['from_month']&&$i+1<=$segment['to_month']){$payment=(float)$segment['amount'];break;}
             $candidates[]=['date'=>$first->addMonthsNoOverflow($i)->toDateString(),'payment'=>$payment];
         }
-        $dates=array_column($candidates,'date');$grouped=$credit->payments->groupBy(fn($p)=>$p->scheduled_on->toDateString());
+        $dates=array_column($candidates,'date');$grouped=$credit->payments->groupBy(fn($p)=>$this->includedInSnapshot($credit,$p)?$p->paid_on->toDateString():$p->scheduled_on->toDateString());
         foreach($grouped as $date=>$payments)if(!in_array($date,$dates,true))$candidates[]=['date'=>$date,'payment'=>round((float)$payments->sum('amount'),2),'source'=>'JOURNAL'];
         $result=[];
         foreach($candidates as $row){

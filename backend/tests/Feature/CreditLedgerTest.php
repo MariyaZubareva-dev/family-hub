@@ -54,6 +54,28 @@ class CreditLedgerTest extends TestCase
         $this->putJson($this->url('bank-schedule'),$partial)->assertOk()->assertJsonPath('data.complete',false);
         $this->postJson($this->url('forecast'),$this->forecast())->assertUnprocessable();
     }
+    public function test_payments_in_bank_opening_balance_do_not_reduce_future_installments_twice(): void
+    {
+        $payment=$this->postJson($this->url('payments'),['scheduled_on'=>'2026-11-22','paid_on'=>'2026-10-04','amount'=>150])->assertCreated()->json('data.id');
+        $graph=$this->graph();$graph['as_of']='2026-10-04';$this->putJson($this->url('bank-schedule'),$graph)->assertOk();
+        $this->getJson('/api/v1/credits')->assertJsonPath('data.0.summary.next_payment.amount',200)->assertJsonPath('data.0.summary.next_payment.paid_amount',0)
+            ->assertJsonPath('data.0.summary.regular_schedule.0.date','2026-10-04')->assertJsonPath('data.0.summary.regular_schedule.0.status','PAID')
+            ->assertJsonPath('data.0.summary.payment_history.0.included_in_bank_snapshot',true)->assertJsonPath('data.0.summary.payment_history.0.display_scheduled_on','2026-10-04');
+        $this->assertDatabaseHas('credit_payments',['id'=>$payment,'scheduled_on'=>'2026-11-22','amount'=>150]);
+        $this->putJson($this->url('schedule-payment'),['scheduled_on'=>'2026-10-04','paid'=>false,'base_version'=>1])->assertOk();
+        $this->assertDatabaseCount('credit_payments',0);
+    }
+    public function test_legacy_snapshot_recognizes_existing_payments_without_altering_new_advance_payments(): void
+    {
+        $graph=$this->graph();$graph['as_of']='2026-10-04';$this->putJson($this->url('bank-schedule'),$graph)->assertOk();
+        $bank=$this->credit->fresh()->bank_schedule;unset($bank['included_payment_ids']);$this->credit->update(['bank_schedule'=>$bank]);
+        $old=$this->credit->payments()->create(['paid_on'=>'2026-10-04','scheduled_on'=>'2026-11-22','amount'=>150,'created_by'=>$this->admin->id]);
+        $old->forceFill(['created_at'=>now()->subMinutes(5)])->save();
+        $this->getJson('/api/v1/credits')->assertJsonPath('data.0.summary.next_payment.amount',200)->assertJsonPath('data.0.summary.payment_history.0.included_in_bank_snapshot',true);
+        $this->credit->payments()->create(['paid_on'=>'2026-10-03','scheduled_on'=>'2026-12-22','amount'=>200,'created_by'=>$this->admin->id]);
+        $result=$this->getJson('/api/v1/credits')->assertOk()->json('data.0.summary.regular_schedule');
+        $this->assertSame('PAID',collect($result)->firstWhere('date','2026-12-22')['status']);
+    }
     public function test_checkbox_payment_keeps_period_when_paid_on_another_date_and_is_idempotent(): void
     {
         $this->putJson($this->url('bank-schedule'),$this->graph())->assertOk();

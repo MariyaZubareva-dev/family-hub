@@ -277,10 +277,9 @@ test('credit, historical prepayment and its purpose persist after reload',async(
   await form.getByLabel('Сумма, ₽',{exact:true}).fill('12000');await form.getByLabel('Срок, месяцев').fill('12');await form.getByLabel('Платёж в месяц, ₽').fill('1000')
   await form.getByLabel('Дата договора').fill('2026-01-01');await form.getByLabel('Первый платёж').fill('2026-02-01');await form.getByRole('button',{name:'Сохранить кредит'}).click()
   await expect(form).toHaveCount(0);await expect(page.getByRole('button',{name:/Рассрочка на технику/})).toBeVisible()
-  await page.getByText('Досрочные платежи',{exact:true}).click()
-  await page.getByLabel('Дата платежа',{exact:true}).fill('2026-03-01');await page.getByLabel('Сумма, ₽',{exact:true}).fill('1500');await page.getByLabel('Проценты при досрочном платеже').selectOption('NEXT_PAYMENT');await page.getByRole('button',{name:'Сохранить платёж',exact:true}).click()
-  const purpose=page.getByLabel('Назначение платежа от 01.03.2026',{exact:true});await expect(purpose).toBeVisible();await purpose.selectOption('PAYMENT')
-  await expect(purpose).toHaveValue('PAYMENT');await page.reload();await tab(page,'Кредиты');await page.getByText('Досрочные платежи',{exact:true}).click();await expect(page.getByLabel('Назначение платежа от 01.03.2026',{exact:true})).toHaveValue('PAYMENT')
+  await page.getByRole('button',{name:'Досрочный платёж',exact:true}).click();let early=page.getByRole('dialog',{name:'Досрочный платёж',exact:true});await early.getByLabel('Дата оплаты',{exact:true}).fill('2026-03-01');await early.getByLabel('Сумма оплаты, ₽').fill('1500');await early.getByLabel('Проценты при досрочном платеже').selectOption('NEXT_PAYMENT');await early.getByRole('button',{name:'Сохранить платёж',exact:true}).click();await expect(early).toHaveCount(0)
+  await page.getByRole('tab',{name:'История',exact:true}).click();await page.getByRole('button',{name:'Изменить досрочный платёж от 01.03.2026',exact:true}).click();early=page.getByRole('dialog',{name:'Изменить досрочный платёж'});await early.getByRole('combobox',{name:'Назначение',exact:true}).selectOption('PAYMENT');await early.getByRole('button',{name:'Сохранить оплату',exact:true}).click();await expect(early).toHaveCount(0)
+  await page.reload();await tab(page,'Кредиты');await page.getByRole('tab',{name:'История',exact:true}).click();await expect(page.locator('.credit-history-row')).toContainText('Уменьшение платежа')
   expect(state.credits[0]).toMatchObject({type:'INSTALLMENT',annual_rate:0});expect(state.credits[0].prepayments).toHaveLength(1);expect(state.credits[0].prepayments[0].interest_policy).toBe('NEXT_PAYMENT')
 })
 
@@ -300,12 +299,10 @@ for(const width of [320,393,768])test(`finance tabs, dialogs and prepayments fit
   await page.setViewportSize({width,height:852});await page.goto('/?section=finance');await expect(page.getByRole('button',{name:'Обновить финансы'})).toBeEnabled();await page.evaluate(()=>document.fonts.ready)
   await expect(page.getByText(/LIVE v07|Teal|POST \/|CoinKeeper/)).toHaveCount(0)
   for(const name of ['Обзор','Категории','Чеки','Запасы','Кредиты','Бюджет']){
-    await tab(page,name);await expect(page.getByRole('tabpanel')).toBeVisible();expect(await page.evaluate(()=>document.documentElement.scrollWidth)).toBeLessThanOrEqual(width)
+    await tab(page,name);await expect(page.getByRole('tabpanel').first()).toBeVisible();expect(await page.evaluate(()=>document.documentElement.scrollWidth)).toBeLessThanOrEqual(width)
     if(['Обзор','Категории','Кредиты'].includes(name))await page.screenshot({path:`test-results/finance-${name==='Обзор'?'overview':name==='Категории'?'categories':'credits'}-${width}.png`,fullPage:true})
     if(name==='Кредиты'){
-      await page.getByText('Досрочные платежи',{exact:true}).click()
-      const bounds=await page.locator('.f-prepayment').evaluate(el=>{const date=el.querySelector('time')!.getBoundingClientRect(),amount=el.querySelector('b')!.getBoundingClientRect();return{dateRight:date.right,amountLeft:amount.left}})
-      expect(bounds.dateRight).toBeLessThanOrEqual(bounds.amountLeft)
+          const hero=page.locator('.credit-overview');expect(await hero.evaluate(el=>el.scrollWidth<=el.clientWidth)).toBe(true)
       await page.getByRole('button',{name:'＋ Добавить',exact:true}).click();const dialog=page.getByRole('dialog');await expect(dialog).toBeVisible();expect(await dialog.evaluate(el=>el.scrollWidth<=el.clientWidth)).toBe(true);await page.screenshot({path:`test-results/finance-credit-form-${width}.png`});await page.keyboard.press('Escape')
     }
   }
