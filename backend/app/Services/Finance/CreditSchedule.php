@@ -33,7 +33,7 @@ class CreditSchedule
         $end=$rows?end($rows)['date']:$first->addMonthsNoOverflow(max(0,$credit->term_months-1))->toDateString();
         $paidDates=$credit->payments->pluck('paid_on')->merge($credit->prepayments->pluck('paid_on'))->map(fn($date)=>CarbonImmutable::parse($date)->toDateString());
         $candidates=$this->regularSchedule($credit,$today);$next=null;
-        foreach($candidates as $row)if($row['status']!=='PAID'){$next=['date'=>$row['date'],'amount'=>$row['remaining_amount'],'planned_amount'=>$row['payment'],'paid_amount'=>$row['paid_amount']];break;}
+        foreach($candidates as $row)if($row['date']>=$today&&$row['status']!=='PAID'){$next=['date'=>$row['date'],'amount'=>$row['remaining_amount'],'planned_amount'=>$row['payment'],'paid_amount'=>$row['paid_amount']];break;}
         return ['last_payment_date'=>$end,'last_paid_on'=>$paidDates->max(),'next_payment'=>$next,'bank_schedule_stale'=>(bool)($graph['stale']??false),'schedule_source'=>$graph?'BANK':'CONTRACT',
             'estimated_last_payment_date'=>$projection['last_payment_date']??null,'estimated_next_payment'=>collect($projection['rows']??[])->first(fn($r)=>$r['date']>=$today),
             'projection_error'=>$projectionError,'projection_available'=>$projection!==null,'regular_schedule'=>$candidates];

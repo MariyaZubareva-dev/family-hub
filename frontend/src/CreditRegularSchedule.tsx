@@ -28,16 +28,17 @@ function rowsFor(credit:any):Scheduled[]{
 }
 export default function CreditRegularSchedule({credit,admin,onSaved,onEdit}:{credit:any;admin:boolean;onSaved:()=>Promise<void>;onEdit:(p:any)=>void}){
   const [filter,setFilter]=useState('pending'),[limit,setLimit]=useState(6),[expanded,setExpanded]=useState('')
-  const [marking,setMarking]=useState<Scheduled|null>(null),[paidOn,setPaidOn]=useState(today()),[busy,setBusy]=useState(false),[error,setError]=useState('')
+  const [marking,setMarking]=useState<Scheduled|null>(null),[paidOn,setPaidOn]=useState(today()),[busy,setBusy]=useState(false),[error,setError]=useState(''),[notice,setNotice]=useState('')
   const rows=rowsFor(credit),shown=rows.filter(r=>filter==='all'||(filter==='paid'?r.status==='PAID':r.status!=='PAID'&&(filter==='past'?r.date<today():r.date>=today())))
   const save=async()=>{
     if(!marking||busy)return
     setBusy(true);setError('')
-    try{await request(`/credits/${credit.id}/schedule-payment`,'PUT',{scheduled_on:marking.date,paid_on:paidOn,paid:marking.status!=='PAID',base_version:credit.bank_schedule?.version||0});await onSaved();setMarking(null)}
+    try{await request(`/credits/${credit.id}/schedule-payment`,'PUT',{scheduled_on:marking.date,paid_on:paidOn,paid:marking.status!=='PAID',base_version:credit.bank_schedule?.version||0});await onSaved();setNotice(marking.status==='PAID'?'Отметка оплаты снята.':`Платёж за ${date(marking.date)} отмечен как оплаченный.`);setMarking(null)}
     catch(e){setError(e instanceof Error?e.message:'Не удалось сохранить отметку. Попробуйте ещё раз.')}
     finally{setBusy(false)}
   }
   return <div className="credit-regular-schedule">
+    {notice&&<p role="status" className="credit-pdf-note">{notice}</p>}
     <div className="credit-schedule-toolbar"><Field label="Показать платежи"><select value={filter} onChange={e=>{setFilter(e.target.value);setLimit(6)}}><option value="pending">Предстоит</option><option value="paid">Оплачено</option><option value="past">Не отмечены</option><option value="all">Все</option></select></Field><Help text="Галочка относится к выбранной дате графика. Дату фактической оплаты можно изменить — это не перенесёт отметку на другой месяц. Снятие галочки удаляет записи оплаты за выбранный период после подтверждения."/></div>
     <div className="credit-schedule-list" role="list" aria-label="Регулярные платежи по графику">{shown.slice(0,limit).map(r=><div className="credit-schedule-item" role="listitem" key={r.date}>
       <div className="credit-schedule-line"><input type="checkbox" aria-label={`Оплачен платёж ${date(r.date)}`} checked={r.status==='PAID'} disabled={!admin||busy} onChange={()=>{setError('');setPaidOn(today());setMarking(r)}}/>

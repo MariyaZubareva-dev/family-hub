@@ -79,16 +79,17 @@ test('monthly contractual amount is editable and persists on reload',async({page
 })
 test('schedule checkbox preserves its selected period across another payment date, reload and undo',async({page})=>{
   const state=await setup(page)
-  state.credit.bank_schedule={as_of:'2026-10-04',version:1,complete:true,stale:false,rows:[{date:'2026-11-04',payment:200,principal:200,interest:0,fees:0,balance:200},{date:'2026-12-04',payment:200,principal:200,interest:0,fees:0,balance:0}]}
+  state.credit.bank_schedule={as_of:'2026-10-01',version:1,complete:true,stale:false,rows:[{date:'2026-10-04',payment:200,principal:200,interest:0,fees:0,balance:200},{date:'2026-11-04',payment:200,principal:200,interest:0,fees:0,balance:0}]}
   await page.reload();await page.getByRole('tab',{name:'Кредиты',exact:true}).click();await page.setViewportSize({width:320,height:852})
   await expect(page.locator('details.credit-disclosure').filter({has:page.getByText('Досрочные платежи',{exact:true})})).not.toHaveAttribute('open','')
-  await page.getByRole('checkbox',{name:'Оплачен платёж 04.11.2026',exact:true}).click()
+  await page.getByLabel('Показать платежи').selectOption('past')
+  await page.getByRole('checkbox',{name:'Оплачен платёж 04.10.2026',exact:true}).click()
   let dialog=page.getByRole('dialog',{name:'Отметить оплату',exact:true})
   await dialog.getByLabel('Дата фактической оплаты').fill('2026-10-20');await dialog.getByRole('button',{name:'Оплачено',exact:true}).click();await expect(dialog).toHaveCount(0)
-  expect(state.credit.payments[0]).toMatchObject({scheduled_on:'2026-11-04',paid_on:'2026-10-20',amount:200})
+  expect(state.credit.payments[0]).toMatchObject({scheduled_on:'2026-10-04',paid_on:'2026-10-20',amount:200})
   await page.reload();await page.getByRole('tab',{name:'Кредиты',exact:true}).click();await page.getByLabel('Показать платежи').selectOption('all')
-  await expect(page.getByRole('checkbox',{name:'Оплачен платёж 04.11.2026',exact:true})).toBeChecked();await expect(page.getByRole('checkbox',{name:'Оплачен платёж 04.12.2026',exact:true})).not.toBeChecked()
-  await page.getByRole('checkbox',{name:'Оплачен платёж 04.11.2026',exact:true}).click();dialog=page.getByRole('dialog',{name:'Снять отметку оплаты?'})
+  await expect(page.getByRole('checkbox',{name:'Оплачен платёж 04.10.2026',exact:true})).toBeChecked();await expect(page.getByRole('checkbox',{name:'Оплачен платёж 04.11.2026',exact:true})).not.toBeChecked()
+  await page.getByRole('checkbox',{name:'Оплачен платёж 04.10.2026',exact:true}).click();dialog=page.getByRole('dialog',{name:'Снять отметку оплаты?'})
   await dialog.getByRole('button',{name:'Снять отметку',exact:true}).click();await expect(dialog).toHaveCount(0);expect(state.credit.payments).toHaveLength(0)
   expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true)
 })

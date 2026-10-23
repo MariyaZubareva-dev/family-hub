@@ -84,6 +84,12 @@ class CreditLedgerTest extends TestCase
         $this->postJson($this->url('forecast'),$this->forecast(['amount'=>200]))->assertOk()->assertJsonPath('data.last_payment_date','2026-11-22')->assertJsonPath('data.original_last_payment_date','2026-12-22');
         $this->assertDatabaseCount('credit_prepayments',1);$this->assertDatabaseCount('credit_payments',0);
     }
+    public function test_late_payment_marks_the_old_period_without_consuming_next_month(): void
+    {
+        $this->credit->update(['first_payment_date'=>'2026-10-05']);
+        $this->getJson('/api/v1/credits')->assertJsonPath('data.0.summary.next_payment.date','2026-11-05')->assertJsonPath('data.0.summary.regular_schedule.0.status','OVERDUE');
+        $this->putJson($this->url('schedule-payment'),['scheduled_on'=>'2026-10-05','paid_on'=>'2026-10-22','paid'=>true,'base_version'=>0])->assertOk()->assertJsonPath('data.regular_schedule.0.status','PAID')->assertJsonPath('data.regular_schedule.1.status','UPCOMING')->assertJsonPath('data.next_payment.date','2026-11-05');
+    }
     public function test_zero_interest_term_and_payment_scenarios_preserve_money(): void
     {
         $this->putJson($this->url('bank-schedule'),$this->graph())->assertOk();
