@@ -55,5 +55,7 @@
 .credit-pdf-loading{display:flex;align-items:center;gap:8px;padding:12px 0;color:#0F766E;font-size:12px}
 .credit-pdf-spinner{width:20px;height:20px;flex:0 0 20px;border:2px solid #D2E5DD;border-top-color:#147F74;border-radius:50%;animation:credit-pdf-spin .8s linear infinite}
 .credit-pdf-review{padding-top:10px}.credit-pdf-review>.button{margin-top:10px}.credit-pdf-note{font-size:11px;line-height:1.45;color:#64736B;margin:6px 0}
+.credit-table-scroll{max-height:260px;overflow:auto}
+.credit-table th{position:sticky;top:0;background:#F7F9F8;z-index:1}
 @keyframes credit-pdf-spin{to{transform:rotate(360deg)}}
 @media(prefers-reduced-motion:reduce){.credit-pdf-spinner{animation:none;border-right-color:#147F74}}
