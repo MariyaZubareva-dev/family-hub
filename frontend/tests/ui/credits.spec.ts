@@ -52,7 +52,7 @@ test('bank payment is shown in full separately from remaining amount and the pro
   await expect(page.locator('.f-row').filter({hasText:'Дата полного погашения'})).toContainText('04.03.2048')
   await expect(page.locator('.f-row').filter({hasText:'Расчётное окончание'})).toContainText('04.02.2045')
   await page.getByRole('button',{name:'＋ Ежемесячный платёж',exact:true}).click();const dialog=page.getByRole('dialog',{name:'Ежемесячный платёж',exact:true})
-  await expect(dialog.getByLabel('Сумма оплаты, ₽')).toHaveValue('56592.34');await expect(dialog.getByLabel('Дата по графику',{exact:true})).toHaveValue('')
+  await expect(dialog.getByLabel('Сумма оплаты, ₽')).toHaveValue('7417.63');await expect(dialog.getByLabel('Дата по графику',{exact:true})).toHaveValue('')
   expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true)
 })
 test('new and edited prepayments save the bank interest policy',async({page})=>{

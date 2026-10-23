@@ -277,10 +277,10 @@ test('credit, historical prepayment and its purpose persist after reload',async(
   await form.getByLabel('Сумма, ₽',{exact:true}).fill('12000');await form.getByLabel('Срок, месяцев').fill('12');await form.getByLabel('Платёж в месяц, ₽').fill('1000')
   await form.getByLabel('Дата договора').fill('2026-01-01');await form.getByLabel('Первый платёж').fill('2026-02-01');await form.getByRole('button',{name:'Сохранить кредит'}).click()
   await expect(form).toHaveCount(0);await expect(page.getByRole('button',{name:/Рассрочка на технику/})).toBeVisible()
-  await page.getByLabel('Дата платежа',{exact:true}).fill('2026-03-01');await page.getByLabel('Сумма, ₽',{exact:true}).fill('1500');await page.getByRole('button',{name:'Сохранить платёж',exact:true}).click()
+  await page.getByLabel('Дата платежа',{exact:true}).fill('2026-03-01');await page.getByLabel('Сумма, ₽',{exact:true}).fill('1500');await page.getByLabel('Проценты при досрочном платеже').selectOption('NEXT_PAYMENT');await page.getByRole('button',{name:'Сохранить платёж',exact:true}).click()
   const purpose=page.getByLabel('Назначение платежа от 01.03.2026',{exact:true});await expect(purpose).toBeVisible();await purpose.selectOption('PAYMENT')
   await expect(purpose).toHaveValue('PAYMENT');await page.reload();await tab(page,'Кредиты');await expect(page.getByLabel('Назначение платежа от 01.03.2026',{exact:true})).toHaveValue('PAYMENT')
-  expect(state.credits[0]).toMatchObject({type:'INSTALLMENT',annual_rate:0});expect(state.credits[0].prepayments).toHaveLength(1)
+  expect(state.credits[0]).toMatchObject({type:'INSTALLMENT',annual_rate:0});expect(state.credits[0].prepayments).toHaveLength(1);expect(state.credits[0].prepayments[0].interest_policy).toBe('NEXT_PAYMENT')
 })
 
 test('budget saves limits; stocks use shopping data and a tooltip instead of duplicate actions',async({page})=>{
