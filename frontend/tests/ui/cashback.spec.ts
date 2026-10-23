@@ -40,6 +40,8 @@ const fixture={name:'categories.png',mimeType:'image/png',buffer:Buffer.from(rea
 
 for(const width of [320,393,768])test(`cashback comparison and editing fit ${width}px and persist`,async({page})=>{
   const state=await mockCashback(page);await page.setViewportSize({width,height:852});await openCashback(page)
+  const filters=await page.locator('.cb-page>.card>.cb-filters>.f-field').evaluateAll(fields=>fields.map(field=>{const bounds=field.getBoundingClientRect(),label=field.querySelector('span')!.getBoundingClientRect(),control=field.querySelector('input,select')!.getBoundingClientRect();return {right:bounds.right,labelRight:label.right,left:control.left,controlRight:control.right}}))
+  for(const field of filters){expect(field.labelRight).toBeLessThanOrEqual(field.left);expect(field.controlRight).toBeLessThanOrEqual(field.right)}
   await expect(page.getByRole('table',{name:'Категории кешбэка'})).toContainText('Андрей')
   await page.getByRole('button',{name:'Подробнее: Супермаркеты, Т-Банк, Мария'}).click()
   await page.getByRole('button',{name:'Изменить категории банка'}).click()
@@ -54,6 +56,28 @@ for(const width of [320,393,768])test(`cashback comparison and editing fit ${wid
   await page.reload();await page.getByRole('tab',{name:'Кешбэк',exact:true}).click();await expect(page.getByRole('table',{name:'Категории кешбэка'})).toContainText('6,5%')
   await page.screenshot({path:`test-results/cashback-table-${width}.png`,fullPage:true})
   expect(state.calls.filter(c=>c.path.includes('/cards'))).toHaveLength(0)
+})
+
+for(const surface of ['home','finance'])test(`${surface} cashback percentage header sorts numerically in both directions and retains sorting on owner filter`,async({page})=>{
+  const state=await mockCashback(page)
+  state.records[0].entries.push(entry('Аптеки',10.5),entry('Кафе',9.25))
+  if(surface==='home')await page.goto('/');else await openCashback(page)
+  const table=page.getByRole('table',{name:surface==='home'?'Лучшие ставки кешбэка':'Категории кешбэка',exact:true})
+  await expect(table).toBeVisible()
+  const rates=async()=>(await table.locator('.cb-table-rate b').allTextContents()).map(value=>Number(value.replace('%','').replace(',','.')))
+  const header=table.getByRole('columnheader').nth(1)
+  await expect(header).toHaveAttribute('aria-sort','none')
+  await table.getByRole('button',{name:'Сортировать по проценту кешбэка: сначала больший',exact:true}).click()
+  await expect(header).toHaveAttribute('aria-sort','descending')
+  expect(await rates()).toEqual(surface==='home'?[99,10.5,9.25,7,3]:[99,10.5,9.25,7,5,3])
+  const reverse=table.getByRole('button',{name:'Сортировать по проценту кешбэка: сначала меньший',exact:true})
+  await reverse.focus();await page.keyboard.press('Enter')
+  await expect(header).toHaveAttribute('aria-sort','ascending')
+  expect(await rates()).toEqual(surface==='home'?[3,7,9.25,10.5,99]:[3,5,7,9.25,10.5,99])
+  if(surface==='home')await page.getByRole('region',{name:'Где выгоднее кешбэк'}).getByRole('button',{name:'Мои банки',exact:true}).click()
+  else await page.getByRole('combobox',{name:/Владелец/}).selectOption('mine')
+  await expect(header).toHaveAttribute('aria-sort','ascending')
+  expect(await rates()).toEqual([3,5,9.25,10.5])
 })
 
 test('home shows all unique current categories; screenshots are imported from Finance',async({page})=>{

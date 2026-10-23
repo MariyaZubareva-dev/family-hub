@@ -6,7 +6,7 @@
 .cb-upload:has(input:focus-visible){outline:2px solid var(--primary);outline-offset:3px}
 .cb-upload:has(input:disabled){opacity:.55;cursor:default}
 .cb-compact-table{width:100%;table-layout:fixed;border-collapse:collapse;margin-top:8px;text-align:left}
-.cb-col-category{width:52%}.cb-col-rate{width:20%}.cb-col-owner{width:28%}
+.cb-col-category{width:48%}.cb-col-rate{width:24%}.cb-col-owner{width:28%}
 .cb-compact-table th{padding:7px 4px;color:#64748B;font-size:10px;line-height:1.4;font-weight:500;overflow-wrap:anywhere;border-bottom:1px solid #E5EBE8}
 .cb-compact-table td{padding:7px 4px;font-size:11px;line-height:1.4;border-bottom:1px solid #EDF0ED;vertical-align:middle;overflow-wrap:anywhere}
 .cb-compact-table tbody tr:last-child td{border-bottom:0}
@@ -40,3 +40,25 @@
 .cb-summary-tools{display:flex;align-items:center;gap:8px;margin-top:6px}
 .cb-summary-tools .f-segment{flex:1;margin-bottom:0}
 .cb-summary>.cb-upload{margin-top:10px}
+.cb-page>.card{padding:12px}
+.cb-page .f-head{margin-bottom:8px;gap:8px}
+.cb-page .f-head h3{font-size:13px;line-height:1.35}
+.cb-page>.card>.cb-filters{grid-template-columns:minmax(0,1fr);gap:0;border:1px solid #E5ECE8;border-radius:10px;background:#F7F9F8;overflow:hidden;margin-bottom:8px}
+.cb-page>.card>.cb-filters>.f-field{display:flex;flex-direction:row;align-items:center;gap:8px;min-width:0;min-height:38px;padding:3px 9px;border-bottom:1px solid #E5ECE8}
+.cb-page>.card>.cb-filters>.f-field:last-child{border-bottom:0}
+.cb-page>.card>.cb-filters>.f-field>span{flex:0 0 96px;font-size:11px;font-weight:400;line-height:1.3;color:#718078}
+.cb-page>.card>.cb-filters>.f-field :is(input,select){display:block;flex:1;width:100%;min-width:0;min-inline-size:0;max-width:100%;height:32px;min-height:32px;margin:0;padding:4px 0;border:0;border-radius:0;background-color:transparent;box-sizing:border-box;font-size:13px;box-shadow:none}
+.cb-page>.card>.cb-filters>.f-field select{padding-right:20px;background-position:right center}
+.cb-page>.card>.cb-filters>.f-field:focus-within{background:#fff;box-shadow:inset 2px 0 var(--primary)}
+.cb-page>.card>.cb-filters>.f-field :is(input,select):focus-visible{outline:0;box-shadow:none}
+.cb-page input[type=month]::-webkit-date-and-time-value{min-width:0;text-align:left}
+.cb-page .cb-top-actions{display:flex;flex-wrap:wrap;gap:6px;margin-top:0}
+.cb-page .cb-top-actions>.cb-upload{flex:1.5}
+.cb-page .cb-top-actions>.button{min-width:0;min-height:34px;padding:7px 8px;font-size:12px;line-height:1.35}
+.cb-page .cb-top-actions>button{flex:1}
+.cb-page>.card>.f-segment button{min-height:32px;padding:6px;font-size:12px}
+.cb-sort{display:inline-flex;align-items:center;justify-content:center;gap:3px;min-height:30px;padding:3px 0;border:0;border-radius:4px;background:transparent;font:inherit;font-weight:500;color:#0F766E;cursor:pointer;white-space:nowrap}
+.cb-sort svg{flex-shrink:0}
+.cb-sort:hover{color:#095B53}
+.cb-sort:focus-visible{outline:2px solid #147F74;outline-offset:2px}
+@supports(-webkit-touch-callout:none){.cb-page>.card>.cb-filters>.f-field :is(input,select){font-size:16px}}

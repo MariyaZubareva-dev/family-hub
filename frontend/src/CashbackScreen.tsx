@@ -15,7 +15,10 @@ const readImage=(file:File)=>new Promise<string>((resolve,reject)=>{
 })
 
 function CashbackTable({rows,onOpen,label,winners=new Set<string>()}:{rows:CashbackRow[];onOpen:(row:CashbackRow)=>void;label:string;winners?:Set<string>}){
-  return <table className="cb-compact-table" aria-label={label}><colgroup><col className="cb-col-category"/><col className="cb-col-rate"/><col className="cb-col-owner"/></colgroup><thead><tr><th scope="col">Категория / банк</th><th scope="col">Кешбэк</th><th scope="col">Владелец</th></tr></thead><tbody>{rows.map(row=><tr key={row.bank.id+':'+row.index}>
+  const [direction,setDirection]=useState<'ascending'|'descending'|null>(null)
+  const sorted=direction?[...rows].sort((a,b)=>(Number(a.rate)-Number(b.rate))*(direction==='ascending'?1:-1)):rows
+  const sortLabel='Сортировать по проценту кешбэка: '+(direction==='descending'?'сначала меньший':'сначала больший')
+  return <table className="cb-compact-table" aria-label={label}><colgroup><col className="cb-col-category"/><col className="cb-col-rate"/><col className="cb-col-owner"/></colgroup><thead><tr><th scope="col">Категория / банк</th><th scope="col" aria-sort={direction||'none'}><button type="button" className="cb-sort" aria-label={sortLabel} title={sortLabel} onClick={()=>setDirection(value=>value==='descending'?'ascending':'descending')}>Кешбэк<svg aria-hidden="true" width="10" height="12" viewBox="0 0 10 12" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"><path d={direction==='descending'?'M5 1v10 M2 8l3 3 3-3':direction==='ascending'?'M5 11V1 M2 4l3-3 3 3':'M3 10V2 M1 4l2-2 2 2 M7 2v8 M5 8l2 2 2-2'}/></svg></button></th><th scope="col">Владелец</th></tr></thead><tbody>{sorted.map(row=><tr key={row.bank.id+':'+row.index}>
     <td><button className="cb-table-open" aria-label={`Подробнее: ${row.category}, ${row.bank.bank_name}, ${ownerName(row.bank)}`} onClick={()=>onOpen(row)}><strong>{row.category}</strong><small>{row.bank.bank_name}</small></button></td>
     <td className={'cb-table-rate'+(winners.has(row.bank.id+':'+row.index)?' cb-table-best':'')}><b>{Number(row.rate).toLocaleString('ru-RU')}%</b>{row.reward_unit!=='RUB'&&<small>{unitLabel(row.reward_unit)}</small>}</td>
     <td className="cb-table-owner">{ownerName(row.bank)}</td>
