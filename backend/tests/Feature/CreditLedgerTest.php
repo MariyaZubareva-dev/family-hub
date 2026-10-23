@@ -114,6 +114,9 @@ class CreditLedgerTest extends TestCase
         $this->assertSame('2026-11-22',$result['rows'][0]['date']);
         $this->assertEquals([11500.25,10000,1500.25,90000],$result['rows'][0]['values']);
         $bad=$service->parseText('31.02.2026   200.00   100.00   10.00   0.00');$this->assertCount(0,$bad['rows']);
+        $boundary=$service->parseText("04.11.2026   100.00   10.00   110.00   900.00\n\f04.11.2026   100.00   10.00   110.00   900.00\n04.12.2026   100.00   9.00   109.00   800.00");
+        $this->assertCount(2,$boundary['rows']);$this->assertSame(1,$boundary['duplicate_rows_removed']);
+        $different=$service->parseText("04.11.2026   100.00   10.00   110.00   900.00\n04.11.2026   200.00   10.00   210.00   700.00");$this->assertCount(2,$different['rows']);
     }
     public function test_pdf_upload_rejects_invalid_files_and_non_admin_before_processing(): void
     {

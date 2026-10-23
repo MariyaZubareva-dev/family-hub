@@ -41,7 +41,7 @@ class CreditPdfImporter
             }
             $parsed=$this->parseText(implode("\n",$extracted));$source=$ocrPages?($ocrPages===$pages?'PDF_OCR':'PDF_MIXED'):'PDF_TEXT';
             abort_unless($parsed['rows'],422,'Не удалось выделить таблицу платежей. Нужен график с датами и отдельными столбцами сумм; CSV и ручной ввод остаются доступны.');
-            return [...$parsed,'pages'=>$pages,'source'=>$source,'warnings'=>[$ocrPages?'Это распознавание скана: особенно внимательно проверьте цифры и даты.':'Проверьте извлечённые даты и суммы по документу.','Сопоставьте столбцы. Затем укажите дату и основной долг на начало графика. Сохранение выполняется отдельно.']];
+            return [...$parsed,'pages'=>$pages,'source'=>$source,'warnings'=>array_values(array_filter([$ocrPages?'Это распознавание скана: особенно внимательно проверьте цифры и даты.':'Проверьте извлечённые даты и суммы по документу.',$parsed['duplicate_rows_removed']?'Одинаковые соседние строки на границах страниц объединены: '.$parsed['duplicate_rows_removed'].'.':null,'Сопоставьте столбцы. Затем укажите дату и основной долг на начало графика. Сохранение выполняется отдельно.']))];
         }finally{
             foreach(glob($dir.'/*')?:[] as $temporary)@unlink($temporary);
             @rmdir($dir);
@@ -49,7 +49,7 @@ class CreditPdfImporter
     }
     public function parseText(string $text): array
     {
-        $rows=[];$skipped=0;
+        $rows=[];$skipped=0;$duplicates=0;
         foreach(preg_split('/\R|\f/u',str_replace(["\xc2\xa0","\xe2\x80\xaf"],' ',$text)) as $line){
             if(!preg_match_all('/\b(?:\d{2}\.\d{2}\.\d{4}|\d{4}-\d{2}-\d{2})\b/u',$line,$matches,PREG_OFFSET_CAPTURE))continue;
             $date=$matches[0][0][0];$offset=$matches[0][0][1];$after=substr($line,$offset+strlen($date));
@@ -63,11 +63,13 @@ class CreditPdfImporter
             }
             if(count($values)<3){if($values)$skipped++;continue;}
             abort_if(count($values)>12,422,'В таблице слишком много столбцов. Загрузите отдельный график без дополнительных таблиц.');
-            $rows[]=['date'=>$date,'values'=>$values];
+            $row=['date'=>$date,'values'=>$values];
+            if($rows && end($rows)===$row){$duplicates++;continue;}
+            $rows[]=$row;
         }
         abort_if(count($rows)>600,422,'В графике больше 600 платежей.');
         $columns=array_unique(array_map(fn($row)=>count($row['values']),$rows));
         abort_if(count($columns)>1,422,'В строках PDF различается число сумм. Проверьте документ или используйте CSV: автоматическое сопоставление может потерять данные.');
-        return ['rows'=>$rows,'column_count'=>$rows?count($rows[0]['values']):0,'skipped_lines'=>$skipped];
+        return ['rows'=>$rows,'column_count'=>$rows?count($rows[0]['values']):0,'skipped_lines'=>$skipped,'duplicate_rows_removed'=>$duplicates];
     }
 }

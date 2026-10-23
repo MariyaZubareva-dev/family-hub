@@ -1,10 +1,11 @@
-import {useState} from 'react'
+import {useEffect,useRef,useState} from 'react'
 import {Field,request} from './FinanceScreen'
 type Row={date:string;payment:number;principal:number;interest:number;fees:number;balance:number}
-type Extracted={rows:{date:string;values:number[]}[];column_count:number;pages:number;source:string;warnings:string[];skipped_lines:number}
+type Extracted={rows:{date:string;values:number[]}[];column_count:number;pages:number;source:string;warnings:string[];skipped_lines:number;today?:string}
 const money=(value:number)=>value.toLocaleString('ru-RU',{maximumFractionDigits:2})
 const readPdf=(file:File)=>new Promise<string>((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve('data:application/pdf;base64,'+String(reader.result).split(',')[1]);reader.onerror=()=>reject(new Error('Не удалось прочитать PDF. Выберите файл ещё раз.'));reader.readAsDataURL(file)})
-export default function CreditPdfUpload({creditId,disabled,onBusy,onImported}:{creditId:string;disabled:boolean;onBusy:(value:boolean)=>void;onImported:(rows:Row[],opening:number)=>void}){
+export default function CreditPdfUpload({creditId,disabled,onBusy,onImported,incomingFile}:{creditId:string;disabled:boolean;onBusy:(value:boolean)=>void;onImported:(rows:Row[],opening:number,asOf?:string)=>void;incomingFile?:File|null}){
+  const consumed=useRef<File|null>(null)
   const [data,setData]=useState<Extracted|null>(null),[loading,setLoading]=useState(false),[error,setError]=useState('')
   const [mapping,setMapping]=useState({payment:-1,principal:-1,interest:-1,fees:-2,balance:-1})
   const upload=async(file:File)=>{
@@ -14,6 +15,7 @@ export default function CreditPdfUpload({creditId,disabled,onBusy,onImported}:{c
     setLoading(true);onBusy(true)
     try{const result=await request(`/credits/${creditId}/bank-schedule/import-pdf`,'POST',{pdf_data:await readPdf(file)});setData(result.data);setMapping({payment:-1,principal:-1,interest:-1,fees:-2,balance:-1})}catch(e){setError(e instanceof Error?e.message:'Не удалось прочитать PDF.')}finally{setLoading(false);onBusy(false)}
   }
+  useEffect(()=>{if(incomingFile&&consumed.current!==incomingFile){consumed.current=incomingFile;void upload(incomingFile)}},[incomingFile])
   const apply=()=>{
     if(!data)return
     setError('')
@@ -27,7 +29,15 @@ export default function CreditPdfUpload({creditId,disabled,onBusy,onImported}:{c
       if(Object.values(row).some(v=>v===undefined)||row.date<=previous||Math.abs(row.payment-row.principal-row.interest-row.fees)>.021||Math.abs(balance-row.principal-row.balance)>.021){setError(`Строка ${i+1}: суммы или даты не сходятся. Проверьте сопоставление столбцов. Ничего не сохранено.`);return}
       balance=row.balance;previous=row.date
     }
-    onImported(rows,opening);setData(null)
+    const today=data.today||new Date().toLocaleDateString('sv-SE')
+    let boundary=-1
+    for(let i=0;i<rows.length;i++)if(rows[i].date<=today)boundary=i
+    // A complete bank schedule may include origination and payments already made.
+    const origin=rows[0].payment===0&&rows[0].principal===0&&rows[0].interest===0&&rows[0].fees===0
+    const start=Math.max(boundary+1,origin?1:0)
+    const future=rows.slice(start)
+    if(!future.length){setError('В PDF нет будущих платежей. Загрузите актуальный график банка.');return}
+    onImported(future,Math.round((future[0].principal+future[0].balance)*100)/100,start>0?rows[start-1].date:undefined);setData(null)
   }
   return <div className="credit-pdf-import">
     <Field label="Загрузить PDF"><input type="file" accept=".pdf,application/pdf" disabled={disabled||loading} onChange={e=>{const file=e.target.files?.[0];e.target.value='';if(file)void upload(file)}}/></Field>

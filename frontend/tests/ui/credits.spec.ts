@@ -65,6 +65,19 @@ test('bank CSV validates columns, saves graph and requires an explicit interest 
   expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true)
 })
 
+test('PDF chosen through CSV upload is recognized; origination and historical rows become the opening balance',async({page})=>{
+  const state=await setup(page)
+  await page.route('**/api/v1/credits/c1/bank-schedule/import-pdf',route=>route.fulfill({json:{data:{source:'PDF_TEXT',pages:2,column_count:4,skipped_lines:0,warnings:[],rows:[{date:'2026-01-01',values:[0,0,0,600]},{date:'2026-02-01',values:[200,0,200,400]},{date:'2026-03-01',values:[200,0,200,200]},{date:'2027-01-22',values:[200,0,200,0]}]}}}))
+  await page.getByRole('button',{name:'Добавить график',exact:true}).click();const dialog=page.getByRole('dialog',{name:'График банка',exact:true})
+  await dialog.getByLabel('Загрузить CSV').setInputFiles({name:'schedule.pdf',mimeType:'application/pdf',buffer:Buffer.from(readFileSync('../backend/tests/Fixtures/credit-schedule.pdf.b64','utf8').trim(),'base64')})
+  const review=dialog.getByRole('region',{name:'Проверка PDF'});await expect(review).toBeVisible()
+  await review.getByLabel('Платёж',{exact:true}).selectOption('2');await review.getByLabel('Основной долг',{exact:true}).selectOption('0');await review.getByLabel('Проценты',{exact:true}).selectOption('1');await review.getByLabel('Остаток после платежа',{exact:true}).selectOption('3');await review.getByRole('button',{name:'Перенести в график'}).click()
+  await expect(dialog.getByLabel('Основной долг, ₽')).toHaveValue('200');await expect(dialog.getByLabel('Дата остатка')).toHaveValue('2026-03-01')
+  await expect(dialog.getByRole('textbox',{name:'Дата; платёж; долг; проценты; услуги; остаток'})).not.toHaveValue(/%PDF/)
+  await dialog.getByRole('checkbox').check();await dialog.getByRole('button',{name:'Сохранить график'}).click();await expect(dialog).toHaveCount(0)
+  expect(state.credit.bank_schedule.rows).toHaveLength(1);expect(state.credit.bank_schedule.as_of).toBe('2026-03-01')
+})
+
 test('PDF upload shows progress, maps bank columns, preserves existing data on a wrong mapping and saves only after review',async({page})=>{
   const state=await setup(page)
   let release!:()=>void;const pending=new Promise<void>(resolve=>{release=resolve})

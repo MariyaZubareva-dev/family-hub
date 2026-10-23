@@ -72,12 +72,12 @@ class CreditLedgerController extends BaseApiController
     }
     public function importPdf(Request $request,string $credit,\App\Services\Finance\CreditPdfImporter $importer): JsonResponse
     {
-        $this->credit($request,$credit,true);
+        $loan=$this->credit($request,$credit,true);
         $data=$request->validate(['pdf_data'=>['required','string','max:11200000']]);
         $parts=explode(',',$data['pdf_data'],2);
         abort_unless(count($parts)===2 && $parts[0]==='data:application/pdf;base64',422,'Выберите PDF-файл.');
         $bytes=base64_decode($parts[1],true);
         abort_unless($bytes!==false && strlen($bytes)<=8*1024*1024,422,'Выберите PDF размером до 8 МБ.');
-        return response()->json(['data'=>$importer->import($bytes)]);
+        return response()->json(['data'=>[...$importer->import($bytes),'today'=>now($loan->family->timezone?:'Europe/Moscow')->toDateString()]]);
     }
 }
