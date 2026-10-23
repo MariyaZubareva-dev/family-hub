@@ -54,6 +54,36 @@ class CreditLedgerTest extends TestCase
         $this->putJson($this->url('bank-schedule'),$partial)->assertOk()->assertJsonPath('data.complete',false);
         $this->postJson($this->url('forecast'),$this->forecast())->assertUnprocessable();
     }
+    public function test_checkbox_payment_keeps_period_when_paid_on_another_date_and_is_idempotent(): void
+    {
+        $this->putJson($this->url('bank-schedule'),$this->graph())->assertOk();
+        $mark=['scheduled_on'=>'2026-11-22','paid_on'=>'2026-10-20','paid'=>true,'base_version'=>1];
+        $this->putJson($this->url('schedule-payment'),$mark)->assertOk()->assertJsonPath('data.regular_schedule.0.status','PAID')->assertJsonPath('data.regular_schedule.0.paid_on','2026-10-20');
+        $this->putJson($this->url('schedule-payment'),$mark)->assertOk();$this->assertDatabaseCount('credit_payments',1);
+        $this->assertDatabaseHas('credit_payments',['credit_id'=>$this->credit->id,'scheduled_on'=>'2026-11-22','paid_on'=>'2026-10-20','amount'=>200]);
+        $this->getJson('/api/v1/credits')->assertJsonPath('data.0.summary.regular_schedule.1.status','UPCOMING')->assertJsonPath('data.0.summary.next_payment.date','2026-12-22');
+        $this->putJson($this->url('schedule-payment'),[...$mark,'base_version'=>0])->assertConflict();
+        $this->putJson($this->url('schedule-payment'),[...$mark,'paid'=>false])->assertOk()->assertJsonPath('data.regular_schedule.0.status','UPCOMING');
+        $this->putJson($this->url('schedule-payment'),[...$mark,'paid'=>false])->assertOk();$this->assertDatabaseCount('credit_payments',0);$this->assertDatabaseCount('finance_transactions',0);
+        $this->putJson($this->url('schedule-payment'),[...$mark,'paid_on'=>'2026-10-23'])->assertUnprocessable();
+        $this->putJson($this->url('schedule-payment'),[...$mark,'scheduled_on'=>'2026-11-21'])->assertUnprocessable();
+    }
+    public function test_checkbox_completes_partial_payment_and_forecast_uses_bank_graph_despite_journal_difference(): void
+    {
+        $this->putJson($this->url('bank-schedule'),$this->graph())->assertOk();
+        $this->postJson($this->url('payments'),['scheduled_on'=>'2026-11-22','paid_on'=>'2026-10-20','amount'=>150])->assertCreated();
+        $this->getJson('/api/v1/credits')->assertJsonPath('data.0.summary.regular_schedule.0.status','PARTIAL');
+        $this->postJson($this->url('forecast'),$this->forecast(['paid_on'=>'2026-11-22','amount'=>100]))->assertOk()->assertJsonPath('data.prepayment.principal',100);
+        $this->putJson($this->url('schedule-payment'),['scheduled_on'=>'2026-11-22','paid_on'=>'2026-10-22','paid'=>true,'base_version'=>1])->assertOk()->assertJsonPath('data.regular_schedule.0.paid_amount',200);
+        $this->assertDatabaseCount('credit_payments',2);$this->assertDatabaseHas('credit_payments',['amount'=>50]);
+    }
+    public function test_calculator_replays_recorded_prepayments_and_does_not_create_new_payments(): void
+    {
+        $graph=$this->graph();$graph['as_of']='2026-10-01';$this->putJson($this->url('bank-schedule'),$graph)->assertOk();
+        $this->postJson($this->url('prepayments'),['paid_on'=>'2026-10-04','amount'=>200,'recalculation_mode'=>'TERM'])->assertCreated();
+        $this->postJson($this->url('forecast'),$this->forecast(['amount'=>200]))->assertOk()->assertJsonPath('data.last_payment_date','2026-11-22')->assertJsonPath('data.original_last_payment_date','2026-12-22');
+        $this->assertDatabaseCount('credit_prepayments',1);$this->assertDatabaseCount('credit_payments',0);
+    }
     public function test_zero_interest_term_and_payment_scenarios_preserve_money(): void
     {
         $this->putJson($this->url('bank-schedule'),$this->graph())->assertOk();
@@ -160,10 +190,12 @@ class CreditLedgerTest extends TestCase
         $member=User::create(['telegram_user_id'=>76102,'first_name'=>'Участник']);
         FamilyMember::create(['family_id'=>$this->credit->family_id,'user_id'=>$member->id,'role'=>'USER','status'=>'ACTIVE']);
         $this->actingAs($member)->deleteJson('/api/v1/credit-payments/'.$payment)->assertForbidden();
+        $this->putJson($this->url('schedule-payment'),['scheduled_on'=>'2026-11-22','paid_on'=>'2026-10-22','paid'=>true,'base_version'=>0])->assertForbidden();
         $this->putJson($this->url('bank-schedule'),$this->graph())->assertForbidden();
         $other=User::create(['telegram_user_id'=>76103,'first_name'=>'Другой']);$family=Family::create(['name'=>'Другая','created_by'=>$other->id]);
         FamilyMember::create(['family_id'=>$family->id,'user_id'=>$other->id,'role'=>'ADMIN','status'=>'ACTIVE']);
         $this->actingAs($other)->deleteJson('/api/v1/credit-payments/'.$payment)->assertNotFound();
+        $this->putJson($this->url('schedule-payment'),['scheduled_on'=>'2026-11-22','paid_on'=>'2026-10-22','paid'=>true,'base_version'=>0])->assertNotFound();
         $this->postJson($this->url('forecast'),$this->forecast())->assertNotFound();
         $this->putJson($this->url('bank-schedule'),$this->graph())->assertNotFound();
     }

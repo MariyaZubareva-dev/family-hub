@@ -60,6 +60,23 @@
 .credits-screen .credit-prepayment-entry .f-form-fields>.f-field:has(select[required])>span{white-space:normal}
 .credits-screen .credit-prepayment-entry>.credit-save-button{grid-row:2}
 .credit-table-scroll{max-height:260px;overflow:auto}
+.credits-screen .credit-disclosure{margin-top:12px;min-width:0}
+.credits-screen details.card.credit-disclosure{padding:0;overflow:hidden;margin-top:0}
+.credit-disclosure>summary{display:flex;align-items:center;gap:8px;padding:10px 0;cursor:pointer;list-style:none}
+.credit-disclosure.card>summary{padding:12px}.credit-disclosure>summary::-webkit-details-marker{display:none}
+.credit-disclosure>summary:before{content:'›';font-size:18px;color:#557168}.credit-disclosure[open]>summary:before{transform:rotate(90deg)}
+.credit-disclosure>summary h3{margin:0;flex:1}.credit-disclosure>summary small{font-size:10px;color:#718078}
+.credit-disclosure-body{min-width:0}.credit-disclosure.card>.credit-disclosure-body{padding:0 12px 12px}
+.credit-schedule-toolbar{display:flex;align-items:center;gap:8px;margin-bottom:6px}.credit-schedule-toolbar>.f-field{flex:1;min-width:0}
+.credit-schedule-toolbar .f-field>span{display:none}.credit-schedule-toolbar select{min-height:32px;font-size:12px}
+.credit-schedule-list{max-height:324px;overflow:auto;overscroll-behavior:contain}
+.credit-schedule-item{border-bottom:1px solid #E5ECE8}.credit-schedule-line{display:grid;grid-template-columns:20px minmax(0,1fr) auto;gap:8px;align-items:center;padding:8px 0;min-width:0}
+.credit-schedule-line>input{appearance:auto;width:18px;height:18px;min-height:18px;accent-color:#147F74;cursor:pointer}
+.credit-schedule-date{display:flex;flex-direction:column;align-items:flex-start;gap:3px;background:none;border:0;padding:0;text-align:left;color:inherit;cursor:pointer;font-size:12px;min-width:0}
+.credit-schedule-line small{font-size:10px;color:#718078;line-height:1.35}.credit-schedule-amount{display:flex;flex-direction:column;align-items:flex-end;gap:3px;text-align:right;min-width:0}.credit-schedule-amount b{font-size:12px;font-variant-numeric:tabular-nums}
+.credit-schedule-extra{padding:0 0 8px 28px;font-size:11px;color:#64736B}.credit-schedule-breakdown{display:flex;gap:4px 12px;flex-wrap:wrap}.credit-schedule-receipt{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.credit-schedule-extra small{font-size:10px}.credit-manual-payment{margin-top:6px;border:0;background:none;color:#147F74;padding:6px 0;font-size:11px;cursor:pointer}
+.credit-disclosure-body>.credit-prepayment-entry{margin:0 0 12px}
 .credit-table th{position:sticky;top:0;background:#F7F9F8;z-index:1}
 @keyframes credit-pdf-spin{to{transform:rotate(360deg)}}
 @media(prefers-reduced-motion:reduce){.credit-pdf-spinner{animation:none;border-right-color:#147F74}}

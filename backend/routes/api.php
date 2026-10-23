@@ -4,6 +4,7 @@ Route::prefix('v1')->group(function(){
  Route::get('/health',fn()=>response()->json(['ok'=>true,'service'=>'family-hub-api','version'=>'0.6.0']));
  Route::middleware([TelegramAuthenticate::class, \App\Http\Middleware\FamilySectionAccess::class])->group(function(){
   Route::post('/credits/{credit}/payments',[\App\Http\Controllers\Api\CreditLedgerController::class,'storePayment']);
+  Route::put('/credits/{credit}/schedule-payment',[\App\Http\Controllers\Api\CreditLedgerController::class,'markSchedulePayment']);
   Route::patch('/credit-payments/{payment}',[\App\Http\Controllers\Api\CreditLedgerController::class,'updatePayment']);
   Route::delete('/credit-payments/{payment}',[\App\Http\Controllers\Api\CreditLedgerController::class,'destroyPayment']);
   Route::put('/credits/{credit}/bank-schedule',[\App\Http\Controllers\Api\CreditLedgerController::class,'bankSchedule']);

@@ -32,6 +32,22 @@ class CreditLedgerController extends BaseApiController
         $member=$this->membership($request);$this->assertAdmin($member);
         return CreditPayment::whereHas('credit',fn($query)=>$query->where('family_id',$member->family_id))->findOrFail($id);
     }
+    public function markSchedulePayment(Request $request,string $credit,CreditSchedule $schedule): JsonResponse
+    {
+        $loan=$this->credit($request,$credit,true);$today=now($loan->family->timezone?:'Europe/Moscow')->toDateString();
+        $data=$request->validate(['scheduled_on'=>['required','date_format:Y-m-d'],'paid'=>['required','boolean'],
+            'paid_on'=>['required_if:paid,true','nullable','date_format:Y-m-d','after_or_equal:'.$loan->start_date->format('Y-m-d'),'before_or_equal:'.$today],
+            'base_version'=>['required','integer','min:0']]);
+        DB::transaction(function()use($loan,$data,$schedule,$today,$request){
+            $locked=Credit::whereKey($loan->id)->lockForUpdate()->firstOrFail();
+            abort_unless((int)($locked->bank_schedule['version']??0)===(int)$data['base_version'],409,'График изменился. Обновите кредит и отметьте оплату ещё раз.');
+            $row=collect($schedule->regularSchedule($locked,$today))->firstWhere('date',$data['scheduled_on']);
+            if(!$data['paid']){$locked->payments()->whereDate('scheduled_on',$data['scheduled_on'])->delete();return;}
+            abort_unless($row,422,'Такой даты нет в графике. Для другой даты используйте ручную запись оплаты.');
+            if($row['remaining_amount']>0)$locked->payments()->create(['scheduled_on'=>$row['date'],'paid_on'=>$data['paid_on'],'amount'=>$row['remaining_amount'],'created_by'=>$request->user()->id]);
+        });
+        return response()->json(['data'=>$schedule->summary($loan->fresh(),$today)]);
+    }
     public function updatePayment(Request $request,string $payment): JsonResponse
     {
         $row=$this->ownedPayment($request,$payment);$row->update($this->paymentData($request,$row->credit));

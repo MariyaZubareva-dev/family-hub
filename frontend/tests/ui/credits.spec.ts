@@ -13,6 +13,11 @@ async function setup(page:Page){
     else if(path==='/credits/c1'&&method==='PATCH'){Object.assign(credit,body);data=credit}
     else if(path==='/credits/c1/payments'){data={...body,id:'pay1'};credit.payments.push(data);credit.summary.last_paid_on=body.paid_on}
     else if(path==='/credits/c1/prepayments'){data={...body,id:'early2'};credit.prepayments.push(data)}
+    else if(path==='/credits/c1/schedule-payment'){
+      if(!body.paid)credit.payments=credit.payments.filter((p:any)=>p.scheduled_on!==body.scheduled_on)
+      else if(!credit.payments.some((p:any)=>p.scheduled_on===body.scheduled_on))credit.payments.push({id:'mark1',scheduled_on:body.scheduled_on,paid_on:body.paid_on,amount:credit.bank_schedule.rows.find((r:any)=>r.date===body.scheduled_on).payment})
+      data=credit.summary
+    }
     else if(path==='/credit-payments/pay1'){if(method==='DELETE')credit.payments=[];else{Object.assign(credit.payments[0],body);data=credit.payments[0]}}
     else if(path==='/credit-prepayments/early'){if(method==='DELETE')credit.prepayments=[];else{Object.assign(credit.prepayments[0],body);data=credit.prepayments[0]}}
     else if(path==='/credits/c1/bank-schedule'){credit.bank_schedule={...body,version:1,complete:true,stale:false};data=credit.bank_schedule}
@@ -22,6 +27,7 @@ async function setup(page:Page){
     await route.fulfill({json:{data}})
   })
   await page.goto('/?section=finance');await page.getByRole('tab',{name:'Кредиты',exact:true}).click()
+  await page.getByText('Досрочные платежи',{exact:true}).click()
   return {credit,requests,today}
 }
 test('monthly payment can be created, corrected and deleted; early payment can be deleted',async({page})=>{
@@ -32,6 +38,7 @@ test('monthly payment can be created, corrected and deleted; early payment can b
   await expect(dialog.getByLabel('Дата по графику',{exact:true})).toHaveValue('');await dialog.getByLabel('Дата по графику',{exact:true}).fill(state.today)
   await dialog.getByLabel('Комментарий').fill('Банк списал платёж');await dialog.getByRole('button',{name:'Сохранить оплату'}).click()
   await expect(dialog).toHaveCount(0);expect(state.credit.payments).toHaveLength(1)
+  await page.locator('.credit-payment-history>summary').click()
   const payment=page.locator('.credit-payment').filter({hasText:'Банк списал платёж'})
   await payment.getByRole('button',{name:'Изменить'}).click()
   dialog=page.getByRole('dialog',{name:'Изменить оплату'});await dialog.getByLabel('Сумма оплаты, ₽').fill('150');await dialog.getByRole('button',{name:'Сохранить оплату'}).click()
@@ -69,6 +76,26 @@ test('monthly contractual amount is editable and persists on reload',async({page
   const dialog=page.getByRole('dialog',{name:'Условия кредита'});await dialog.getByLabel('Платёж в месяц, ₽').fill('210');await dialog.getByRole('button',{name:'Сохранить кредит'}).click()
   await expect(dialog).toHaveCount(0);expect(state.credit.standard_payment).toBe(210)
   await page.reload();await page.getByRole('tab',{name:'Кредиты',exact:true}).click();await expect(page.locator('.f-credit')).toContainText('210 ₽')
+})
+test('schedule checkbox preserves its selected period across another payment date, reload and undo',async({page})=>{
+  const state=await setup(page)
+  state.credit.bank_schedule={as_of:'2026-10-04',version:1,complete:true,stale:false,rows:[{date:'2026-11-04',payment:200,principal:200,interest:0,fees:0,balance:200},{date:'2026-12-04',payment:200,principal:200,interest:0,fees:0,balance:0}]}
+  await page.reload();await page.getByRole('tab',{name:'Кредиты',exact:true}).click();await page.setViewportSize({width:320,height:852})
+  await expect(page.locator('details.credit-disclosure').filter({has:page.getByText('Досрочные платежи',{exact:true})})).not.toHaveAttribute('open','')
+  await page.getByRole('checkbox',{name:'Оплачен платёж 04.11.2026',exact:true}).click()
+  let dialog=page.getByRole('dialog',{name:'Отметить оплату',exact:true})
+  await dialog.getByLabel('Дата фактической оплаты').fill('2026-10-20');await dialog.getByRole('button',{name:'Оплачено',exact:true}).click();await expect(dialog).toHaveCount(0)
+  expect(state.credit.payments[0]).toMatchObject({scheduled_on:'2026-11-04',paid_on:'2026-10-20',amount:200})
+  await page.reload();await page.getByRole('tab',{name:'Кредиты',exact:true}).click();await page.getByLabel('Показать платежи').selectOption('all')
+  await expect(page.getByRole('checkbox',{name:'Оплачен платёж 04.11.2026',exact:true})).toBeChecked();await expect(page.getByRole('checkbox',{name:'Оплачен платёж 04.12.2026',exact:true})).not.toBeChecked()
+  await page.getByRole('checkbox',{name:'Оплачен платёж 04.11.2026',exact:true}).click();dialog=page.getByRole('dialog',{name:'Снять отметку оплаты?'})
+  await dialog.getByRole('button',{name:'Снять отметку',exact:true}).click();await expect(dialog).toHaveCount(0);expect(state.credit.payments).toHaveLength(0)
+  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true)
+})
+test('calculator remains usable after recorded prepayments without uploading the same graph again',async({page})=>{
+  const state=await setup(page);state.credit.bank_schedule={as_of:'2026-03-01',complete:true,stale:true,stale_reason:'PREPAYMENTS',rows:[]}
+  await page.reload();await page.getByRole('tab',{name:'Кредиты',exact:true}).click();await page.getByRole('button',{name:'Расчёт досрочного погашения',exact:true}).click()
+  const dialog=page.getByRole('dialog',{name:'Расчёт досрочного погашения',exact:true});await dialog.getByLabel('Досрочная сумма, ₽').fill('100');await dialog.getByLabel('Как банк списывает накопленные проценты').selectOption('NEXT_PAYMENT');await dialog.getByRole('button',{name:'Рассчитать',exact:true}).click();await expect(dialog).toContainText('Предварительный расчёт')
 })
 test('bank CSV validates columns, saves graph and requires an explicit interest policy for estimate',async({page})=>{
   const state=await setup(page);await page.setViewportSize({width:320,height:852})
