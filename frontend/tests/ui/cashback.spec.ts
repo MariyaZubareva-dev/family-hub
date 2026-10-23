@@ -2,6 +2,7 @@ import { expect,test,type Page } from '@playwright/test'
 import { readFileSync } from 'node:fs'
 
 const entry=(category:string,rate:number,extra:any={})=>({category,rate,reward_unit:'RUB',active:true,cap_amount:null,notes:null,valid_from:null,valid_to:null,...extra})
+const catalog=[{name:'Т-Банк',legal_name:'АО «ТБанк»',aliases:['Тинькофф']},{name:'Ozon Банк',legal_name:'ООО «ОЗОН Банк»',aliases:['Ozon','Озон']},{name:'Яндекс Банк',legal_name:'АО «Яндекс Банк»',aliases:['Яндекс']},{name:'ОТП Банк',legal_name:'АО «ОТП Банк»',aliases:[]},{name:'Уралсиб',legal_name:'ПАО «БАНК УРАЛСИБ»',aliases:[]}]
 async function mockCashback(page:Page,finance=true){
   await page.clock.install({time:new Date('2026-10-22T09:00:00Z')})
   const records:any[]=[
@@ -22,7 +23,7 @@ async function mockCashback(page:Page,finance=true){
       if(failRecognize){await route.fulfill({status:503,json:{message:'Распознавание временно недоступно.'}});return}
       data={bank_name:'Т-Банк',entries:[entry('Супермаркеты',6,{active:false,reward_unit:'UNKNOWN'}),entry('Аптеки',8,{active:false,reward_unit:'UNKNOWN'})],message:'Проверьте данные перед сохранением.'}
     }else if(path.startsWith('/finance/cashback-banks')){
-      if(method==='GET'){const month=url.searchParams.get('month')||'2026-10';data=records.filter(r=>r.month===month);meta={month,today:'2026-10-22',user_id:'u1'}}
+      if(method==='GET'){const month=url.searchParams.get('month')||'2026-10';data=records.filter(r=>r.month===month);meta={month,today:'2026-10-22',user_id:'u1',banks:catalog}}
       else{
         if(failSave){await route.fulfill({status:409,json:{message:'Категории уже изменились. Обновите список.'}});return}
         const id=path.split('/').at(-1),index=records.findIndex(r=>r.id===id)
@@ -37,6 +38,31 @@ async function mockCashback(page:Page,finance=true){
 }
 const openCashback=async(page:Page)=>{await page.goto('/?section=finance');await page.getByRole('tab',{name:'Кешбэк',exact:true}).click();await expect(page.getByRole('button',{name:'Обновить кешбэк'})).toBeEnabled()}
 const fixture={name:'categories.png',mimeType:'image/png',buffer:Buffer.from(readFileSync('../backend/tests/Fixtures/receipt.png.b64','utf8').trim(),'base64')}
+
+test('recognition shows progress and merges bank aliases with selected ruble defaults',async({page})=>{
+  const state=await mockCashback(page)
+  state.records.push({id:'ozon',bank_name:'Ozon Банк',created_by:'u1',creator:{first_name:'Мария'},month:'2026-10',revision:1,can_edit:true,entries:[entry('Аптеки',5)]})
+  let release!:()=>void;const pending=new Promise<void>(resolve=>{release=resolve})
+  await page.route('**/api/v1/finance/cashback-banks/recognize',async route=>{await pending;await route.fulfill({json:{data:{bank_name:'Ozon',entries:[entry('Аптеки',8,{active:false,reward_unit:'UNKNOWN'}),entry('Кафе',3,{active:false,reward_unit:'POINTS'})]}}})})
+  await page.setViewportSize({width:320,height:640});await openCashback(page)
+  await page.getByLabel('Загрузить скриншоты кешбэка').setInputFiles(fixture)
+  const dialog=page.getByRole('dialog')
+  await expect(dialog.getByRole('status')).toContainText('Распознаём скриншот 1 из 1')
+  await expect(dialog.locator('.cb-spinner')).toBeVisible();await expect(dialog.getByRole('button',{name:'Подождите…',exact:true})).toBeDisabled()
+  release()
+  await expect(dialog).toHaveAttribute('aria-label','Изменить кешбэк банка')
+  await expect(dialog.locator('.cb-preloader')).toHaveCount(0)
+  await expect(dialog.getByRole('combobox',{name:'Название банка',exact:true})).toHaveValue('Ozon Банк')
+  await expect(dialog.getByLabel('Категория банка',{exact:true})).toHaveCount(2)
+  await expect(dialog.getByLabel('Кешбэк, %',{exact:true}).first()).toHaveValue('8')
+  for(const checkbox of await dialog.getByLabel('Категория выбрана в банке').all())await expect(checkbox).toBeChecked()
+  const units=dialog.getByRole('combobox',{name:'Вознаграждение',exact:true})
+  await expect(units.first()).toHaveValue('RUB');await expect(units.nth(1)).toHaveValue('POINTS')
+  await dialog.getByLabel('Проверены банк, месяц, проценты и выбранные категории').check();await dialog.getByRole('button',{name:'Сохранить категории'}).click()
+  await expect(dialog).toHaveCount(0)
+  expect(state.records.filter(r=>r.bank_name==='Ozon Банк')).toHaveLength(1)
+  expect(state.calls.find(c=>c.path==='/finance/cashback-banks/ozon'&&c.method==='PATCH')?.body.entries).toHaveLength(2)
+})
 
 for(const width of [320,393,768])test(`cashback comparison and editing fit ${width}px and persist`,async({page})=>{
   const state=await mockCashback(page);await page.setViewportSize({width,height:852});await openCashback(page)
@@ -96,13 +122,10 @@ test('home shows all unique current categories; screenshots are imported from Fi
   await expect(dialog.getByRole('button',{name:'Сохранить категории'})).toBeDisabled()
   await expect(dialog.getByLabel('Категория банка',{exact:true})).toHaveCount(3)
   await expect(dialog.getByLabel('Кешбэк, %',{exact:true}).first()).toHaveValue('6')
-  await expect(dialog.getByLabel('Категория выбрана в банке').first()).not.toBeChecked()
+  await expect(dialog.getByLabel('Категория выбрана в банке').first()).toBeChecked()
   await dialog.getByLabel('Проверены банк, месяц, проценты и выбранные категории').check()
-  await dialog.getByRole('button',{name:'Сохранить категории'}).click();await expect(dialog.getByRole('alert')).toContainText('тип вознаграждения')
   const units=dialog.getByRole('combobox',{name:'Вознаграждение',exact:true});await expect(units).toHaveCount(3)
-  for(const select of await units.all())await select.selectOption('RUB')
-  await dialog.getByLabel('Категория выбрана в банке').first().check()
-  await dialog.getByLabel('Проверены банк, месяц, проценты и выбранные категории').check()
+  for(const select of await units.all())await expect(select).toHaveValue('RUB')
   await dialog.getByRole('button',{name:'Сохранить категории'}).click();await expect(dialog).toHaveCount(0)
   expect(state.records.filter(r=>r.month==='2026-10'&&r.created_by==='u1')).toHaveLength(1)
   expect(state.records[0].entries).toHaveLength(3)
@@ -126,13 +149,13 @@ test('home cashback has no four-category limit and keeps the highest rate for du
 test('manual entry, month archive and deletion preserve another month',async({page})=>{
   const state=await mockCashback(page);await openCashback(page)
   await page.getByRole('button',{name:'＋ Вручную'}).click();const dialog=page.getByRole('dialog',{name:'Добавить кешбэк банка'})
-  await dialog.getByLabel('Название банка').fill('Мой новый банк');await dialog.getByLabel('Категория банка',{exact:true}).fill('Дом')
+  await dialog.getByRole('combobox',{name:'Название банка',exact:true}).selectOption('ОТП Банк');await dialog.getByLabel('Категория банка',{exact:true}).fill('Дом')
   await dialog.getByLabel('Кешбэк, %',{exact:true}).fill('4');await dialog.getByLabel('Категория выбрана в банке').check();await dialog.getByLabel('Проверены банк, месяц, проценты и выбранные категории').check()
   await dialog.getByRole('button',{name:'Сохранить категории'}).click();await expect(dialog).toHaveCount(0)
-  await page.getByRole('button',{name:'Подробнее: Дом, Мой новый банк, Мария'}).click()
+  await page.getByRole('button',{name:'Подробнее: Дом, ОТП Банк, Мария'}).click()
   await page.getByRole('button',{name:'Изменить категории банка'}).click()
   await page.getByRole('button',{name:'Удалить за месяц'}).click();await page.getByRole('dialog',{name:'Удалить кешбэк банка?'}).getByRole('button',{name:'Удалить категории',exact:true}).click()
-  await expect(page.getByRole('dialog')).toHaveCount(0);expect(state.records.filter(r=>r.bank_name==='Мой новый банк')).toHaveLength(0)
+  await expect(page.getByRole('dialog')).toHaveCount(0);expect(state.records.filter(r=>r.bank_name==='ОТП Банк')).toHaveLength(0)
   await page.getByLabel('Месяц кешбэка').fill('2026-09');await expect(page.getByRole('table',{name:'Категории кешбэка'})).toContainText('История сентября')
   await expect(page.getByRole('table',{name:'Категории кешбэка'})).not.toContainText('Супермаркеты')
 })
@@ -142,7 +165,7 @@ test('recognition and save errors retain the editable draft',async({page})=>{
   await page.getByLabel('Загрузить скриншоты кешбэка').setInputFiles(fixture)
   const dialog=page.getByRole('dialog',{name:'Добавить кешбэк банка'})
   await expect(dialog.getByRole('alert')).toContainText('временно недоступен')
-  await dialog.getByLabel('Название банка').fill('Тестовый банк');await dialog.getByLabel('Категория банка',{exact:true}).fill('Кафе');await dialog.getByLabel('Кешбэк, %',{exact:true}).fill('4')
+  await dialog.getByRole('combobox',{name:'Название банка',exact:true}).selectOption('Уралсиб');await dialog.getByLabel('Категория банка',{exact:true}).fill('Кафе');await dialog.getByLabel('Кешбэк, %',{exact:true}).fill('4')
   await dialog.getByLabel('Проверены банк, месяц, проценты и выбранные категории').check();state.setFailSave(true)
   await dialog.getByRole('button',{name:'Сохранить категории'}).click();await expect(dialog.getByRole('alert')).toContainText('уже изменились')
   await expect(dialog.getByLabel('Категория банка',{exact:true})).toHaveValue('Кафе')

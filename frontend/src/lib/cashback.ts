@@ -3,7 +3,7 @@ export type CashbackBank={id:string;bank_name:string;bank_key:string;month:strin
 export type CashbackRow=CashbackEntry&{bank:CashbackBank;index:number}
 export const ownerName=(bank:CashbackBank)=>[bank.creator?.first_name,bank.creator?.last_name].filter(Boolean).join(' ').trim()||(bank.creator?.username?'@'+bank.creator.username:'Автор не указан')
 export const categoryKey=(name:string)=>name.trim().toLocaleLowerCase('ru-RU').replace(/ё/g,'е').replace(/\s+/g,' ')
-export function bankKey(name:string){const key=categoryKey(name).replace(/[^\p{L}\p{N}]/gu,'');return ({тинькофф:'тбанк',тинькоффбанк:'тбанк',tbank:'тбанк',альфа:'альфабанк',alfabank:'альфабанк',сбер:'сбербанк',sber:'сбербанк',vtb:'втб'} as Record<string,string>)[key]||key}
+export function bankKey(name:string){const key=categoryKey(name).replace(/[^\p{L}\p{N}]/gu,'');return ({тинькофф:'тбанк',тинькоффбанк:'тбанк',tbank:'тбанк',tinkoff:'тбанк',альфа:'альфабанк',alfabank:'альфабанк',сбер:'сбербанк',sber:'сбербанк',vtb:'втб',ozon:'ozonбанк',озон:'ozonбанк',озонбанк:'ozonбанк',ozonbank:'ozonбанк',яндекс:'яндексбанк',yandex:'яндексбанк',yandexbank:'яндексбанк'} as Record<string,string>)[key]||key}
 export const unitLabel=(unit:CashbackEntry['reward_unit'])=>({RUB:'рублями',POINTS:'баллами',MILES:'милями',UNKNOWN:'тип не указан'}[unit])
 export const flattenCashback=(banks:CashbackBank[]):CashbackRow[]=>banks.flatMap(bank=>bank.entries.map((entry,index)=>({...entry,bank,index})))
 export const isCurrentCashback=(entry:CashbackRow,today:string)=>entry.active&&entry.bank.month===today.slice(0,7)&&(!entry.valid_from||entry.valid_from<=today)&&(!entry.valid_to||entry.valid_to>=today)&&entry.cap_amount!==0&&entry.cap_amount!=='0'

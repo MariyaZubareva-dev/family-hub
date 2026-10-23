@@ -48,7 +48,7 @@ class CashbackRecognizer
                 }
             } catch(\Throwable $e) { /* No additional provider is required for local OCR. */ }
         }
-        $result['message']=$result['entries']?'Проверьте банк, месяц, проценты и тип вознаграждения. Отметьте только категории, которые уже выбраны в банке.':'Не удалось уверенно прочитать категории. Добавьте их вручную или выберите более чёткий скриншот.';
+        $result['message']=$result['entries']?'Проверьте банк, месяц и проценты. Категории отмечены как выбранные; если на скриншоте есть неактивные предложения, снимите отметку. Если тип вознаграждения не виден, по умолчанию выбраны рубли.':'Не удалось уверенно прочитать категории. Добавьте их вручную или выберите более чёткий скриншот.';
         return $result;
     }
 
@@ -80,8 +80,8 @@ class CashbackRecognizer
             $name=trim($entry['category']);$rate=(float)$entry['rate'];
             if($name==='' || mb_strlen($name)>120 || $rate<=0 || $rate>100)continue;
             $key=mb_strtolower(str_replace('ё','е',$name));$cap=$entry['cap_amount']??null;
-            $entries[$key]=['category'=>$name,'rate'=>$rate,'reward_unit'=>in_array($entry['reward_unit']??null,['RUB','POINTS','MILES','UNKNOWN'],true)?$entry['reward_unit']:'UNKNOWN','active'=>false,'cap_amount'=>is_numeric($cap) && $cap>=0?(float)$cap:null,'notes'=>is_string($entry['notes']??null)?mb_substr($entry['notes'],0,500):null,'valid_from'=>null,'valid_to'=>null];
+            $entries[$key]=['category'=>$name,'rate'=>$rate,'reward_unit'=>in_array($entry['reward_unit']??null,['RUB','POINTS','MILES'],true)?$entry['reward_unit']:'RUB','active'=>true,'cap_amount'=>is_numeric($cap) && $cap>=0?(float)$cap:null,'notes'=>is_string($entry['notes']??null)?mb_substr($entry['notes'],0,500):null,'valid_from'=>null,'valid_to'=>null];
         }
-        return ['bank_name'=>is_string($data['bank_name']??null)?mb_substr(trim($data['bank_name']),0,100):null,'entries'=>array_values($entries),'source'=>$source];
+        return ['bank_name'=>is_string($data['bank_name']??null)?(CashbackBankCatalog::find($data['bank_name'])['name']??null):null,'entries'=>array_values($entries),'source'=>$source];
     }
 }

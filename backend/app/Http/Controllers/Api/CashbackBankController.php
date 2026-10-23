@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Models\CashbackBankPeriod;
 use App\Models\FamilyMember;
 use App\Services\Finance\CashbackRecognizer;
+use App\Services\Finance\CashbackBankCatalog;
 use Illuminate\Database\QueryException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -18,13 +19,14 @@ class CashbackBankController extends BaseApiController
         $data=$request->validate(['month'=>['nullable','date_format:Y-m']]);
         $month=$data['month']??now($member->family->timezone?:'Europe/Moscow')->format('Y-m');
         $records=CashbackBankPeriod::with('creator:id,first_name,last_name,username')->where('family_id',$member->family_id)->where('month',$month)->orderBy('bank_name')->get();
-        return response()->json(['data'=>$records->map(fn($record)=>$this->present($record,$member)), 'meta'=>['month'=>$month,'today'=>now($member->family->timezone?:'Europe/Moscow')->toDateString(),'user_id'=>$member->user_id]]);
+        return response()->json(['data'=>$records->map(fn($record)=>$this->present($record,$member)), 'meta'=>['month'=>$month,'today'=>now($member->family->timezone?:'Europe/Moscow')->toDateString(),'user_id'=>$member->user_id,'banks'=>CashbackBankCatalog::all()]]);
     }
 
     public function store(Request $request): JsonResponse
     {
         $member=$this->membership($request);
         $data=$this->validated($request);
+        abort_unless(CashbackBankCatalog::find($data['bank_name']),422,'Выберите банк из списка.');
         $key=CashbackBankPeriod::bankKey($data['bank_name']);
         abort_if($key==='',422,'Укажите название банка.');
         try {
@@ -97,13 +99,13 @@ class CashbackBankController extends BaseApiController
     {
         $data=$request->validate([
             'bank_name'=>['required','string','max:100'], 'month'=>['required','date_format:Y-m'], 'revision'=>['nullable','integer','min:1'],
-            'entries'=>['required','array','min:1','max:60'], 'entries.*'=>['required','array:category,rate,reward_unit,active,cap_amount,notes,valid_from,valid_to'],
+            'entries'=>['required','array','min:1','max:300'], 'entries.*'=>['required','array:category,rate,reward_unit,active,cap_amount,notes,valid_from,valid_to'],
             'entries.*.category'=>['required','string','max:120'], 'entries.*.rate'=>['required','numeric','gt:0','max:100'],
             'entries.*.reward_unit'=>['required','in:RUB,POINTS,MILES'], 'entries.*.active'=>['required','boolean'],
             'entries.*.cap_amount'=>['nullable','numeric','min:0'], 'entries.*.notes'=>['nullable','string','max:500'],
             'entries.*.valid_from'=>['nullable','date_format:Y-m-d'], 'entries.*.valid_to'=>['nullable','date_format:Y-m-d'],
         ],['required'=>'Заполните поле :attribute.','entries.required'=>'Добавьте хотя бы одну категорию.','entries.*.rate.gt'=>'Процент должен быть больше нуля.','entries.*.rate.max'=>'Процент не может превышать 100.']);
-        $data['bank_name']=trim(preg_replace('/\s+/u',' ',$data['bank_name']));
+        $data['bank_name']=CashbackBankCatalog::name(trim(preg_replace('/\s+/u',' ',$data['bank_name'])));
         $seen=[];
         foreach($data['entries'] as &$entry) {
             $entry['category']=trim(preg_replace('/\s+/u',' ',$entry['category']));

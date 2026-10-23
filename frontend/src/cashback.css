@@ -62,3 +62,9 @@
 .cb-sort:hover{color:#095B53}
 .cb-sort:focus-visible{outline:2px solid #147F74;outline-offset:2px}
 @supports(-webkit-touch-callout:none){.cb-page>.card>.cb-filters>.f-field :is(input,select){font-size:16px}}
+.cb-preloader{position:sticky;top:0;z-index:2;display:flex;align-items:center;gap:10px;padding:12px;border:1px solid #CDE7DE;border-radius:10px;background:#F0F8F5;color:#0F766E}
+.cb-preloader strong{display:block;font-size:12px;line-height:1.4;font-weight:600}
+.cb-preloader small{display:block;font-size:11px;line-height:1.4;margin-top:3px;color:#60766D}
+.cb-spinner{width:22px;height:22px;flex:0 0 22px;border:2px solid #CEE3DB;border-top-color:#147F74;border-radius:50%;animation:cb-spin .8s linear infinite}
+@keyframes cb-spin{to{transform:rotate(360deg)}}
+@media(prefers-reduced-motion:reduce){.cb-spinner{animation:none;border-top-color:#147F74;border-right-color:#147F74}}

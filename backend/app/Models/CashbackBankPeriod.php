@@ -18,13 +18,6 @@ class CashbackBankPeriod extends Model
 
     public static function bankKey(string $name): string
     {
-        $key=preg_replace('/[^\pL\pN]+/u','',str_replace('ё','е',mb_strtolower(trim($name))));
-        return match ($key) {
-            'тинькофф','тинькоффбанк','tbank','тбанк' => 'тбанк',
-            'альфа','альфабанк','alfabank' => 'альфабанк',
-            'сбер','сбербанк','sber' => 'сбербанк',
-            'втб','vtb' => 'втб',
-            default => $key,
-        };
+        return \App\Services\Finance\CashbackBankCatalog::key($name);
     }
 }

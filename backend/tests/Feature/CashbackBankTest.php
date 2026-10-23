@@ -93,15 +93,15 @@ class CashbackBankTest extends TestCase
         $this->postJson($this->url.'/recognize',['image_data'=>$image])->assertOk()->assertJsonPath('data.entries.0.active',false);
         $this->assertDatabaseCount('cashback_bank_periods',0);
     }
-    public function test_local_parser_handles_percent_layouts_without_guessing_activation_or_reward_type(): void
+    public function test_local_parser_defaults_to_selected_rubles_and_keeps_explicit_points(): void
     {
         $parser=new CashbackRecognizer();
         $data=$parser->parseText("Т-Банк\n5% Супермаркеты\nАптеки 7,5%\n10%\nКафе\nЛимит 1000 рублей");
         $this->assertSame('Т-Банк',$data['bank_name']);$this->assertCount(3,$data['entries']);
         $this->assertSame(7.5,$data['entries'][1]['rate']);
-        foreach($data['entries'] as $entry){$this->assertFalse($entry['active']);$this->assertNull($entry['cap_amount']);}
+        foreach($data['entries'] as $entry){$this->assertTrue($entry['active']);$this->assertNull($entry['cap_amount']);}
         $unknown=$parser->parseText("5% Супермаркеты\n150% Выдумка\n2% Такси 5% Кафе");
-        $this->assertCount(1,$unknown['entries']);$this->assertSame('UNKNOWN',$unknown['entries'][0]['reward_unit']);
+        $this->assertCount(1,$unknown['entries']);$this->assertSame('RUB',$unknown['entries'][0]['reward_unit']);
         $this->assertSame('POINTS',$parser->parseText("Кешбэк баллами\nАптеки 5%")['entries'][0]['reward_unit']);
     }
     public function test_local_ocr_reads_percentages_from_a_generated_screenshot(): void
@@ -113,6 +113,34 @@ class CashbackBankTest extends TestCase
         $result=(new CashbackRecognizer())->recognize('data:image/png;base64,'.base64_encode($bytes));
         $this->assertCount(2,$result['entries']);
         $this->assertEquals([5,7],array_column($result['entries'],'rate'));
-        foreach($result['entries'] as $entry)$this->assertFalse($entry['active']);
+        foreach($result['entries'] as $entry)$this->assertTrue($entry['active']);
+    }
+    public function test_catalog_and_canonical_names_prevent_new_bank_alias_duplicates(): void
+    {
+        $this->getJson($this->url)->assertOk()->assertJsonFragment(['name'=>'Яндекс Банк'])->assertJsonFragment(['name'=>'Ozon Банк']);
+        $id=$this->postJson($this->url,$this->payload(['bank_name'=>'Ozon']))->assertCreated()->assertJsonPath('data.bank_name','Ozon Банк')->json('data.id');
+        $this->postJson($this->url,$this->payload(['bank_name'=>'Озон Банк']))->assertConflict();
+        $this->patchJson($this->url.'/'.$id,$this->payload(['bank_name'=>'ООО «ОЗОН Банк»','revision'=>1]))->assertOk()->assertJsonPath('data.bank_name','Ozon Банк');
+        $this->postJson($this->url,$this->payload(['bank_name'=>'Яндекс']))->assertCreated()->assertJsonPath('data.bank_name','Яндекс Банк');
+        $this->postJson($this->url,$this->payload(['bank_name'=>'Выдуманный банк']))->assertUnprocessable();
+    }
+    public function test_normalization_merges_aliases_without_crossing_owner_month_or_deleted_data_and_keeps_backups(): void
+    {
+        $create=function($name,$key,$owner,$month,$entries,$updated,$deleted=null){return \App\Models\CashbackBankPeriod::create(['family_id'=>$this->family->id,'created_by'=>$owner,'month'=>$month,'bank_name'=>$name,'bank_key'=>$key,'entries'=>$entries,'revision'=>2,'updated_at'=>$updated,'deleted_at'=>$deleted]);};
+        $base=$this->payload()['entries'][0];
+        $create('Ozon','ozon',$this->member->id,'2026-11',[$base,[...$base,'category'=>'Аптеки']],'2026-10-20');
+        $latest=$create('Ozon Банк','ozonбанк',$this->member->id,'2026-11',[[...$base,'rate'=>9]],'2026-10-22');
+        $create('Озон','озон',$this->member->id,'2026-11',[[...$base,'category'=>'Удалённая','rate'=>99]],'2026-10-23','2026-10-23');
+        $create('Ozon','ozon',$this->admin->id,'2026-11',[$base],'2026-10-20');
+        $create('Ozon','ozon',$this->member->id,'2026-10',[$base],'2026-10-20');
+        $normalizer=app(\App\Services\Finance\NormalizeCashbackBanks::class);
+        $audit=$normalizer->run();$this->assertEquals(2,$audit['merged']);$this->assertDatabaseCount('cashback_bank_periods',5);
+        $normalizer->run(true);
+        $this->assertDatabaseCount('cashback_bank_periods',3);$this->assertDatabaseCount('cashback_bank_normalization_backups',5);
+        $merged=$latest->fresh();$this->assertSame('Ozon Банк',$merged->bank_name);$this->assertCount(2,$merged->entries);
+        $this->assertSame(9,collect($merged->entries)->firstWhere('category','Супермаркеты')['rate']);
+        $this->assertNull(collect($merged->entries)->firstWhere('category','Удалённая'));
+        $again=$normalizer->run(true);$this->assertEquals(0,$again['merged']);$this->assertEquals(0,$again['renamed']);
+        $this->assertDatabaseCount('cashback_bank_normalization_backups',5);
     }
 }
