@@ -1,10 +1,10 @@
 import { expect, test } from '@playwright/test'
 
-for(const state of ['ready','multiple','uncertain'])test(`receipt without QR handles ${state}`,async({page})=>{
-  const multiple=state==='multiple',uncertain=state==='uncertain'
+for(const state of ['ready','multiple','uncertain','timeout','unavailable'])test(`receipt without QR handles ${state}`,async({page})=>{
+  const multiple=state==='multiple',uncertain=state==='uncertain',failure=state==='timeout'||state==='unavailable',empty=multiple||failure
   await page.setViewportSize({width:320,height:852})
   let confirms=0
-  const receipt={id:'table',can_edit:true,qr_state:null,ocr_status:multiple||uncertain?'NEEDS_REVIEW':'COMPLETED',created_at:'2026-10-24',review_payload:{recognition_source:'OCR',review_reason:multiple?'MULTIPLE_RECEIPTS':uncertain?'TOTAL_UNCERTAIN':undefined,date:'2026-10-24',receipt_total:multiple?null:435,items:multiple?[]:[{name:'Йогурт',qty:2,price:120,category:'Продукты',category_id:'c1'},{name:'Апельсины',qty:.65,price:300,category:'Продукты',category_id:'c1'}]}}
+  const receipt={id:'table',can_edit:true,qr_state:null,ocr_status:empty||uncertain?'NEEDS_REVIEW':'COMPLETED',created_at:'2026-10-24',review_payload:{recognition_source:'OCR',review_reason:multiple?'MULTIPLE_RECEIPTS':uncertain?'TOTAL_UNCERTAIN':failure?(state==='timeout'?'OCR_TIMEOUT':'OCR_UNAVAILABLE'):undefined,date:'2026-10-24',receipt_total:empty?null:435,items:empty?[]:[{name:'Йогурт',qty:2,price:120,category:'Продукты',category_id:'c1'},{name:'Апельсины',qty:.65,price:300,category:'Продукты',category_id:'c1'}]}}
   await page.route('**/api/v1/**',async route=>{
     const req=route.request(),path=new URL(req.url()).pathname.replace('/api/v1','')
     let data:any=[]
@@ -20,8 +20,13 @@ for(const state of ['ready','multiple','uncertain'])test(`receipt without QR han
     await route.fulfill({json:{data}})
   })
   await page.goto('/?section=finance');await page.getByRole('tab',{name:'Чеки',exact:true}).click()
-  await page.getByRole('button',{name:multiple||uncertain?/Чек.*Нужна проверка/:/Чек.*Проверьте позиции/}).click()
-  if(multiple){
+  await page.getByRole('button',{name:empty||uncertain?/Чек.*Нужна проверка/:/Чек.*Проверьте позиции/}).click()
+  if(failure){
+    await expect(page.getByText(state==='timeout'?'Сервер не успел обработать чек. Фото сохранено — нажмите «Распознать ещё раз».':'Распознавание на сервере сейчас недоступно. Фото сохранено — сообщите администратору.',{exact:true})).toBeVisible()
+    await expect(page.getByText(/Загрузите чёткое фото/)).toHaveCount(0)
+    await expect(page.getByRole('button',{name:'Подтвердить расходы',exact:true})).toBeDisabled()
+    expect(confirms).toBe(0)
+  }else if(multiple){
     await expect(page.getByText('На фото несколько чеков. Загрузите отдельное фото нужного чека целиком, чтобы не смешать покупки.',{exact:true})).toBeVisible()
     await expect(page.getByRole('button',{name:'Подтвердить расходы',exact:true})).toBeDisabled()
     await expect(page.getByText(/Фото сохранено, но позиции/)).toHaveCount(0)

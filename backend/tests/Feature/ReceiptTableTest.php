@@ -133,8 +133,24 @@ class ReceiptTableTest extends TestCase
     {
         config(['services.openai.key'=>'do-not-use-this-key']);
         \Illuminate\Support\Facades\Http::preventStrayRequests();
-        $this->artisan('family:check-receipt-ocr')->expectsOutput('{"OCR_VERSION":"table-v4","OCR_ROTATION_OK":true}')->assertSuccessful();
+        $this->artisan('family:check-receipt-ocr')->expectsOutput('{"OCR_VERSION":"table-v5","OCR_ROTATION_OK":true,"OCR_LONG_RECEIPT_OK":true}')->assertSuccessful();
         $this->assertSame('do-not-use-this-key',config('services.openai.key'));
         \Illuminate\Support\Facades\Http::assertNothingSent();
+    }
+
+    public function test_a_later_failed_attempt_does_not_erase_previously_recognized_products(): void
+    {
+        config(['services.openai.key'=>null]);
+        $reader=\Mockery::mock(ReceiptRecognizer::class)->makePartial()->shouldAllowMockingProtectedMethods();
+        $attempt=0;
+        $reader->shouldReceive('readText')->andReturnUsing(function()use(&$attempt){
+            $attempt++;
+            if ($attempt===2) throw new \RuntimeException('must not be printed');
+            return $attempt===1?"Milk 20.00 *1 =20.00 VAT 10%\nBread 30.00 *1 =30.00 VAT 10%\nTea 50.00 *1 =50.00 VAT 10%":"TOTAL 100.00";
+        });
+        $r=$reader->recognize('data:image/png;base64,'.trim(file_get_contents(__DIR__.'/../Fixtures/receipt.png.b64')),null,true);
+        $this->assertSame('COMPLETED',$r['status']);
+        $this->assertCount(3,$r['payload']['items']);
+        $this->assertSame(100.0,$r['payload']['total']);
     }
 }

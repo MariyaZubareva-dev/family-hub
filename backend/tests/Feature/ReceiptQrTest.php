@@ -296,4 +296,28 @@ class ReceiptQrTest extends TestCase
         $this->artisan('family:check-receipt-qr')->expectsOutput('{"QR_DECODE_OK":true}')->assertSuccessful();
         Http::assertNothingSent();
     }
+
+    public function test_saved_receipt_diagnostics_are_offline_and_do_not_modify_the_draft(): void
+    {
+        $id=(string)\Illuminate\Support\Str::ulid();
+        $image='data:image/png;base64,'.trim(file_get_contents(__DIR__.'/../Fixtures/receipt.png.b64'));
+        DB::table('receipts')->insert(['id'=>$id,'family_id'=>$this->family->id,'uploaded_by'=>$this->user->id,'file_name'=>'saved-test.png','image_data'=>$image,'ocr_status'=>'NEEDS_REVIEW','created_at'=>now(),'updated_at'=>now()]);
+        $before=DB::table('receipts')->where('id',$id)->first();
+        config(['services.openai.key'=>'do-not-use-this-key']);
+        $this->partialMock(\App\Services\Finance\ReceiptRecognizer::class,function($mock)use($image){
+            $mock->shouldReceive('recognize')->once()->with($image,null,true)->andReturnUsing(function(){
+                $this->assertNull(config('services.openai.key'));
+                return ['status'=>'NEEDS_REVIEW','payload'=>['items'=>[['name'=>'Test','qty'=>1,'price'=>100]],'total'=>100]];
+            });
+        });
+        $exit=\Illuminate\Support\Facades\Artisan::call('family:check-receipt-ocr',['--receipt'=>'saved-test.png']);
+        $out=json_decode(\Illuminate\Support\Facades\Artisan::output(),true);
+        $this->assertSame(0,$exit);
+        $this->assertTrue($out['READ_ONLY']);
+        $this->assertSame(1,$out['ITEM_COUNT']);
+        $this->assertSame((array)$before,(array)DB::table('receipts')->where('id',$id)->first());
+        $this->assertSame('do-not-use-this-key',config('services.openai.key'));
+        $this->assertDatabaseCount('finance_transactions',0);
+        Http::assertNothingSent();
+    }
 }

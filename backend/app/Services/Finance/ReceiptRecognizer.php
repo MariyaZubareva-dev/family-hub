@@ -7,9 +7,14 @@ use Symfony\Component\Process\Process;
 
 class ReceiptRecognizer
 {
-    public const VERSION = 'table-v4';
+    public const VERSION = 'table-v5';
+    private array $ocrAttempts=[];
+    private ?string $ocrFailure=null;
+
+    public function diagnostics(): array { return $this->ocrAttempts; }
     public function recognize(string $image, ?array $knownQr=null, bool $qrAlreadyDecoded=false): array
     {
+        $this->ocrAttempts=[]; $this->ocrFailure=null;
         $qr = $qrAlreadyDecoded ? $knownQr : ($knownQr ?? app(FiscalQr::class)->decode($image));
         $lookup = $qr ? app(QrReceiptProvider::class)->fetch($qr) : null;
         if ($qr && $qr['n'] !== '1') $lookup = ['state'=>'UNSUPPORTED'];
@@ -33,11 +38,12 @@ class ReceiptRecognizer
             }
             [$payload,$text]=$this->readOcr($tmp);
         } catch (\Throwable $e) {
-            // Manual review remains available if OCR is unavailable or the image is unreadable.
+            $payload['review_reason']='OCR_UNAVAILABLE';
+            \Illuminate\Support\Facades\Log::warning('Receipt OCR unavailable',['version'=>self::VERSION,'exception_type'=>get_class($e)]);
         } finally {
             @unlink($tmp);
         }
-        if (empty($payload['review_reason']) && config('services.openai.key')) {
+        if (in_array($payload['review_reason']??null,[null,'OCR_TIMEOUT','OCR_UNAVAILABLE'],true) && config('services.openai.key')) {
             try {
                 $response = Http::withToken(config('services.openai.key'))->timeout(45)->post('https://api.openai.com/v1/responses', [
                     'model' => config('services.openai.model'),
@@ -77,7 +83,7 @@ class ReceiptRecognizer
 
     private function readOcr(string $path): array
     {
-        $payload=$this->parseText(''); $text=''; $deadline=microtime(true)+25;
+        $payload=$this->parseText(''); $text=''; $deadline=microtime(true)+35;
         $source=@imagecreatefrompng($path);
         if (!$source) return [$payload,$text];
         $rotated=tempnam(sys_get_temp_dir(),'receipt_rotation_');
@@ -98,7 +104,12 @@ class ReceiptRecognizer
                     finally { imagedestroy($image); }
                     $angle=$rotation;
                 }
-                $candidateText=$this->readText($rotated,$mode,$deadline);
+                try { $candidateText=$this->readText($rotated,$mode,$deadline); }
+                catch (\Throwable $e) {
+                    $this->ocrFailure='OCR_UNAVAILABLE';
+                    \Illuminate\Support\Facades\Log::warning('Receipt OCR attempt unavailable',['version'=>self::VERSION,'exception_type'=>get_class($e)]);
+                    continue;
+                }
                 if ($candidateText===null) continue;
                 $candidate=$this->parseText($candidateText);
                 if (!empty($candidate['review_reason'])) return [$candidate,$candidateText];
@@ -124,6 +135,7 @@ class ReceiptRecognizer
                     $attempts[]=[$bestAngle,'4']; $attempts[]=[$bestAngle,'11'];
                 }
             }
+            if (!$payload['items'] && $payload['total']===null && $this->ocrFailure) $payload['review_reason']=$this->ocrFailure;
             return [$payload,$text];
         } finally {
             imagedestroy($source);
@@ -134,9 +146,22 @@ class ReceiptRecognizer
     protected function readText(string $path,string $mode,float $deadline): ?string
     {
         $process=new Process(['tesseract',$path,'stdout','-l','rus+eng','--psm',$mode]);
-        $process->setTimeout(max(.1,min(10,$deadline-microtime(true))));
+        // Four OCR threads on a one-core VPS can exceed the timeout on a long receipt.
+        $process->setEnv(['OMP_THREAD_LIMIT'=>'1']);
+        $process->setTimeout(max(.1,min(25,$deadline-microtime(true))));
+        $start=microtime(true); $timedOut=false;
         try { $process->run(); }
-        catch (\Symfony\Component\Process\Exception\ProcessTimedOutException $e) { return null; }
+        catch (\Symfony\Component\Process\Exception\ProcessTimedOutException $e) {
+            $timedOut=true; $this->ocrFailure='OCR_TIMEOUT';
+            return null;
+        } finally {
+            $attempt=['mode'=>$mode,'elapsed_ms'=>(int)round((microtime(true)-$start)*1000),'timed_out'=>$timedOut,'exit_code'=>$process->getExitCode()];
+            $this->ocrAttempts[]=$attempt;
+            if ($timedOut || !$process->isSuccessful()) {
+                \Illuminate\Support\Facades\Log::warning('Receipt OCR process incomplete',['version'=>self::VERSION,...$attempt]);
+                if (!$timedOut) $this->ocrFailure='OCR_UNAVAILABLE';
+            }
+        }
         return $process->isSuccessful()?trim($process->getOutput()):null;
     }
 
