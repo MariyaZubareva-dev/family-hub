@@ -70,7 +70,10 @@ class ReceiptTableTest extends TestCase
             try {
                 $this->assertLessThan(1100,imagesx($result));
                 $rgb=imagecolorat($result,0,0);
-                $this->assertSame(0xffffff,$rgb&0xffffff);
+                $channels=[($rgb>>16)&255,($rgb>>8)&255,$rgb&255];
+                // Bicubic interpolation can make a white boundary a few levels darker.
+                $this->assertGreaterThan(240,min($channels));
+                $this->assertLessThan(5,max($channels)-min($channels));
             } finally { imagedestroy($result); }
             $this->assertSame($bytes,file_get_contents($input));
         } finally { imagedestroy($im); @unlink($input); @unlink($output); }
