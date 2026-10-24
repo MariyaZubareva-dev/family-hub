@@ -1,9 +1,10 @@
 import { expect, test } from '@playwright/test'
 
-for(const multiple of [false,true])test(`receipt without QR ${multiple?'explains multiple documents':'keeps table quantities and confirms expenses'}`,async({page})=>{
+for(const state of ['ready','multiple','uncertain'])test(`receipt without QR handles ${state}`,async({page})=>{
+  const multiple=state==='multiple',uncertain=state==='uncertain'
   await page.setViewportSize({width:320,height:852})
   let confirms=0
-  const receipt={id:'table',can_edit:true,qr_state:null,ocr_status:multiple?'NEEDS_REVIEW':'COMPLETED',created_at:'2026-10-24',review_payload:{recognition_source:'OCR',review_reason:multiple?'MULTIPLE_RECEIPTS':undefined,date:'2026-10-24',receipt_total:multiple?null:435,items:multiple?[]:[{name:'Йогурт',qty:2,price:120,category:'Продукты',category_id:'c1'},{name:'Апельсины',qty:.65,price:300,category:'Продукты',category_id:'c1'}]}}
+  const receipt={id:'table',can_edit:true,qr_state:null,ocr_status:multiple||uncertain?'NEEDS_REVIEW':'COMPLETED',created_at:'2026-10-24',review_payload:{recognition_source:'OCR',review_reason:multiple?'MULTIPLE_RECEIPTS':uncertain?'TOTAL_UNCERTAIN':undefined,date:'2026-10-24',receipt_total:multiple?null:435,items:multiple?[]:[{name:'Йогурт',qty:2,price:120,category:'Продукты',category_id:'c1'},{name:'Апельсины',qty:.65,price:300,category:'Продукты',category_id:'c1'}]}}
   await page.route('**/api/v1/**',async route=>{
     const req=route.request(),path=new URL(req.url()).pathname.replace('/api/v1','')
     let data:any=[]
@@ -19,13 +20,19 @@ for(const multiple of [false,true])test(`receipt without QR ${multiple?'explains
     await route.fulfill({json:{data}})
   })
   await page.goto('/?section=finance');await page.getByRole('tab',{name:'Чеки',exact:true}).click()
-  await page.getByRole('button',{name:multiple?/Чек.*Нужна проверка/:/Чек.*Проверьте позиции/}).click()
+  await page.getByRole('button',{name:multiple||uncertain?/Чек.*Нужна проверка/:/Чек.*Проверьте позиции/}).click()
   if(multiple){
     await expect(page.getByText('На фото несколько чеков. Загрузите отдельное фото нужного чека целиком, чтобы не смешать покупки.',{exact:true})).toBeVisible()
     await expect(page.getByRole('button',{name:'Подтвердить расходы',exact:true})).toBeDisabled()
     await expect(page.getByText(/Фото сохранено, но позиции/)).toHaveCount(0)
     expect(confirms).toBe(0)
   }else{
+    if(uncertain){
+      await expect(page.getByRole('button',{name:'Подтвердить расходы',exact:true})).toBeDisabled()
+      await expect(page.getByText(/Итог прочитан по-разному/)).toBeVisible()
+      await page.getByLabel('Итог на чеке, ₽',{exact:true}).fill('436')
+      await page.getByLabel('Итог на чеке, ₽',{exact:true}).fill('435')
+    }
     await expect(page.locator('.f-receipt-line').filter({hasText:'Йогурт'})).toContainText('2 × 120 ₽')
     await expect(page.locator('.f-receipt-line').filter({hasText:'Апельсины'})).toContainText('0.65 × 300 ₽')
     await page.getByRole('button',{name:'Подтвердить расходы',exact:true}).click()

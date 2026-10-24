@@ -7,6 +7,7 @@ use Symfony\Component\Process\Process;
 
 class ReceiptRecognizer
 {
+    public const VERSION = 'table-v4';
     public function recognize(string $image, ?array $knownQr=null, bool $qrAlreadyDecoded=false): array
     {
         $qr = $qrAlreadyDecoded ? $knownQr : ($knownQr ?? app(FiscalQr::class)->decode($image));
@@ -27,23 +28,10 @@ class ReceiptRecognizer
             $photo = app(ReceiptPhoto::class)->prepare($tmp, $bytes);
             if (($photo['review_reason']??null)==='MULTIPLE_RECEIPTS') {
                 $payload['review_reason']='MULTIPLE_RECEIPTS';
-                $payload['recognition_source']='OCR'; $payload['recognizer_version']='table-v3';
+                $payload['recognition_source']='OCR'; $payload['recognizer_version']=self::VERSION;
                 return ['text'=>'','payload'=>$payload,'qr_data'=>$qr,'qr_state'=>$lookup['state']??null,'status'=>'NEEDS_REVIEW'];
             }
-            $deadline=microtime(true)+25;
-            foreach (['6','4','11'] as $mode) {
-                if (microtime(true)>=$deadline) break;
-                $process = new Process(['tesseract', $tmp, 'stdout', '-l', 'rus+eng', '--psm', $mode]);
-                $process->setTimeout(max(0.1,min(15,$deadline-microtime(true))));
-                try { $process->run(); }
-                catch (\Symfony\Component\Process\Exception\ProcessTimedOutException $e) { continue; }
-                if (!$process->isSuccessful()) continue;
-                $candidateText=trim($process->getOutput());
-                $candidate=$this->parseText($candidateText);
-                if (!empty($candidate['review_reason'])) { $text=$candidateText; $payload=$candidate; break; }
-                if ($this->ocrScore($candidate)>$this->ocrScore($payload)) { $text=$candidateText; $payload=$candidate; }
-                if ($this->isBalanced($payload)) break;
-            }
+            [$payload,$text]=$this->readOcr($tmp);
         } catch (\Throwable $e) {
             // Manual review remains available if OCR is unavailable or the image is unreadable.
         } finally {
@@ -76,7 +64,7 @@ class ReceiptRecognizer
                 // Fall back to local OCR; never return provider diagnostics or credentials to the user.
             }
         }
-        $payload['recognizer_version'] = 'table-v3';
+        $payload['recognizer_version'] = self::VERSION;
         $payload['receipt_total'] = $payload['total'];
         $payload['recognition_source'] = 'OCR';
         if ($qr) {
@@ -85,6 +73,71 @@ class ReceiptRecognizer
             $payload['total'] = $fiscal['total']; $payload['receipt_total'] = $fiscal['total']; $payload['date'] = $fiscal['date'];
         }
         return ['text' => $text, 'payload' => $payload, 'status' => $this->isBalanced($payload) ? 'COMPLETED' : 'NEEDS_REVIEW', 'qr_data'=>$qr, 'qr_state'=>$lookup['state'] ?? null];
+    }
+
+    private function readOcr(string $path): array
+    {
+        $payload=$this->parseText(''); $text=''; $deadline=microtime(true)+25;
+        $source=@imagecreatefrompng($path);
+        if (!$source) return [$payload,$text];
+        $rotated=tempnam(sys_get_temp_dir(),'receipt_rotation_');
+        $angle=null; $bestAngle=0;
+        try {
+            if ($rotated===false) return [$payload,$text];
+            $angles=imagesx($source)>imagesy($source)*1.6?[90,270,0,180]:[0,180,90,270];
+            // Find the reading direction first; then refine segmentation in that direction.
+            // Do not rely on optional EXIF or the separately packaged Tesseract OSD model.
+            $attempts=array_map(fn($a)=>[$a,'6'],$angles);
+            for ($index=0;$index<count($attempts);$index++) {
+                if (microtime(true)>=$deadline) break;
+                [$rotation,$mode]=$attempts[$index];
+                if ($angle!==$rotation) {
+                    $image=imagerotate($source,$rotation,0xffffff);
+                    if (!$image) continue;
+                    try { imagepng($image,$rotated,1); }
+                    finally { imagedestroy($image); }
+                    $angle=$rotation;
+                }
+                $candidateText=$this->readText($rotated,$mode,$deadline);
+                if ($candidateText===null) continue;
+                $candidate=$this->parseText($candidateText);
+                if (!empty($candidate['review_reason'])) return [$candidate,$candidateText];
+                // A sparse pass can read the total/date better than the product rows.
+                // Share only missing metadata; never concatenate product lists.
+                foreach (['total','date'] as $field) {
+                    if ($payload[$field]===null && $candidate[$field]!==null) $payload[$field]=$candidate[$field];
+                    elseif ($candidate[$field]===null) $candidate[$field]=$payload[$field];
+                    elseif ($payload[$field]!==null && $payload[$field]!==$candidate[$field]) {
+                        $payload['review_reason']=$field==='total'?'TOTAL_UNCERTAIN':'DATE_UNCERTAIN';
+                        $candidate['review_reason']=$payload['review_reason'];
+                    }
+                }
+                if (!empty($payload['review_reason'])) $candidate['review_reason']=$payload['review_reason'];
+                if ($this->ocrScore($candidate)>$this->ocrScore($payload)) {
+                    $payload=$candidate; $text=$candidateText; $bestAngle=$rotation;
+                }
+                if ($this->isBalanced($payload)) break;
+                $valid=count(array_filter($candidate['items'],fn($item)=>empty($item['needs_review'])));
+                if ($mode==='6' && (($candidate['total']>0 && $valid>=3)||$valid>=8||$index===3)) {
+                    // One candidate is kept; separate passes never add the same items twice.
+                    $attempts=array_slice($attempts,0,$index+1);
+                    $attempts[]=[$bestAngle,'4']; $attempts[]=[$bestAngle,'11'];
+                }
+            }
+            return [$payload,$text];
+        } finally {
+            imagedestroy($source);
+            if ($rotated!==false) @unlink($rotated);
+        }
+    }
+
+    protected function readText(string $path,string $mode,float $deadline): ?string
+    {
+        $process=new Process(['tesseract',$path,'stdout','-l','rus+eng','--psm',$mode]);
+        $process->setTimeout(max(.1,min(10,$deadline-microtime(true))));
+        try { $process->run(); }
+        catch (\Symfony\Component\Process\Exception\ProcessTimedOutException $e) { return null; }
+        return $process->isSuccessful()?trim($process->getOutput()):null;
     }
 
     private function ocrScore(array $payload): float
@@ -108,7 +161,7 @@ class ReceiptRecognizer
     public function parseText(string $text): array
     {
         $lines = array_values(array_filter(array_map('trim',preg_split('/\R/u', str_replace(["\u{00A0}", "\u{202F}"], ' ', $text))),fn($line)=>$line!==''));
-        $money = '(\d+(?: \d{3})*(?:[.,]\d{2}))';
+        $money = '(\d+(?: \d{3})*(?:[.,]\s*\d{2}))';
         $number = fn(string $s): float => (float) str_replace([' ', ','], ['', '.'], $s);
         $items = []; $block = null; $total = null; $ended=false; $pendingTotal=false; $totals=[];
         $numberedCount=preg_match_all('/^\s*(\d{1,3})\s*[:)]\s*\p{L}/um',$text,$numbered);
@@ -125,11 +178,11 @@ class ReceiptRecognizer
             if ($index<=$skipUntil) continue;
             $line = preg_replace('/^[\s\x{0027}\x{0022}\x{0060}\x{2018}\x{2019}\x{201C}\x{201D}]+|[\s\x{0027}\x{0022}\x{0060}\x{2018}\x{2019}\x{201C}\x{201D}]+$/u', '', $raw);
             $totalLabel='(?:ИТОГ(?:О)?|ВСЕГО|TOTAL)(?:\s+[КK]\s+[ОO][ПPпnN][ЛLлnN][АA][ТT][ЕE])?';
-            if (preg_match('/^'.$totalLabel.'\s*[=:\s]*(\d+(?: \d{3})*(?:[.,]\d{1,2})?)\s*(?:₽|руб\.?)?$/ui', $line, $m) ||
-                $pendingTotal && preg_match('/^[=:\s]*(\d+(?: \d{3})*(?:[.,]\d{1,2})?)\s*(?:₽|руб\.?)?$/ui',$line,$m)) {
+            if (preg_match('/^'.$totalLabel.'\s*[=:#\s]*(\d+(?: \d{3})*(?:[.,]\s*\d{1,2})?)\s*(?:₽|руб\.?)?$/ui', $line, $m) ||
+                $pendingTotal && preg_match('/^[=:#\s]*(\d+(?: \d{3})*(?:[.,]\s*\d{1,2})?)\s*(?:₽|руб\.?)?$/ui',$line,$m)) {
                 $finish(); $value=$number($m[1]); $totals[]=$value; $total??=$value; $ended=true; $pendingTotal=false; continue;
             }
-            $pendingTotal=(bool)preg_match('/^'.$totalLabel.'\s*[=:\s]*$/ui',$line);
+            $pendingTotal=(bool)preg_match('/^'.$totalLabel.'\s*[=:#\s]*$/ui',$line);
             if ($pendingTotal) { $finish(); $ended=true; continue; }
             if ($ended) continue;
             if ($structured) {
@@ -156,8 +209,8 @@ class ReceiptRecognizer
                 $sparseRow=true;
             }
             // Tax belongs to a product row. Parse the arithmetic before skipping tax/footer lines.
-            $product=preg_replace('/\s+(?:[НH][ДDАAОO][СC]|VAT)\b.*$/ui','',$line);
-            if (preg_match('/^(.+?\p{L}.*?)\s+'.$money.'\s*[xXхХ×*#жЖмМ«]\s*(\d+(?:[.,]\d+)?)\s*=\s*'.$money.'\s*$/u',$product,$m)) {
+            $product=preg_replace('/\s+(?:[НH][ДDАAОOИIЦUN]?[СC]|VAT)\b.*$/ui','',$line);
+            if (preg_match('/^(.+?\p{L}.*?)\s+'.$money.'\s*(?:[xXхХ×*#жЖмМ«]\s*|\s+)(\d+(?:[.,]\d+)?)\.?\s*=\s*'.$money.'\s*$/u',$product,$m)) {
                 $price=$number($m[2]); $qty=$number($m[3]); $amount=$number($m[4]);
                 // A free gift is not an expense; it does not change the receipt total.
                 if ($price===0.0 && $amount===0.0 && $qty>0) continue;

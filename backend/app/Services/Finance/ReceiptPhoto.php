@@ -18,17 +18,25 @@ class ReceiptPhoto
                 // Do not combine purchases or select a receipt accidentally left in the background.
                 return ['review_reason'=>'MULTIPLE_RECEIPTS'];
             }
+            // Pale wood can join the paper mask. Prefer a tighter neutral-colour
+            // region only when it preserves most of the original component.
+            $margin=2;
+            [$neutral]=$this->regions($source,.14);
+            if ($parts && $neutral && $neutral[0]['area']>=$parts[0]['area']*.75) {
+                $boxArea=fn($part)=>($part['maxX']-$part['minX']+1)*($part['maxY']-$part['minY']+1);
+                if ($boxArea($neutral[0])<$boxArea($parts[0])*.85) { $parts=$neutral; $margin=0; }
+            }
             if ($parts) {
                 $points=[];
                 foreach ($parts[0]['rows'] as $y=>[$left,$right]) {
-                    $points[]=[max(0,$left-2),max(0,$y-2)];
-                    $points[]=[min($w-1,$right+2),min($h-1,$y+2)];
+                    $points[]=[max(0,$left-$margin),max(0,$y-$margin)];
+                    $points[]=[min($w-1,$right+$margin),min($h-1,$y+$margin)];
                 }
                 $hull=$this->hull($points);
-                $x1=max(0,(int)floor(($parts[0]['minX']-2)*$size[0]/$w));
-                $y1=max(0,(int)floor(($parts[0]['minY']-2)*$size[1]/$h));
-                $x2=min($size[0],(int)ceil(($parts[0]['maxX']+3)*$size[0]/$w));
-                $y2=min($size[1],(int)ceil(($parts[0]['maxY']+3)*$size[1]/$h));
+                $x1=max(0,(int)floor(($parts[0]['minX']-$margin)*$size[0]/$w));
+                $y1=max(0,(int)floor(($parts[0]['minY']-$margin)*$size[1]/$h));
+                $x2=min($size[0],(int)ceil(($parts[0]['maxX']+$margin+1)*$size[0]/$w));
+                $y2=min($size[1],(int)ceil(($parts[0]['maxY']+$margin+1)*$size[1]/$h));
                 $paper=imagecreatetruecolor($x2-$x1,$y2-$y1);
                 imagefill($paper,0,0,imagecolorallocate($paper,255,255,255));
                 // Copy only the paper polygon. White margins replace the table/background.
@@ -65,7 +73,7 @@ class ReceiptPhoto
         return isset($parts[1]) && $parts[1]['area']>$parts[0]['area']*.35 && $parts[1]['area']>$w*$h*.05;
     }
 
-    private function regions($source): array
+    private function regions($source,float $saturation=.24): array
     {
         $ratio=min(1,320/max(imagesx($source),imagesy($source)));
         $w=max(1,(int)round(imagesx($source)*$ratio)); $h=max(1,(int)round(imagesy($source)*$ratio));
@@ -78,7 +86,8 @@ class ReceiptPhoto
                 $rgb=imagecolorat($sample,$x,$y);
                 $r=($rgb>>16)&255; $g=($rgb>>8)&255; $b=$rgb&255;
                 $hi=max($r,$g,$b); $lo=min($r,$g,$b);
-                if ($hi>140 && $lo>90 && $hi-$lo<$hi*.24) $mask[$y*$w+$x]="\1";
+                $neutral=$saturation<.24;
+                if ($hi>($neutral?150:140) && $lo>($neutral?120:90) && $hi-$lo<min($neutral?35:255,$hi*$saturation)) $mask[$y*$w+$x]="\1";
             }
             $parts=[];
             for ($seed=0;$seed<$w*$h;$seed++) {
