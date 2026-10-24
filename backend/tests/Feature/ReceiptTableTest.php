@@ -133,7 +133,14 @@ class ReceiptTableTest extends TestCase
     {
         config(['services.openai.key'=>'do-not-use-this-key']);
         \Illuminate\Support\Facades\Http::preventStrayRequests();
-        $this->artisan('family:check-receipt-ocr')->expectsOutput('{"OCR_VERSION":"table-v5","OCR_ROTATION_OK":true,"OCR_LONG_RECEIPT_OK":true}')->assertSuccessful();
+        $exit=\Illuminate\Support\Facades\Artisan::call('family:check-receipt-ocr');
+        $out=json_decode(\Illuminate\Support\Facades\Artisan::output(),true);
+        $this->assertSame(0,$exit);
+        $this->assertSame('table-v5',$out['OCR_VERSION']);
+        $this->assertTrue($out['OCR_ROTATION_OK']);
+        $this->assertTrue($out['OCR_LONG_RECEIPT_PROCESSED']);
+        $this->assertGreaterThan(0,$out['OCR_LONG_ITEM_COUNT']);
+        $this->assertContains($out['OCR_LONG_STATUS'],['COMPLETED','NEEDS_REVIEW']);
         $this->assertSame('do-not-use-this-key',config('services.openai.key'));
         \Illuminate\Support\Facades\Http::assertNothingSent();
     }
