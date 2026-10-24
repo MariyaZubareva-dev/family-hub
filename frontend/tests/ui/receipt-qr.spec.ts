@@ -1,5 +1,40 @@
 import { expect, test } from '@playwright/test'
 
+for(const multiple of [false,true])test(`receipt without QR ${multiple?'explains multiple documents':'keeps table quantities and confirms expenses'}`,async({page})=>{
+  await page.setViewportSize({width:320,height:852})
+  let confirms=0
+  const receipt={id:'table',can_edit:true,qr_state:null,ocr_status:multiple?'NEEDS_REVIEW':'COMPLETED',created_at:'2026-10-24',review_payload:{recognition_source:'OCR',review_reason:multiple?'MULTIPLE_RECEIPTS':undefined,date:'2026-10-24',receipt_total:multiple?null:435,items:multiple?[]:[{name:'Йогурт',qty:2,price:120,category:'Продукты',category_id:'c1'},{name:'Апельсины',qty:.65,price:300,category:'Продукты',category_id:'c1'}]}}
+  await page.route('**/api/v1/**',async route=>{
+    const req=route.request(),path=new URL(req.url()).pathname.replace('/api/v1','')
+    let data:any=[]
+    if(path==='/me')data={family:{id:'f1',role:'ADMIN'}}
+    else if(path==='/finance/categories')data=[{id:'c1',name:'Продукты',transaction_type:'EXPENSE'}]
+    else if(path==='/finance/analytics')data={ranked:[],trend:[]}
+    else if(path==='/finance/receipts')data=[receipt]
+    else if(path==='/finance/receipts/table')data=receipt
+    else if(path==='/finance/receipts/table/confirm'){
+      expect(req.postDataJSON().items.map((i:any)=>[i.qty,i.price])).toEqual([[2,120],[.65,300]])
+      confirms++;data={total_amount:435,created_count:2}
+    }
+    await route.fulfill({json:{data}})
+  })
+  await page.goto('/?section=finance');await page.getByRole('tab',{name:'Чеки',exact:true}).click()
+  await page.getByRole('button',{name:multiple?/Чек.*Нужна проверка/:/Чек.*Проверьте позиции/}).click()
+  if(multiple){
+    await expect(page.getByText('На фото несколько чеков. Загрузите отдельное фото нужного чека целиком, чтобы не смешать покупки.',{exact:true})).toBeVisible()
+    await expect(page.getByRole('button',{name:'Подтвердить расходы',exact:true})).toBeDisabled()
+    await expect(page.getByText(/Фото сохранено, но позиции/)).toHaveCount(0)
+    expect(confirms).toBe(0)
+  }else{
+    await expect(page.locator('.f-receipt-line').filter({hasText:'Йогурт'})).toContainText('2 × 120 ₽')
+    await expect(page.locator('.f-receipt-line').filter({hasText:'Апельсины'})).toContainText('0.65 × 300 ₽')
+    await page.getByRole('button',{name:'Подтвердить расходы',exact:true}).click()
+    await expect(page.getByText('Чек подтверждён. Добавлены расходы на 435 ₽.',{exact:true})).toBeVisible()
+    expect(confirms).toBe(1)
+  }
+  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true)
+})
+
 test('suggested item categories stay editable and an unmatched item requires a deliberate choice',async({page})=>{
   let confirms=0
   const receipt={id:'classified',can_edit:true,ocr_status:'COMPLETED',qr_state:'READY',created_at:'2026-10-22',review_payload:{merchant:'Магазин',date:'2026-10-22',receipt_total:300,total:300,items:[

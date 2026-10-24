@@ -121,6 +121,60 @@ class ReceiptQrTest extends TestCase
         Http::assertNothingSent();
     }
 
+    public function test_qr_on_another_receipt_in_the_background_is_not_requested(): void
+    {
+        $canvas=imagecreatetruecolor(900,900);
+        imagefill($canvas,0,0,imagecolorallocate($canvas,140,90,40));
+        $white=imagecolorallocate($canvas,245,245,240);
+        imagefilledrectangle($canvas,40,200,420,800,$white);
+        imagefilledrectangle($canvas,500,40,860,700,$white);
+        $qr=imagecreatefromstring(base64_decode(trim(file_get_contents(resource_path('diagnostics/fiscal-qr.png.b64')))));
+        $path=tempnam(sys_get_temp_dir(),'two_receipts_');
+        try {
+            imagecopy($canvas,$qr,545,200,0,0,imagesx($qr),imagesy($qr));
+            imagepng($canvas,$path);
+            $this->postJson('/api/v1/finance/receipts',['file_name'=>'two.png','image_data'=>'data:image/png;base64,'.base64_encode(file_get_contents($path))])
+                ->assertCreated()->assertJsonPath('data.ocr_status','NEEDS_REVIEW')
+                ->assertJsonPath('data.review_payload.review_reason','MULTIPLE_RECEIPTS')
+                ->assertJsonPath('data.review_payload.items',[]);
+        } finally { imagedestroy($canvas); imagedestroy($qr); @unlink($path); }
+        Http::assertNothingSent();
+        $this->assertDatabaseCount('finance_transactions',0);
+    }
+
+    public function test_free_gift_does_not_invalidate_an_electronic_receipt_or_create_a_zero_expense(): void
+    {
+        $data=$this->data();
+        $data['items'][]=['name'=>'Подарок','quantity'=>1,'price'=>0,'sum'=>0];
+        $payload=(new QrReceiptProvider)->normalize($data,$this->qr);
+        $this->assertNotNull($payload);
+        $this->assertCount(1,$payload['items']);
+        $this->assertSame(199.8,$payload['receipt_total']);
+    }
+
+    public function test_a_table_receipt_without_a_fiscal_qr_is_read_locally_without_a_provider_request(): void
+    {
+        $this->mock(FiscalQr::class,fn($mock)=>$mock->shouldReceive('decode')->once()->andReturn(null));
+        $canvas=imagecreatetruecolor(600,300);
+        imagefill($canvas,0,0,imagecolorallocate($canvas,255,255,255));
+        $black=imagecolorallocate($canvas,0,0,0);
+        imagestring($canvas,5,40,60,'MILK 100.00 *2 =200.00 VAT 10%',$black);
+        imagestring($canvas,5,40,130,'TOTAL 200.00',$black);
+        imagestring($canvas,5,40,200,'24.10.26 18:11',$black);
+        $path=tempnam(sys_get_temp_dir(),'table_photo_');
+        try {
+            imagepng($canvas,$path);
+            $this->postJson('/api/v1/finance/receipts',['file_name'=>'table.png','image_data'=>'data:image/png;base64,'.base64_encode(file_get_contents($path))])
+                ->assertCreated()->assertJsonPath('data.ocr_status','COMPLETED')
+                ->assertJsonPath('data.review_payload.receipt_total',200)
+                ->assertJsonPath('data.review_payload.items.0.qty',2)
+                ->assertJsonPath('data.review_payload.items.0.price',100)
+                ->assertJsonPath('data.review_payload.date','2026-10-24');
+        } finally { imagedestroy($canvas); @unlink($path); }
+        Http::assertNothingSent();
+        $this->assertDatabaseCount('finance_transactions',0);
+    }
+
     public function test_duplicate_photo_reuses_existing_receipt_without_another_provider_request(): void
     {
         $this->mockQr(); Http::fake(['proverkacheka.com/*'=>Http::response(['code'=>1,'data'=>['json'=>$this->data()]])]);

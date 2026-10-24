@@ -20,6 +20,7 @@ class FiscalQr
             // Normalize the upload to PNG locally. No photo is sent to the receipt provider.
             $source = @imagecreatefromstring($bytes);
             if (!$source) return null;
+            if ((new ReceiptPhoto())->hasMultiple($source)) return null;
             imagepng($source, $path);
             $found = $this->readCodes($path, $deadline);
             if ($found === null) return null;

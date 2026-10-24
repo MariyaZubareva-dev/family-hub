@@ -54,7 +54,9 @@ class QrReceiptProvider
             if (!is_array($row) || !is_string($row['name'] ?? null) || trim($row['name']) === '') return null;
             if (!is_numeric($row['quantity'] ?? null) || !is_numeric($row['price'] ?? null) || !is_numeric($row['sum'] ?? null)) return null;
             $qty=(float)$row['quantity']; $price=(float)$row['price']; $amount=(float)$row['sum'];
-            if (!is_finite($qty) || $qty<=0 || !is_finite($price) || $price<=0 || floor($price)!==$price || !is_finite($amount) || $amount<=0 || floor($amount)!==$amount) return null;
+            if (!is_finite($qty) || $qty<=0 || !is_finite($price) || $price<0 || floor($price)!==$price || !is_finite($amount) || $amount<0 || floor($amount)!==$amount) return null;
+            if ($price===0.0 && $amount===0.0) continue;
+            if ($price===0.0 || $amount===0.0) return null;
             $item=['name'=>mb_substr(trim($row['name']),0,255),'qty'=>$qty,'price'=>$price/100,'category'=>'Покупки'];
             // Preserve authoritative line totals for discounted/weighted items. Existing confirmation
             // multiplies qty*price, so discrepancies must be reviewed instead of silently rounded away.
