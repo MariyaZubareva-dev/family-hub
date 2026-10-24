@@ -7,9 +7,9 @@ use Symfony\Component\Process\Process;
 
 class ReceiptRecognizer
 {
-    public function recognize(string $image, ?array $knownQr=null): array
+    public function recognize(string $image, ?array $knownQr=null, bool $qrAlreadyDecoded=false): array
     {
-        $qr = $knownQr ?? app(FiscalQr::class)->decode($image);
+        $qr = $qrAlreadyDecoded ? $knownQr : ($knownQr ?? app(FiscalQr::class)->decode($image));
         $lookup = $qr ? app(QrReceiptProvider::class)->fetch($qr) : null;
         if ($qr && $qr['n'] !== '1') $lookup = ['state'=>'UNSUPPORTED'];
         if ($qr && $lookup['state'] !== 'NOT_CONFIGURED') {

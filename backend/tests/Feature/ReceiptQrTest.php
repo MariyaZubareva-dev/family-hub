@@ -80,6 +80,47 @@ class ReceiptQrTest extends TestCase
         $this->assertDatabaseCount('finance_transactions',1);
     }
 
+    public function test_camera_photo_is_decoded_and_uses_electronic_items_without_a_qr_screenshot(): void
+    {
+        // Synthetic, blurred, low-contrast camera image made from the public diagnostic QR.
+        // The original single ZBar pass misses it. No personal receipt is stored in tests.
+        Http::fake(['proverkacheka.com/*'=>Http::response(['code'=>1,'data'=>['json'=>$this->data()]])]);
+        $image = 'data:image/jpeg;base64,'.trim(file_get_contents(__DIR__.'/../Fixtures/fiscal-qr-camera.jpg.b64'));
+        $this->assertSame($this->qr, app(FiscalQr::class)->decode($image));
+        $this->postJson('/api/v1/finance/receipts', ['file_name'=>'camera.jpg','image_data'=>$image])
+            ->assertCreated()->assertJsonPath('data.qr_state','READY')
+            ->assertJsonPath('data.review_payload.receipt_total',199.8)
+            ->assertJsonPath('data.review_payload.items.0.name','Молоко');
+        Http::assertSentCount(1);
+        $this->assertDatabaseCount('finance_transactions',0);
+    }
+
+    public function test_several_fiscal_qrs_are_not_silently_treated_as_one_receipt(): void
+    {
+        $canvas = imagecreatetruecolor(1200,600);
+        imagefill($canvas,0,0,imagecolorallocate($canvas,255,255,255));
+        $path = tempnam(sys_get_temp_dir(),'qr_multiple_');
+        try {
+            foreach ([123,124] as $index=>$document) {
+                $raw = http_build_query(array_replace($this->qr,['i'=>(string)$document]));
+                (new Process(['qrencode','-o',$path,'-s','6','--',$raw]))->mustRun();
+                $qr = imagecreatefrompng($path);
+                try { imagecopy($canvas,$qr,50+$index*600,100,0,0,imagesx($qr),imagesy($qr)); }
+                finally { imagedestroy($qr); }
+            }
+            imagepng($canvas,$path);
+            $this->assertNull(app(FiscalQr::class)->decode('data:image/png;base64,'.base64_encode(file_get_contents($path))));
+        } finally { imagedestroy($canvas); @unlink($path); }
+        Http::assertNothingSent();
+    }
+
+    public function test_an_unsuccessful_qr_attempt_is_not_repeated_before_ocr(): void
+    {
+        $this->mock(FiscalQr::class, fn($mock)=>$mock->shouldReceive('decode')->once()->andReturn(null));
+        $this->upload()->assertCreated();
+        Http::assertNothingSent();
+    }
+
     public function test_duplicate_photo_reuses_existing_receipt_without_another_provider_request(): void
     {
         $this->mockQr(); Http::fake(['proverkacheka.com/*'=>Http::response(['code'=>1,'data'=>['json'=>$this->data()]])]);

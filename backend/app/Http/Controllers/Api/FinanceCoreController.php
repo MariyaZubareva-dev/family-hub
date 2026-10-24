@@ -323,6 +323,8 @@ class FinanceCoreController extends FinanceBaseController
         abort_unless(count($parts) === 2 && preg_match('#^data:image/(jpeg|png|webp);base64$#', $parts[0]), 422, 'Выберите фото в формате JPEG, PNG или WebP.');
         $bytes = base64_decode($parts[1], true);
         abort_unless($bytes !== false && strlen($bytes) <= 8 * 1024 * 1024 && @getimagesizefromstring($bytes), 422, 'Не удалось прочитать фото. Выберите другое изображение размером до 8 МБ.');
+        $size = getimagesizefromstring($bytes);
+        abort_unless($size[0]*$size[1] <= 16000000, 422, 'Фото слишком большое. Выберите изображение до 16 мегапикселей.');
         $id=(string)Str::ulid();
         // Prepare review_payload from initial items if provided (manual)
         $reviewPayload = null;
@@ -540,7 +542,7 @@ class FinanceCoreController extends FinanceBaseController
                 return $existing->id;
             }
         }
-        $result = app(\App\Services\Finance\ReceiptRecognizer::class)->recognize($row->image_data,$qr);
+        $result = app(\App\Services\Finance\ReceiptRecognizer::class)->recognize($row->image_data,$qr,true);
         $result['payload'] = app(\App\Services\Finance\ReceiptCategoryMatcher::class)->categorize($familyId,$result['payload']);
         return DB::transaction(function() use ($result,$id,$familyId,$row) {
             // Serialize fingerprint assignment within this family, including parallel uploads.
