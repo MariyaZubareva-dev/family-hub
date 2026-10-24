@@ -1,0 +1,250 @@
+/* Finance styles are scoped; the approved Family screen uses its own rules. */
+.finance-page{width:100%;max-width:640px;margin-inline:auto;display:flex;flex-direction:column;gap:12px;min-width:0;padding-bottom:8px}
+.finance-page .section-title{align-items:center;min-height:36px}
+.finance-page .section-title h2{font-size:23px;line-height:1.2}
+.finance-page .card{padding:14px;border-radius:16px;overflow:visible;box-shadow:0 2px 8px rgba(26,30,34,.025)}
+.finance-page :where(div,section,form,label){min-width:0}
+.finance-page p{line-height:1.5}
+.finance-page .button,.finance-dialog .button{min-height:36px;padding:8px 12px;border-radius:9px;font-size:12px;box-shadow:none}
+.finance-page button:disabled,.finance-dialog button:disabled{opacity:.55;cursor:default;transform:none}
+.f-stack,.f-form{display:flex;flex-direction:column;gap:12px}
+.f-head{display:flex;align-items:center;justify-content:space-between;gap:8px;min-height:32px;margin-bottom:8px}
+.f-head h3{margin:0;font-size:14px;font-weight:600;line-height:1.35;overflow-wrap:anywhere}
+.f-head h2{margin:0;font-size:18px;font-weight:600;line-height:1.3}
+.f-tabs{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:5px;padding:4px;background:#EFF2F6;border-radius:12px}
+.f-tabs button{min-width:0;min-height:36px;border:0;border-radius:8px;background:transparent;font:inherit;font-size:12px;font-weight:500;color:#64748B;padding:6px 2px}
+.f-tabs button[aria-selected=true]{background:#fff;color:var(--primary);box-shadow:0 1px 4px #0F172A0D}
+.f-icon{width:36px;height:36px;flex:0 0 36px;display:grid;place-items:center;border:0;background:transparent;border-radius:9px;color:var(--primary);font-size:22px;cursor:pointer;padding:0}
+.f-segment{display:flex;background:#EFF2F6;border-radius:10px;padding:3px;gap:3px;margin-bottom:10px}
+.f-segment button{min-width:0;flex:1;border:0;background:transparent;border-radius:8px;min-height:32px;padding:6px;font-size:12px;color:#64748B;cursor:pointer}
+.f-segment button[aria-pressed=true]{background:#fff;color:#1A1E22;box-shadow:0 1px 4px #0F172A0D}
+.f-metrics{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px}
+.f-metrics>div{display:flex;flex-direction:column;gap:6px;padding:10px 8px;background:#fff;border:1px solid var(--border);border-radius:12px}
+.f-metrics small{font-size:10px;color:#64748B}
+.f-metrics strong{font-size:clamp(11px,3.4vw,16px);font-weight:600;font-variant-numeric:tabular-nums;overflow-wrap:anywhere;line-height:1.35}
+.f-positive{color:var(--primary)}
+.f-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.f-actions>.button{flex:1;min-width:0}
+.f-help{position:relative;display:inline-flex;flex:0 0 auto;align-items:center;vertical-align:middle}
+.f-help-button{width:32px;height:32px;padding:0;display:grid;place-items:center;border:0;border-radius:50%;background:#F1F5F9;color:#64748B;font-size:12px;font-weight:600;cursor:pointer}
+.f-tooltip{position:absolute;top:38px;width:240px;max-width:calc(100vw - 24px);box-sizing:border-box;z-index:35;padding:10px 12px;border:1px solid #CBD5E1;background:#fff;border-radius:10px;box-shadow:0 4px 16px #0F172A22;color:#334155;font-size:12px;font-weight:400;line-height:1.5;text-align:left;overflow-wrap:anywhere}
+.f-income-summary{display:flex;flex-direction:column;gap:4px;padding:12px 0;border-bottom:1px solid #F1F1EF;overflow-wrap:anywhere}
+.f-income-summary small{font-size:10px;color:#64748B}
+.f-income-summary strong{font-size:20px;font-weight:600}
+.f-message{padding:9px 11px;border-radius:10px;border:1px solid #BFE5DC;background:#F0FDFA;color:#115E59;font-size:12px;line-height:1.5;overflow-wrap:anywhere;margin-block:6px}
+.f-message.f-error{background:#FFF1F2;border-color:#FECDD3;color:#9F1239}
+.f-empty{padding:14px 0;margin:0;font-size:12px;color:#64748B;line-height:1.5}
+.f-loading{margin:0;font-size:11px;color:#64748B}
+.f-category-stat{width:100%;padding:10px 0;border:0;border-bottom:1px solid #F1F1EF;background:transparent;cursor:pointer;text-align:left;font:inherit}
+.f-category-stat[aria-pressed=true]{background:#F0FDFA}
+.f-category-stat>span:first-child{display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:8px;align-items:center;font-size:12px}
+.f-category-stat strong{font-weight:500;overflow-wrap:anywhere}
+.f-category-stat small{color:#64748B;font-size:10px}
+.f-category-stat b{font-size:12px;font-weight:600;white-space:nowrap}
+.f-expense-total{font-size:22px;font-weight:600;margin:6px 0}
+.f-progress{display:block;height:5px;background:#EFF2F6;border-radius:9px;margin-top:7px;overflow:hidden}
+.f-progress i{display:block;height:100%;border-radius:9px}
+.f-trend{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:7px;text-align:center}
+.f-trend-bars{height:90px;display:flex;align-items:flex-end;justify-content:center;gap:3px;margin-bottom:5px}
+.f-trend-bars i{width:16px;max-width:38%;background:var(--primary);border-radius:4px 4px 0 0}
+.f-trend-bars i+i{background:#F59E0B}
+.f-trend small{display:block;font-size:10px;color:#64748B}
+.f-trend .f-help-button{width:28px;height:28px;margin-top:3px}
+.f-legend{display:flex;justify-content:center;gap:14px;margin-top:8px;font-size:10px;color:var(--primary)}
+.f-legend span+span{color:#B45309}
+.f-row{display:flex;align-items:center;gap:8px;padding:10px 0;border-bottom:1px solid #F1F1EF;font-size:12px}
+.f-row:last-child{border-bottom:0}
+.f-row>span:first-child{flex:1;min-width:0}
+.f-row b{font-size:12px;font-weight:600;white-space:nowrap;font-variant-numeric:tabular-nums}
+.f-copy{flex:1;min-width:0;overflow-wrap:anywhere;display:flex;flex-direction:column;gap:4px}
+.f-copy strong,strong.f-copy{font-size:12px;font-weight:500}
+.f-copy small,.f-row>small{font-size:10px;color:#64748B;line-height:1.4}
+.f-number{flex:0 0 auto;text-align:right;display:flex;flex-direction:column;gap:4px}
+.f-number small{font-size:10px;color:#64748B}
+.f-category-icon{width:28px;height:28px;flex:0 0 28px;border-radius:8px;display:grid;place-items:center;background:#F0FDFA;color:var(--primary)}
+.f-row>.f-category-icon:first-child{flex:0 0 28px}
+.f-search{display:flex;gap:8px;margin-block:10px}
+.f-search input{flex:1;min-width:0}
+.f-search .button{flex:0 0 auto}
+.finance-page input:not([type=file]),.finance-page select,.finance-dialog input,.finance-dialog select{width:100%;min-width:0;max-width:100%;min-height:38px;border:1px solid #D8DDE5;border-radius:9px;padding:8px;background:#fff;font:inherit;font-size:16px;color:#1A1E22}
+.finance-page input::placeholder,.finance-dialog input::placeholder{font-size:12px;color:#8A94A6}
+.f-field{min-width:0;display:flex;flex-direction:column;gap:5px;text-align:left}
+.f-field>span{font-size:11px;color:#475569;font-weight:500;line-height:1.4}
+.f-form-pair{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+.finance-dialog{position:fixed;inset:auto 0 0;margin:0 auto;padding:0;width:min(100%,480px);max-width:100%;max-height:85dvh;border:0;border-radius:20px 20px 0 0;color:var(--text);background:#fff;box-shadow:0 -8px 40px #1A1E2226;overflow-y:auto;overscroll-behavior:contain;font:inherit;font-size:12px;line-height:1.4;scroll-padding-block:14px}
+.finance-dialog::backdrop{background:#1A1E2266}
+.finance-dialog>section{padding:14px 14px calc(14px + env(safe-area-inset-bottom))}
+.finance-dialog .f-head{align-items:center;gap:8px;margin-bottom:8px;min-height:36px}
+.finance-dialog .f-head h2{min-width:0;font-size:17px;line-height:1.3;font-weight:600;overflow-wrap:anywhere}
+.finance-dialog .f-head .f-icon{width:36px;height:36px;flex:0 0 36px;border-radius:10px;font-size:20px}
+.finance-dialog .f-head .f-icon:hover,.finance-dialog .f-head .f-icon:focus-visible{background:var(--primary-soft-2)}
+.finance-dialog .f-form{gap:10px}
+.finance-dialog :where(form,label,div){min-width:0}
+.finance-dialog .f-field{gap:4px}
+.finance-dialog .f-form>p{margin:0;font-size:12px;line-height:1.5;color:#475569;overflow-wrap:anywhere}
+.finance-dialog .f-message{margin-block:0}
+.finance-dialog .f-actions{gap:8px}
+.finance-dialog .button{font-weight:600;line-height:1.35;white-space:normal}
+.finance-dialog input,.finance-dialog select{height:38px;padding:7px 8px}
+@media(max-width:350px){.finance-dialog .f-form-pair{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-height:520px){.finance-dialog{max-height:calc(100dvh - 12px)}}
+.f-upload{width:100%;position:relative}
+.f-upload input{position:absolute;width:1px;height:1px;opacity:0;overflow:hidden}
+.f-upload:focus-within{outline:2px solid var(--primary);outline-offset:3px}
+.f-disabled{opacity:.55;cursor:default}
+.f-receipt-review{display:flex;flex-direction:column;gap:10px;margin-top:16px}
+.f-status{align-self:flex-start;padding:4px 7px;border-radius:6px;background:#F1F5F9;color:#475569;font-size:10px}
+.f-receipt-item{display:flex;flex-direction:column;gap:8px;padding:10px;background:#F8FAFC;border:1px solid #E2E8F0;border-radius:10px}
+.f-item-title{display:flex;align-items:end;gap:6px}
+.f-item-title>.f-field{flex:1}
+.f-history{width:100%;text-align:left;background:transparent;border-inline:0;border-top:0;cursor:pointer;font:inherit}
+.f-credit-list{display:flex;flex-direction:column;gap:8px}
+.f-credit{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:7px;padding:10px;border:1px solid var(--border);border-radius:10px;background:#fff;text-align:left;font:inherit;cursor:pointer}
+.f-credit[aria-pressed=true]{background:#F5FCFA;border-color:#BFE5DC}
+.f-credit>strong,.f-credit>small{grid-column:1/-1;overflow-wrap:anywhere}
+.f-credit>strong{font-size:13px;font-weight:600}
+.f-credit small{font-size:10px;color:#64748B}
+.f-credit>span{display:flex;flex-direction:column;gap:4px;min-width:0}
+.f-credit b{font-size:13px;overflow-wrap:anywhere;font-variant-numeric:tabular-nums}
+.f-prepayment{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:6px;padding:10px 0;border-bottom:1px solid #F1F1EF;font-size:12px}
+.f-prepayment>b{font-size:12px;font-weight:600;white-space:nowrap;font-variant-numeric:tabular-nums}
+.f-prepayment>.f-field{grid-column:1/-1;display:grid;grid-template-columns:90px minmax(0,1fr);align-items:center}
+.finance-page .f-prepayment select{min-height:36px;font-size:12px}
+.f-count{font-size:11px;color:#64748B}
+.finance-page :where(button,input,select):focus-visible,.finance-dialog :where(button,input,select):focus-visible{outline:2px solid var(--primary);outline-offset:2px}
+@media(min-width:540px){.f-tabs{grid-template-columns:repeat(6,minmax(0,1fr))}.f-prepayment{grid-template-columns:100px auto minmax(0,1fr);gap:12px}.f-prepayment>.f-field{grid-column:auto;grid-template-columns:1fr}.f-credit-list{display:grid;grid-template-columns:1fr 1fr}}
+@media(max-width:350px){.finance-page .card{padding:12px}.f-search{flex-direction:column}.f-search .button{align-self:flex-end}.f-form-pair{grid-template-columns:minmax(0,1fr)}.f-trend{gap:3px}.f-metrics>div{padding:9px 6px}}
+
+/* Receipt review uses compact lines; only the selected position opens an editor. */
+.f-receipts .f-receipt-review{gap:8px;margin-top:0}
+.f-receipt-meta{display:flex;align-items:center;gap:8px;padding:5px 0 9px;border-bottom:1px solid #F1F1EF}
+.f-receipt-lines{display:flex;flex-direction:column}
+.f-receipt-line{display:flex;align-items:flex-start;gap:7px;padding:10px 0;border-bottom:1px solid #F1F1EF}
+.f-line-index{flex:0 0 16px;padding-top:2px;font-size:10px;color:#64748B}
+.f-receipt-line .f-copy strong{font-size:12px;line-height:1.4;overflow-wrap:anywhere}
+.f-receipt-line .f-copy small{font-size:10px;line-height:1.5}
+.f-line-end{display:flex;flex-direction:column;align-items:flex-end;gap:1px;flex:0 0 auto}
+.f-line-end b{font-size:12px;white-space:nowrap;font-weight:600;font-variant-numeric:tabular-nums}
+.f-line-end .f-icon{width:32px;height:32px;font-size:18px}
+.f-receipt-tools{display:flex;justify-content:space-between;gap:6px;flex-wrap:wrap}
+.f-receipts .f-receipt-tools .button{font-size:11px;padding:6px 8px}
+.f-receipt-total{padding:10px;background:#F8FAFC;border:1px solid #E2E8F0;border-radius:10px;display:flex;flex-direction:column;gap:5px}
+.f-receipt-total>div{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.f-receipt-total span{font-size:11px;color:#475569}
+.f-receipt-total b{font-size:15px;white-space:nowrap;font-weight:600}
+.f-receipt-total small{font-size:10px;line-height:1.45}
+.f-receipt-submit{display:flex;gap:8px}
+.f-receipt-submit .primary{flex:1;min-width:0}
+.f-receipt-quantity-price{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+.finance-dialog textarea{width:100%;min-width:0;max-width:100%;min-height:72px;border:1px solid #D8DDE5;border-radius:9px;padding:8px;background:#fff;font:inherit;font-size:16px;color:#1A1E22;line-height:1.4;resize:vertical}
+.finance-dialog textarea:focus-visible{outline:2px solid var(--primary);outline-offset:2px}
+
+.f-receipt-upload{display:grid;gap:8px}
+.f-receipts .f-receipt-line .f-copy strong{display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
+.f-receipts .f-receipt-line{padding:8px 0}
+.f-receipts .f-receipt-history{gap:4px;padding:6px 0}
+.f-history-open{display:flex;align-items:center;gap:8px;flex:1;min-width:0;text-align:left;background:none;border:0;padding:4px 0;color:inherit;font:inherit;cursor:pointer}
+.f-history-open .f-copy{flex:1}
+.f-receipt-history>.f-icon{flex:0 0 36px}
+@media(min-width:400px){.f-receipt-upload{grid-template-columns:1fr 1fr}.f-receipt-upload .button{font-size:11px;padding:10px 6px}}
+
+.f-line-category{display:flex;align-items:center;gap:5px;margin-top:4px}
+.f-line-category>span{font-size:10px;color:#64748B}
+.finance-page .f-line-category select{width:auto;max-width:100%;flex:1;min-height:30px;padding:4px 20px 4px 6px;border-radius:7px;font-size:12px}
+.f-receipts .f-receipt-total>.f-field{display:grid;grid-template-columns:minmax(0,1fr) minmax(88px,120px);align-items:center;gap:8px}
+.f-receipts .f-receipt-total input{min-height:36px;padding:6px 8px;text-align:right}
+.f-review-fix{align-self:flex-start;border:0;background:none;padding:4px 0;color:var(--primary);font:inherit;font-size:11px;text-align:left;cursor:pointer}
+
+.finance-dialog .button.f-danger-button{background:#BE123C;color:#fff}
+
+/* Dense finance forms: short labels share a row with their fields. */
+.finance-dialog{width:min(100%,420px)}
+.finance-dialog>section{padding:12px 14px calc(12px + env(safe-area-inset-bottom))}
+.finance-dialog .f-head{margin-bottom:6px;min-height:32px}
+.finance-dialog .f-head h2{font-size:16px}
+.finance-dialog .f-head .f-icon{width:32px;height:32px;flex-basis:32px}
+.finance-dialog .f-form,.f-prepayment-form{gap:8px}
+.finance-dialog .f-form>.f-field:not(:has(textarea)),.f-prepayment-form>.f-field{display:grid;grid-template-columns:96px minmax(0,1fr);align-items:center;gap:8px}
+.finance-page input:not([type=file]),.finance-page select,.finance-dialog input,.finance-dialog select{min-height:36px;height:36px;padding:6px 8px;font-size:14px}
+.finance-dialog textarea{font-size:14px}
+.finance-page input[type=number],.finance-dialog input[type=number]{appearance:textfield;-moz-appearance:textfield}
+.finance-page input[type=number]::-webkit-inner-spin-button,.finance-page input[type=number]::-webkit-outer-spin-button,.finance-dialog input[type=number]::-webkit-inner-spin-button,.finance-dialog input[type=number]::-webkit-outer-spin-button{-webkit-appearance:none;margin:0}
+.finance-page select,.finance-dialog select{appearance:none;-webkit-appearance:none;padding-right:26px;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath d='m3 4.5 3 3 3-3' fill='none' stroke='%2364748B' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 8px center;background-size:12px}
+.finance-page :where(input,select,textarea):focus-visible,.finance-dialog :where(input,select,textarea):focus-visible{outline:0;border-color:var(--primary);box-shadow:0 0 0 2px #0F766E20}
+.f-prepayment-form .f-form-pair{grid-template-columns:repeat(2,minmax(0,1fr))}
+.f-prepayment-form>.button{align-self:flex-end}
+.f-budget-month>.f-field{display:grid;grid-template-columns:minmax(70px,1fr) minmax(130px,170px);align-items:center;gap:8px;margin-bottom:10px}
+.f-budget-summary{margin:10px 0}
+.f-budget-summary strong{font-size:13px}
+.f-budget-limits-head{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.f-budget-limits-head strong{font-size:12px;font-weight:600}
+.f-budget-limits{display:flex;flex-direction:column;gap:4px}
+.f-budget-limits:empty{display:none}
+.f-budget-limit{display:flex;align-items:center;gap:4px;padding-bottom:4px;border-bottom:1px solid #F1F1EF}
+.f-budget-limit>.f-field{flex:1;display:grid;grid-template-columns:minmax(0,1fr) minmax(80px,105px);align-items:center;gap:8px}
+.f-budget-limit .f-icon{width:30px;height:30px;flex-basis:30px;font-size:18px}
+.f-budget-limit input{text-align:right}
+@supports(-webkit-touch-callout:none){
+  .finance-page input:not([type=file]),.finance-page select,.finance-dialog input,.finance-dialog select,.finance-dialog textarea{font-size:16px}
+}
+
+.finance-page .f-line-category select{height:30px}
+
+/* Action forms follow the compact Operations rows rather than boxed inputs. */
+.finance-dialog .f-form,.f-prepayment-form{gap:0}
+.finance-dialog .f-form>.f-field,.finance-dialog .f-form-pair>.f-field,.f-prepayment-form .f-field,.f-budget-month>.f-field{min-height:40px;padding-block:4px;border-bottom:1px solid #F1F1EF}
+.finance-dialog .f-form>.f-field:not(:has(textarea)),.f-prepayment-form>.f-field{grid-template-columns:minmax(88px,.8fr) minmax(0,1.6fr)}
+.finance-dialog .f-field>span,.f-prepayment-form .f-field>span,.f-budget-month .f-field>span{font-size:12px;font-weight:500;color:#475569}
+.finance-dialog .f-form-pair,.f-prepayment-form .f-form-pair{gap:12px}
+.finance-dialog .f-form-pair>.f-field,.f-prepayment-form .f-form-pair>.f-field{gap:0}
+.finance-dialog .f-field :is(input,select,textarea),.finance-page .f-prepayment-form :is(input,select),.finance-page .f-budget-month input{min-height:32px;height:32px;border:0;border-radius:0;background-color:transparent;box-shadow:none;padding:4px 0;font-size:14px;text-align:right}
+.finance-dialog .f-field select,.finance-page .f-prepayment-form select{padding-right:20px;background-position:right center}
+.finance-dialog .f-field textarea{height:auto;min-height:64px;text-align:left;resize:vertical}
+.finance-dialog .f-field :is(input,select,textarea):focus-visible,.finance-page .f-prepayment-form :is(input,select):focus-visible,.finance-page .f-budget-month input:focus-visible{outline:0;box-shadow:none}
+.finance-dialog .f-field:focus-within,.f-prepayment-form .f-field:focus-within,.f-budget-month>.f-field:focus-within{border-bottom-color:var(--primary);box-shadow:0 1px 0 var(--primary)}
+.finance-dialog .f-form>.button:last-child,.finance-dialog .f-form>.f-actions:last-child,.f-prepayment-form>.button{margin-top:12px}
+.finance-dialog .f-form>.f-message{margin-top:8px}
+.finance-dialog .f-field input::placeholder,.finance-dialog .f-field textarea::placeholder{font-size:12px;color:#8A94A6;opacity:1}
+.finance-dialog .f-budget-limit>.f-field{border-bottom:0;box-shadow:none}
+.finance-dialog .f-budget-limit:focus-within{border-bottom-color:var(--primary)}
+.f-budget-month>.f-field{margin-bottom:6px}
+@supports(-webkit-touch-callout:none){
+  .finance-dialog .f-field :is(input,select,textarea),.finance-page .f-prepayment-form :is(input,select),.finance-page .f-budget-month input{font-size:16px}
+}
+.finance-dialog .f-head h2{font-size:14px;line-height:1.35}
+.finance-dialog .f-field :is(input,select,textarea),.finance-page .f-prepayment-form :is(input,select),.finance-page .f-budget-month input{font-size:13px}
+.f-budget-summary{display:flex;flex-direction:column;gap:0;margin:8px 0}
+.f-budget-summary>div{display:flex;flex-direction:row;align-items:center;justify-content:space-between;gap:8px;min-height:32px;padding:8px 0;border:0;border-bottom:1px solid #F1F1EF;border-radius:0;background:transparent}
+.f-budget-summary small{font-size:12px}
+.f-budget-summary strong{font-size:13px;white-space:nowrap}
+@media(pointer:coarse){.finance-dialog .f-field :is(input,select,textarea),.finance-page .f-prepayment-form :is(input,select),.finance-page .f-budget-month input{font-size:14px}}
+@supports(-webkit-touch-callout:none){.finance-dialog .f-field :is(input,select,textarea),.finance-page .f-prepayment-form :is(input,select),.finance-page .f-budget-month input{font-size:16px}}
+/* Quiet, grouped surfaces keep the accepted compact type and row heights. */
+.finance-dialog{background:#fff;box-shadow:0 -8px 32px #183B2E24}
+.finance-dialog::backdrop{background:#1A1E224D;backdrop-filter:blur(2px)}
+.f-dialog-identity{display:flex;align-items:center;gap:8px;min-width:0}
+.f-action-symbol{display:grid;place-items:center;flex:0 0 28px;width:28px;height:28px;border-radius:9px;background:#EAF4F0;color:var(--primary)}
+.f-action-symbol svg{width:18px;height:18px;display:block}
+.f-action-symbol-delete{background:#FFF1F2;color:#BE123C}
+.finance-dialog .f-head .f-icon{background:#F2F5F3;color:#62746B;border-radius:50%}
+.finance-dialog .f-head .f-icon:hover{background:#E6EFEB;color:var(--primary)}
+.f-form-fields{min-width:0;border:1px solid #E5ECE8;border-radius:12px;background:#F7F9F8}
+.finance-dialog .f-form-fields>.f-field,.f-prepayment-form .f-form-fields>.f-field{min-height:40px;padding:4px 10px;border-bottom:1px solid #E5ECE8}
+.finance-dialog .f-form-fields>.f-field:not(:has(textarea)),.f-prepayment-form .f-form-fields>.f-field{display:grid;grid-template-columns:minmax(88px,.8fr) minmax(0,1.6fr);align-items:center;gap:8px}
+.f-form-fields>.f-field:first-child{border-radius:11px 11px 0 0}
+.f-form-fields>.f-field:last-child{border-bottom:0;border-radius:0 0 11px 11px}
+.f-form-fields>.f-field:only-child{border-radius:11px}
+.finance-dialog .f-form-fields>:is(.f-form-pair,.f-receipt-quantity-price),.f-prepayment-form .f-form-fields>:is(.f-form-pair,.f-receipt-quantity-price){gap:0}
+.finance-dialog .f-form-fields>:is(.f-form-pair,.f-receipt-quantity-price)>.f-field,.f-prepayment-form .f-form-fields>:is(.f-form-pair,.f-receipt-quantity-price)>.f-field{padding-inline:10px;border-bottom:0}
+.f-form-fields>:is(.f-form-pair,.f-receipt-quantity-price)>.f-field+.f-field{border-left:1px solid #E5ECE8}
+.finance-dialog .f-form-fields .f-field>span,.f-prepayment-form .f-form-fields .f-field>span{color:#64736B}
+.finance-dialog .f-form-fields .f-field:focus-within,.f-prepayment-form .f-form-fields .f-field:focus-within{background:#fff;box-shadow:inset 2px 0 var(--primary);border-bottom-color:#E5ECE8}
+.finance-dialog .f-form-fields input,.finance-dialog .f-form-fields select,.f-prepayment-form .f-form-fields input,.f-prepayment-form .f-form-fields select{font-variant-numeric:tabular-nums}
+.finance-dialog .f-form-fields .f-field input::placeholder,.finance-dialog .f-form-fields .f-field textarea::placeholder{color:#7D8B83}
+.finance-dialog .button.primary:not(.f-danger-button),.f-prepayment-form>.button.primary{background-image:linear-gradient(180deg,#147F74,#0F766E);box-shadow:0 2px 5px #0F766E18}
+.finance-dialog .button.primary:disabled{background-image:none;box-shadow:none}
+.finance-dialog .f-form-fields .f-budget-limits-head{padding-inline:10px}
+.finance-dialog .f-form-fields .f-budget-limits{padding-inline:10px}
+.finance-dialog .f-form-fields .f-budget-limit>.f-field{border:0;box-shadow:none}
+.finance-dialog .f-form-fields>.f-budget-limits-head{border-block:1px solid #E5ECE8}
+.finance-dialog .f-form-fields>.f-budget-limits-head:first-child{border-top:0}

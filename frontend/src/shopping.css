@@ -1,0 +1,43 @@
+/* Shopping follows docs/interface-style.md. All page overrides stay scoped. */
+.shopping-page{width:100%;max-width:640px;margin-inline:auto;display:flex;flex-direction:column;gap:12px;min-width:0;padding-bottom:8px}
+.shopping-page :where(div,section,form,label){min-width:0}
+.shopping-page .section-title{align-items:center;min-height:36px}
+.shopping-page .section-title h2{font-size:23px;line-height:1.2}
+.shopping-page .card{padding:14px;border-radius:16px;border-color:#E5E9E6;box-shadow:0 2px 8px #1A1E2206}
+.s-icon{width:36px;height:36px;flex:0 0 36px;border:0;background:transparent;border-radius:9px;display:grid;place-items:center;color:var(--primary);font-size:22px;cursor:pointer}
+.s-tabs{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:5px;padding:4px;background:#EFF2F6;border-radius:12px}
+.s-tabs button{min-height:36px;border:0;border-radius:8px;background:transparent;font:inherit;font-size:12px;font-weight:500;color:#64748B;padding:6px;cursor:pointer}
+.s-tabs button[aria-selected=true]{background:#fff;color:var(--primary);box-shadow:0 1px 4px #0F172A0D}
+.s-head{display:flex;align-items:center;justify-content:space-between;gap:8px;min-height:36px;margin-bottom:4px}
+.s-head h3{margin:0;font-size:14px;font-weight:600;line-height:1.35}
+.s-count{font-size:11px;color:#718078;font-weight:500;margin-left:4px;white-space:nowrap}
+.s-add{border:0;background:transparent;color:var(--primary);padding:6px 0;min-height:36px;font:inherit;font-size:12px;font-weight:600;white-space:nowrap;cursor:pointer}
+.s-item{display:flex;align-items:flex-start;gap:9px;padding:12px 0;border-bottom:1px solid #EDF0ED}
+.s-item:last-child{border-bottom:0;padding-bottom:0}
+.s-symbol{display:grid;place-items:center;flex:0 0 30px;width:30px;height:30px;border-radius:9px;background:#EAF4F0;color:var(--primary)}
+.s-symbol svg{width:18px;height:18px}
+.s-copy{flex:1;display:flex;flex-direction:column;gap:4px;min-width:0}
+.s-copy strong{font-size:13px;font-weight:600;line-height:1.4;overflow-wrap:anywhere}
+.s-copy small{font-size:11px;color:#718078;line-height:1.4;overflow-wrap:anywhere}
+.s-end{display:flex;flex-direction:column;align-items:flex-end;gap:6px;max-width:42%;flex-shrink:0}
+.s-end b{font-size:12px;font-weight:600;line-height:1.5;text-align:right;font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
+.shopping-page .button{min-height:36px;padding:8px 12px;font-size:12px;border-radius:9px;box-shadow:none}
+.s-empty{padding:10px 0;margin:0;font-size:12px;color:#64748B;line-height:1.5}
+.s-message{display:flex;align-items:center;justify-content:space-between;gap:8px;margin:0;padding:9px 11px;border:1px solid #BFE5DC;background:#F0FDFA;color:#115E59;border-radius:10px;font-size:12px;line-height:1.5;overflow-wrap:anywhere}
+.s-error{background:#FFF1F2;border-color:#FECDD3;color:#9F1239}
+.s-new-category{display:grid;gap:8px;margin-top:8px}
+.s-store-item{display:flex;align-items:center;gap:6px;padding:4px 0;border-bottom:1px solid #EDF0ED}
+.s-store-item:last-child{border-bottom:0}
+.s-store-check{display:flex;align-items:center;gap:10px;flex:1;min-width:0;min-height:36px;box-sizing:border-box;cursor:pointer;padding-block:6px}
+.s-store-check .s-copy{gap:2px}
+.s-store-title{display:flex;align-items:baseline;gap:8px;min-width:0}
+.s-store-title strong{min-width:0}
+.s-store-quantity{flex:0 0 auto;max-width:40%;font-size:11px;line-height:1.4;color:#718078;overflow-wrap:anywhere}
+.s-store-check input{width:20px;height:20px;margin:0;flex:0 0 20px;accent-color:var(--primary);cursor:pointer}
+.s-store-check:has(input:focus-visible){outline:2px solid var(--primary);outline-offset:2px;border-radius:5px}
+.s-store-done .s-copy strong{text-decoration:line-through;color:#718078}
+.s-store-completed{margin-top:8px;border-top:1px solid #EDF0ED;padding-top:10px}
+.s-store-completed summary{font-size:12px;font-weight:600;color:#64748B;cursor:pointer;padding-block:5px}
+.shopping-page button:disabled{opacity:.55;cursor:default;transform:none}
+.s-tabs button:focus-visible,.s-add:focus-visible,.s-icon:focus-visible{outline:2px solid var(--primary);outline-offset:2px}
+@media(max-width:360px){.shopping-page .card{padding:12px}.s-head h3{font-size:13px}.s-item{gap:7px}.s-copy strong{font-size:12px}.s-copy small{font-size:10px}.s-end b{font-size:11px}}

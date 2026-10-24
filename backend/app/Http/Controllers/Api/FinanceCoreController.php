@@ -1,0 +1,573 @@
+<?php
+
+namespace App\Http\Controllers\Api;
+
+use App\Models\ExpenseCategory;
+use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Str;
+
+class FinanceCoreController extends FinanceBaseController
+{
+    /**
+     * v07 Modern analytics: top5+other donut + ranked + 6m trend
+     * Query: ?period=month|3m|6m|year|all&year=2026&month=9
+     * Backward compatible: without params returns all-time chart as before + ranked+trend
+     */
+    public function analytics(Request $request): JsonResponse
+    {
+        // Allow any active member to view (not just ADMIN) — per v07 spec "фильтр, не изоляция"
+        $m = $this->viewMembership($request);
+        $familyId = $m->family_id;
+
+        $period = $request->query('period');
+        $year = $request->query('year');
+        $month = $request->query('month');
+
+        // Normalize period: if year+month given and no period, assume month
+        if (!$period && $year && $month) $period = 'month';
+        if (!$period) $period = 'all';
+
+        // Build base query with period filter for totals/chart/ranked
+        $expenseQuery = DB::table('finance_transactions')->where('family_id', $familyId)->where('type', 'EXPENSE');
+        $incomeQuery = DB::table('finance_transactions')->where('family_id', $familyId)->where('type', 'INCOME');
+
+        // Apply period filter
+        $this->applyPeriodFilter($expenseQuery, $period, $year, $month);
+        $this->applyPeriodFilter($incomeQuery, $period, $year, $month);
+
+        $expenseRows = $expenseQuery->get();
+        $incomeRows = $incomeQuery->get();
+
+        $totalExpense = round((float) $expenseRows->sum('amount'), 2);
+        $totalIncome = round((float) $incomeRows->sum('amount'), 2);
+        $balance = round($totalIncome - $totalExpense, 2);
+
+        // Group by category (string) — enrich with ExpenseCategory meta
+        $grouped = $expenseRows->groupBy('category');
+        $allCatsMeta = DB::table('expense_categories')->where('family_id', $familyId)->where('status','ACTIVE')->where('transaction_type','EXPENSE')->get()->keyBy(fn($c)=>mb_strtolower($c->name));
+
+        $chartAll = $grouped->map(function ($items, $category) use ($totalExpense, $allCatsMeta) {
+            $amount = round((float) $items->sum('amount'), 2);
+            $meta = $allCatsMeta->get(mb_strtolower($category));
+            return [
+                'id' => $meta?->id ?? md5($category),
+                'name' => $category,
+                'icon' => $meta?->icon ?? '•',
+                'color' => $meta?->color ?? '#9CA3AF',
+                'amount' => $amount,
+                'percent' => $totalExpense > 0 ? round($amount / $totalExpense * 100, 1) : 0,
+            ];
+        })->sortByDesc('amount')->values();
+
+        // Ranked = full sorted list with budget/limit info for the requested month (if month given)
+        $ranked = $chartAll->map(function($c) use ($familyId, $year, $month) {
+            $limit = null;
+            $budget = null;
+            if ($year && $month) {
+                $budgetRow = DB::table('budgets')->where('family_id',$familyId)->where('year',$year)->where('month',$month)->first();
+                if ($budgetRow && $c['id']) {
+                    // Try find budget_categories by category_id
+                    $bc = DB::table('budget_categories')->where('budget_id',$budgetRow->id)->where('category_id',$c['id'])->first();
+                    if (!$bc) {
+                        // Fallback by name match via expense_categories
+                        $catByName = DB::table('expense_categories')->where('family_id',$familyId)->where('name',$c['name'])->where('transaction_type','EXPENSE')->first();
+                        if ($catByName) $bc = DB::table('budget_categories')->where('budget_id',$budgetRow->id)->where('category_id',$catByName->id)->first();
+                    }
+                    if ($bc) {
+                        $limit = (float) $bc->limit_amount;
+                    }
+                }
+            }
+            return array_merge($c, [
+                'limit_amount' => $limit,
+                'is_over' => $limit !== null ? $c['amount'] > $limit : false,
+                'progress_percent' => $limit ? min(100, round($c['amount']/$limit*100,1)) : null,
+            ]);
+        })->values()->all();
+
+        // Donut = top5 + Other (as frontend expects)
+        $top5 = collect($chartAll)->take(5)->values();
+        $otherAmount = $totalExpense - $top5->sum('amount');
+        $donut = $top5->all();
+        if ($otherAmount > 0.01 && count($chartAll) > 5) {
+            $donut[] = [
+                'id' => 'other',
+                'name' => 'Остальные '.(count($chartAll)-5),
+                'icon' => '•',
+                'color' => '#9CA3AF',
+                'amount' => round($otherAmount,2),
+                'percent' => $totalExpense>0 ? round($otherAmount/$totalExpense*100,1) : 0,
+            ];
+        }
+
+        // Trend — last 6 months including current, income vs expense per month
+        $trend = $this->buildTrend($familyId, 6);
+
+        // Also include legacy expense_chart for backward compat (same as ranked without meta)
+        $legacyChart = $chartAll;
+
+        return response()->json(['data' => [
+            'total_expense' => $totalExpense,
+            'total_income' => $totalIncome,
+            'balance' => $balance,
+            // Modern fields
+            'donut' => $donut,
+            'ranked' => $ranked,
+            'trend' => $trend,
+            // Legacy
+            'expense_chart' => $legacyChart,
+            // Meta
+            'period' => $period,
+            'year' => $year ? (int)$year : null,
+            'month' => $month ? (int)$month : null,
+            'categories_count' => count($chartAll),
+        ]]);
+    }
+
+    private function applyPeriodFilter($query, ?string $period, $year, $month): void
+    {
+        if ($period === 'month' && $year && $month) {
+            $query->whereYear('occurred_on', $year)->whereMonth('occurred_on', $month);
+        } elseif ($period === '3m') {
+            $query->where('occurred_on', '>=', Carbon::now()->subMonths(2)->startOfMonth());
+        } elseif ($period === '6m') {
+            $query->where('occurred_on', '>=', Carbon::now()->subMonths(5)->startOfMonth());
+        } elseif ($period === 'year' && $year) {
+            $query->whereYear('occurred_on', $year);
+        } elseif ($period === 'year' && !$year) {
+            $query->whereYear('occurred_on', Carbon::now()->year);
+        }
+        // 'all' => no filter
+    }
+
+    private function buildTrend(string $familyId, int $months = 6): array
+    {
+        $result = [];
+        $now = Carbon::now()->startOfMonth();
+        for ($i = $months -1; $i >= 0; $i--) {
+            $date = $now->copy()->subMonths($i);
+            $y = $date->year;
+            $m = $date->month;
+            $income = (float) DB::table('finance_transactions')->where('family_id',$familyId)->where('type','INCOME')->whereYear('occurred_on',$y)->whereMonth('occurred_on',$m)->sum('amount');
+            $expense = (float) DB::table('finance_transactions')->where('family_id',$familyId)->where('type','EXPENSE')->whereYear('occurred_on',$y)->whereMonth('occurred_on',$m)->sum('amount');
+            $result[] = [
+                'month' => $date->format('Y-m'),
+                'label' => $this->monthLabel($m),
+                'year' => $y,
+                'month_num' => $m,
+                'income' => round($income,2),
+                'expense' => round($expense,2),
+            ];
+        }
+        return $result;
+    }
+
+    private function monthLabel(int $m): string
+    {
+        return ['','Янв','Фев','Мар','Апр','Май','Июн','Июл','Авг','Сен','Окт','Ноя','Дек'][$m] ?? (string)$m;
+    }
+
+    public function aiReview(Request $request): JsonResponse
+    {
+        $m=$this->adminMembership($request);
+        $rows=DB::table('finance_transactions')->where('family_id',$m->family_id)->orderByDesc('occurred_on')->limit(500)->get();
+        $income=round((float)$rows->where('type','INCOME')->sum('amount'),2);
+        $expense=round((float)$rows->where('type','EXPENSE')->sum('amount'),2);
+        $categories=$rows->where('type','EXPENSE')->groupBy('category')->map(fn($x)=>round((float)$x->sum('amount'),2))->sortDesc()->take(8)->all();
+        $payload=['income'=>$income,'expense'=>$expense,'balance'=>round($income-$expense,2),'top_expense_categories'=>$categories];
+        if(env('OPENAI_API_KEY')){
+            try{
+                $resp=Http::withToken(env('OPENAI_API_KEY'))->timeout(30)->post('https://api.openai.com/v1/responses',['model'=>env('OPENAI_MODEL','gpt-5.6-luna'),'input'=>'Сделай короткий финансовый разбор для семьи на русском. Используй только эти агрегированные данные, без персональных данных. Дай 3 наблюдения и 3 практических действия. JSON не нужен. Данные: '.json_encode($payload,JSON_UNESCAPED_UNICODE)]);
+                if($resp->successful()){
+                    $json=$resp->json();
+                    return response()->json(['data'=>['text'=>$json['output'][0]['content'][0]['text']??json_encode($json,JSON_UNESCAPED_UNICODE),'source'=>'openai']]);
+                }
+            }catch(\Throwable $e){report($e);}
+        }
+        $text='Доходы: '.number_format($income,2,',',' ').' ₽. Расходы: '.number_format($expense,2,',',' ').' ₽. Баланс: '.number_format($income-$expense,2,',',' ').' ₽.'."\n";
+        $text.=$expense>0?'Наблюдение: расходная часть составляет '.round($expense/max(1,$income)*100,1).'% от доходов.'."\n":'';
+        $text.='Действия: задайте месячный лимит, внесите крупные финансовые цели и регулярно проверяйте категории с максимальными расходами.';
+        return response()->json(['data'=>['text'=>$text,'source'=>'local_rules']]);
+    }
+
+    public function categories(Request $request): JsonResponse
+    {
+        $m = $this->viewMembership($request);
+        \App\Services\Finance\CategoryCatalog::ensureDefaults($m->family_id, $m->user_id);
+        return response()->json(['data' => ExpenseCategory::query()->where('family_id', $m->family_id)->where('status', 'ACTIVE')->orderBy('name')->get()]);
+    }
+
+    public function createCategory(Request $request): JsonResponse
+    {
+        $m = $this->adminMembership($request);
+        $d = $request->validate(['name' => 'required|string|max:80', 'transaction_type' => 'required|in:EXPENSE,INCOME'], [
+            'name.required' => 'Введите название категории.', 'name.max' => 'Название категории должно быть не длиннее 80 символов.',
+            'transaction_type.in' => 'Выберите доход или расход.',
+        ]);
+        $d['name'] = trim($d['name']);
+        abort_if($d['name'] === '', 422, 'Введите название категории.');
+        $exists = ExpenseCategory::withTrashed()->where('family_id', $m->family_id)->where('transaction_type', $d['transaction_type'])->whereRaw('LOWER(name) = ?', [mb_strtolower($d['name'])])->exists();
+        abort_if($exists, 422, 'Категория с таким названием уже существует.');
+        $category = ExpenseCategory::create([...$d, 'family_id' => $m->family_id, 'created_by' => $m->user_id, 'status' => 'ACTIVE']);
+        return response()->json(['data' => $category], 201);
+    }
+
+    public function saveBudget(Request $request): JsonResponse
+    {
+        $m = $this->adminMembership($request);
+        $d = $request->validate(['year' => 'required|integer|between:2000,2100', 'month' => 'required|integer|between:1,12', 'total_limit' => 'required|numeric|min:0', 'categories' => 'array', 'categories.*.category_id' => 'required|string|distinct', 'categories.*.limit_amount' => 'required|numeric|min:0']);
+        foreach ($d['categories'] ?? [] as $cat) $this->activeCategory($m->family_id, $cat['category_id']);
+        DB::transaction(function () use ($d, $m) {
+            $budget = DB::table('budgets')->where(['family_id' => $m->family_id, 'year' => $d['year'], 'month' => $d['month']])->lockForUpdate()->first();
+            $budgetId = $budget->id ?? (string) Str::ulid();
+            if ($budget) DB::table('budgets')->where('id', $budgetId)->update(['total_limit' => $d['total_limit'], 'updated_at' => now()]);
+            else DB::table('budgets')->insert(['id' => $budgetId, 'family_id' => $m->family_id, 'year' => $d['year'], 'month' => $d['month'], 'total_limit' => $d['total_limit'], 'status' => 'ACTIVE', 'created_by' => $m->user_id, 'created_at' => now(), 'updated_at' => now()]);
+            DB::table('budget_categories')->where('budget_id', $budgetId)->delete();
+            foreach ($d['categories'] ?? [] as $cat) DB::table('budget_categories')->insert(['id' => (string) Str::ulid(), 'budget_id' => $budgetId, 'category_id' => $cat['category_id'], 'limit_amount' => $cat['limit_amount'], 'created_at' => now(), 'updated_at' => now()]);
+        });
+        return $this->budgetResponse($m->family_id, $d['year'], $d['month']);
+    }
+
+    public function budget(Request $request, int $year, int $month): JsonResponse
+    {
+        $m = $this->viewMembership($request);
+        return $this->budgetResponse($m->family_id, $year, $month);
+    }
+
+    private function budgetResponse(string $familyId, int $year, int $month): JsonResponse
+    {
+        $budget = DB::table('budgets')->where('family_id',$familyId)->where('year',$year)->where('month',$month)->first();
+        $spent = (float) DB::table('finance_transactions')->where('family_id',$familyId)->where('type','EXPENSE')->whereYear('occurred_on',$year)->whereMonth('occurred_on',$month)->sum('amount');
+        $cats = [];
+        if ($budget) {
+            $cats = DB::table('budget_categories')->join('expense_categories','expense_categories.id','=','budget_categories.category_id')->where('budget_categories.budget_id',$budget->id)->get(['budget_categories.category_id','budget_categories.limit_amount','expense_categories.name','expense_categories.icon'])->map(function($x) use ($familyId,$year,$month){
+                $spent = (float) DB::table('finance_transactions')->where('family_id',$familyId)->where('type','EXPENSE')->where('category',$x->name)->whereYear('occurred_on',$year)->whereMonth('occurred_on',$month)->sum('amount');
+                return ['category_id'=>$x->category_id,'name'=>$x->name,'icon'=>$x->icon,'limit_amount'=>(float)$x->limit_amount,'spent_amount'=>round($spent,2),'remaining_amount'=>round((float)$x->limit_amount-$spent,2),'progress_percent'=>(float)$x->limit_amount>0?min(100,round($spent/(float)$x->limit_amount*100,1)):0];
+            })->values()->all();
+        }
+        return response()->json(['data'=>['budget'=>['id'=>$budget?->id,'total_limit'=>(float)($budget?->total_limit??0),'spent_amount'=>round($spent,2),'available_amount'=>round((float)($budget?->total_limit??0)-$spent,2),'categories'=>$cats]]]);
+    }
+
+    public function goals(Request $request): JsonResponse
+    {
+        $m = $this->viewMembership($request);
+        $goals = DB::table('financial_goals')->where('family_id',$m->family_id)->whereNull('deleted_at')->orderByDesc('created_at')->get();
+        $goals = $goals->map(function($g){
+            $g->target_amount=(float)$g->target_amount; $g->current_price=$g->current_price===null?null:(float)$g->current_price;
+            $g->contributions=DB::table('goal_contributions')->where('goal_id',$g->id)->orderByDesc('contribution_date')->get()->map(fn($x)=>array_merge((array)$x,['amount'=>(float)$x->amount]));
+            $g->price_history=DB::table('goal_price_history')->where('goal_id',$g->id)->orderByDesc('recorded_at')->get()->map(fn($x)=>array_merge((array)$x,['price'=>(float)$x->price]));
+            return $g;
+        });
+        return response()->json(['data'=>$goals]);
+    }
+
+    public function createGoal(Request $request): JsonResponse
+    {
+        $m=$this->adminMembership($request); $d=$request->validate(['name'=>'required|string|max:255','type'=>'required|string|max:32','target_amount'=>'required|numeric|min:0.01','category_id'=>'nullable|string','target_date'=>'nullable|date','priority'=>'nullable|string|max:32','current_price'=>'nullable|numeric|min:0','url'=>'nullable|string','description'=>'nullable|string','status'=>'nullable|string|max:32']);
+        $id=(string)Str::ulid(); DB::table('financial_goals')->insert(['id'=>$id,'family_id'=>$m->family_id,'name'=>$d['name'],'type'=>$d['type'],'target_amount'=>$d['target_amount'],'category_id'=>$d['category_id']??null,'target_date'=>$d['target_date']??null,'priority'=>$d['priority']??'MEDIUM','current_price'=>$d['current_price']??null,'url'=>$d['url']??null,'description'=>$d['description']??null,'status'=>$d['status']??'PLANNED','created_by'=>$m->user_id,'created_at'=>now(),'updated_at'=>now()]); return $this->goals($request);
+    }
+
+    public function updateGoal(Request $request,string $goal): JsonResponse { $m=$this->adminMembership($request); $d=$request->validate(['name'=>'sometimes|string|max:255','target_amount'=>'sometimes|numeric|min:0.01','target_date'=>'nullable|date','priority'=>'sometimes|string|max:32','current_price'=>'nullable|numeric|min:0','url'=>'nullable|string','description'=>'nullable|string','status'=>'sometimes|string|max:32']); $this->ownedRow('financial_goals',$goal,$m->family_id); DB::table('financial_goals')->where('id',$goal)->update([...$d,'updated_at'=>now()]); return $this->goals($request); }
+    public function deleteGoal(Request $request,string $goal): JsonResponse { $m=$this->adminMembership($request); $this->ownedRow('financial_goals',$goal,$m->family_id); DB::table('financial_goals')->where('id',$goal)->update(['deleted_at'=>now()]); return response()->json([],204); }
+    public function contribution(Request $request,string $goal): JsonResponse { $m=$this->adminMembership($request); $this->ownedRow('financial_goals',$goal,$m->family_id); $d=$request->validate(['amount'=>'required|numeric|min:0.01','contribution_date'=>'required|date']); DB::table('goal_contributions')->insert(['id'=>(string)Str::ulid(),'goal_id'=>$goal,'amount'=>$d['amount'],'contribution_date'=>$d['contribution_date'],'created_by'=>$m->user_id,'created_at'=>now(),'updated_at'=>now()]); return $this->goals($request); }
+    public function price(Request $request,string $goal): JsonResponse { $m=$this->adminMembership($request); $this->ownedRow('financial_goals',$goal,$m->family_id); $d=$request->validate(['price'=>'required|numeric|min:0','recorded_at'=>'required','url'=>'nullable|string','comment'=>'nullable|string']); DB::table('goal_price_history')->insert(['id'=>(string)Str::ulid(),'goal_id'=>$goal,'price'=>$d['price'],'url'=>$d['url']??null,'comment'=>$d['comment']??null,'recorded_at'=>$d['recorded_at'],'created_by'=>$m->user_id,'created_at'=>now()]); DB::table('financial_goals')->where('id',$goal)->update(['current_price'=>$d['price'],'updated_at'=>now()]); return $this->goals($request); }
+
+    public function cards(Request $request): JsonResponse { $m=$this->viewMembership($request); return response()->json(['data'=>DB::table('finance_cards')->where('family_id',$m->family_id)->whereNull('deleted_at')->orderBy('name')->get()->map(fn($x)=>array_merge((array)$x,['default_cashback_rate'=>(float)$x->default_cashback_rate]))]); }
+    public function createCard(Request $request): JsonResponse { $m=$this->adminMembership($request); $d=$request->validate(['name'=>'required|string|max:120','bank_name'=>'nullable|string|max:120','last4'=>'nullable|digits:4','payment_system'=>'nullable|string|max:40','default_cashback_rate'=>'nullable|numeric|min:0']); DB::table('finance_cards')->insert(['id'=>(string)Str::ulid(),'family_id'=>$m->family_id,'name'=>$d['name'],'bank_name'=>$d['bank_name']??null,'last4'=>$d['last4']??null,'payment_system'=>$d['payment_system']??null,'default_cashback_rate'=>$d['default_cashback_rate']??0,'status'=>'ACTIVE','created_by'=>$m->user_id,'created_at'=>now(),'updated_at'=>now()]); return $this->cards($request); }
+    public function deleteCard(Request $request,string $card): JsonResponse { $m=$this->adminMembership($request); $this->ownedRow('finance_cards',$card,$m->family_id); DB::table('finance_cards')->where('id',$card)->update(['deleted_at'=>now(),'status'=>'ARCHIVED','updated_at'=>now()]); return response()->json([],204); }
+
+    public function cashback(Request $request): JsonResponse { $m=$this->viewMembership($request); return response()->json(['data'=>DB::table('cashback_offers')->where('family_id',$m->family_id)->whereNull('deleted_at')->orderByDesc('cashback_rate')->get()->map(fn($x)=>array_merge((array)$x,['cashback_rate'=>(float)$x->cashback_rate,'cap_amount'=>$x->cap_amount===null?null:(float)$x->cap_amount]))]); }
+    public function createCashback(Request $request): JsonResponse { $m=$this->adminMembership($request); $d=$request->validate(['card_id'=>'nullable|string','merchant_name'=>'nullable|string|max:160','category'=>'nullable|string|max:120','cashback_rate'=>'required|numeric|min:0','cap_amount'=>'nullable|numeric|min:0','valid_from'=>'nullable|date','valid_to'=>'nullable|date','notes'=>'nullable|string']); DB::table('cashback_offers')->insert(['id'=>(string)Str::ulid(),'family_id'=>$m->family_id,'card_id'=>$d['card_id']??null,'merchant_name'=>$d['merchant_name']??null,'category'=>$d['category']??null,'cashback_rate'=>$d['cashback_rate'],'cap_amount'=>$d['cap_amount']??null,'valid_from'=>$d['valid_from']??null,'valid_to'=>$d['valid_to']??null,'notes'=>$d['notes']??null,'created_by'=>$m->user_id,'created_at'=>now(),'updated_at'=>now()]); return $this->cashback($request); }
+
+    // ---- Receipts: v07 N-expenses flow ----
+    public function receipts(Request $request): JsonResponse {
+        $m=$this->viewMembership($request);
+        $rows = DB::table('receipts')->where('family_id',$m->family_id)->whereNull('deleted_at')->orderByDesc('created_at')->get()->map(function($x) use ($m){
+            $arr = (array)$x;
+            $arr['ai_result'] = null;
+            $arr['can_edit'] = $m->role === 'ADMIN' || $x->uploaded_by === $m->user_id;
+            // decode review_payload if exists
+            if (isset($x->review_payload) && $x->review_payload) {
+                $arr['review_payload'] = is_string($x->review_payload) ? json_decode($x->review_payload, true) : $x->review_payload;
+            }
+            // hide raw image_data for list (keep thumb only) — but return flag if exists
+            $arr['has_image'] = !empty($x->image_data);
+            // don't leak huge base64 in list unless needed — provide truncated
+            unset($arr['image_data']);
+            return $arr;
+        });
+        return response()->json(['data'=>$rows]);
+    }
+
+    public function receiptShow(Request $request, string $receipt): JsonResponse {
+        $m=$this->viewMembership($request);
+        $row = $this->ownedRow('receipts', $receipt, $m->family_id);
+        $arr = (array)$row;
+        $arr['can_edit'] = $m->role === 'ADMIN' || $row->uploaded_by === $m->user_id;
+        unset($arr['image_data']);
+        $arr['ai_result'] = $row->ai_result ? json_decode($row->ai_result, true) : null;
+        if (isset($row->review_payload) && $row->review_payload) {
+            $arr['review_payload'] = is_string($row->review_payload) ? json_decode($row->review_payload, true) : $row->review_payload;
+        }
+        return response()->json(['data'=>$arr]);
+    }
+
+    public function uploadReceipt(Request $request): JsonResponse {
+        $m=$this->viewMembership($request);
+        $d=$request->validate(['file_name'=>'nullable|string|max:255','mime_type'=>'nullable|string|max:80','image_data'=>'required|string|max:12000000','merchant'=>'nullable|string|max:255','total'=>'nullable|numeric','occurred_on'=>'nullable|date','items'=>'nullable|array']);
+        $parts = explode(',', $d['image_data'], 2);
+        abort_unless(count($parts) === 2 && preg_match('#^data:image/(jpeg|png|webp);base64$#', $parts[0]), 422, 'Выберите фото в формате JPEG, PNG или WebP.');
+        $bytes = base64_decode($parts[1], true);
+        abort_unless($bytes !== false && strlen($bytes) <= 8 * 1024 * 1024 && @getimagesizefromstring($bytes), 422, 'Не удалось прочитать фото. Выберите другое изображение размером до 8 МБ.');
+        $size = getimagesizefromstring($bytes);
+        abort_unless($size[0]*$size[1] <= 16000000, 422, 'Фото слишком большое. Выберите изображение до 16 мегапикселей.');
+        $id=(string)Str::ulid();
+        // Prepare review_payload from initial items if provided (manual)
+        $reviewPayload = null;
+        if (!empty($d['items'])) {
+            $reviewPayload = json_encode(['merchant'=>$d['merchant']??null,'total'=>$d['total']??null,'date'=>$d['occurred_on']??null,'items'=>$d['items']], JSON_UNESCAPED_UNICODE);
+        }
+        $insert = ['id'=>$id,'family_id'=>$m->family_id,'uploaded_by'=>$m->user_id,'file_name'=>$d['file_name']??null,'mime_type'=>$d['mime_type']??null,'image_data'=>$d['image_data'],'ocr_status'=>'PENDING','created_at'=>now(),'updated_at'=>now()];
+        // Add review_payload/confirmed_at if columns exist (migration may not yet run) — try/catch
+        try {
+            if ($reviewPayload) $insert['review_payload'] = $reviewPayload;
+        } catch(\Throwable $e){}
+        DB::table('receipts')->insert($insert);
+        $originalId=$id;
+        $id=$this->tryAnalyzeReceipt($id,$m->family_id);
+        $row=DB::table('receipts')->where('id',$id)->first();
+        $arr = (array)$row;
+        $arr['can_edit'] = $m->role === 'ADMIN' || $row->uploaded_by === $m->user_id;
+        $arr['duplicate'] = $id !== $originalId;
+        unset($arr['image_data']);
+        $arr['ai_result']=$row->ai_result?json_decode($row->ai_result,true):null;
+        if (isset($row->review_payload) && $row->review_payload) $arr['review_payload']=is_string($row->review_payload)?json_decode($row->review_payload,true):$row->review_payload;
+        return response()->json(['data'=>$arr],201);
+    }
+
+    public function updateReceipt(Request $request, string $receipt): JsonResponse {
+        $m=$this->viewMembership($request);
+        $row = $this->ownedRow('receipts',$receipt,$m->family_id);
+        abort_unless($m->role==='ADMIN'||$row->uploaded_by===$m->user_id,403);
+        // Prevent editing after confirmed
+        $status = $row->ocr_status ?? '';
+        if ($status === 'CONFIRMED') abort(409, 'Чек уже подтверждён, редактирование запрещено');
+        $d=$request->validate([
+            'merchant'=>'nullable|string|max:255',
+            'total'=>'nullable|numeric|min:0',
+            'receipt_total'=>'nullable|numeric|gt:0',
+            'date'=>'nullable|date',
+            'currency'=>'nullable|string|max:10',
+            'items'=>'nullable|array',
+            'items.*.name'=>'required_with:items|string|max:255',
+            'items.*.qty'=>'required|numeric|gt:0',
+            'items.*.price'=>'required_with:items|numeric|min:0',
+            'items.*.category'=>'nullable|string|max:120',
+            'items.*.category_id'=>'nullable|string',
+            'items.*.category_needs_review'=>'sometimes|boolean',
+        ]);
+        $previous = $row->review_payload ? json_decode($row->review_payload, true) : [];
+        $receiptTotal = array_key_exists('receipt_total', $d) ? $d['receipt_total'] : ($previous['receipt_total'] ?? $previous['total'] ?? null);
+        $payload = [
+            'receipt_total'=>$receiptTotal,
+            'merchant'=>$d['merchant']??null,
+            'total'=>isset($d['total'])?(float)$d['total']:null,
+            'date'=>$d['date']??null,
+            'currency'=>$d['currency']??'RUB',
+            'items'=> $d['items'] ?? null,
+        ];
+        // Try to update review_payload if column exists, else fallback to ai_result
+        $updated = false;
+        try {
+            DB::table('receipts')->where('id',$receipt)->whereNull('deleted_at')->update(['review_payload'=>json_encode($payload,JSON_UNESCAPED_UNICODE),'qr_state'=>$row->qr_state==='WAITING'?'MANUAL':$row->qr_state,'qr_next_attempt_at'=>null,'updated_at'=>now()]);
+            $updated = true;
+        } catch(\Throwable $e){
+            // Fallback: store in ai_result under review key
+            $ai = $row->ai_result ? json_decode($row->ai_result,true) : [];
+            $ai['review_payload'] = $payload;
+            DB::table('receipts')->where('id',$receipt)->whereNull('deleted_at')->update(['ai_result'=>json_encode($ai,JSON_UNESCAPED_UNICODE),'updated_at'=>now()]);
+            $updated = true;
+        }
+        $row = DB::table('receipts')->where('id',$receipt)->first();
+        $arr=(array)$row;
+        $arr['can_edit'] = $m->role === 'ADMIN' || $row->uploaded_by === $m->user_id;
+        unset($arr['image_data']);
+        $arr['ai_result']=$row->ai_result?json_decode($row->ai_result,true):null;
+        if (isset($row->review_payload) && $row->review_payload) $arr['review_payload']=is_string($row->review_payload)?json_decode($row->review_payload,true):$row->review_payload;
+        // If fallback, extract from ai_result
+        if (!isset($arr['review_payload']) && isset($arr['ai_result']['review_payload'])) $arr['review_payload']=$arr['ai_result']['review_payload'];
+        return response()->json(['data'=>$arr]);
+    }
+
+    public function confirmReceipt(Request $request, string $receipt): JsonResponse {
+        $m=$this->viewMembership($request);
+        $row = $this->ownedRow('receipts',$receipt,$m->family_id);
+        abort_unless($m->role==='ADMIN'||$row->uploaded_by===$m->user_id,403);
+        $status = $row->ocr_status ?? '';
+        if ($status === 'CONFIRMED') {
+            return response()->json(['message'=>'Чек уже подтверждён','data'=>(array)$row], 409);
+        }
+        $qr=json_decode($row->qr_data ?? '',true);
+        abort_if($qr && ($qr['n'] ?? '1') !== '1',422,'Это чек возврата или другой операции. Его нельзя сохранить как расход по покупке.');
+        $d=$request->validate([
+            'merchant'=>'nullable|string|max:255',
+            'total'=>'nullable|numeric|min:0',
+            'receipt_total'=>'nullable|numeric|gt:0',
+            'date'=>'nullable|date',
+            'currency'=>'nullable|string|max:10',
+            'items'=>'required|array|min:1',
+            'items.*.name'=>'required|string|max:255',
+            'items.*.qty'=>'required|numeric|gt:0',
+            'items.*.price'=>'required|numeric|gt:0',
+            'items.*.category'=>'nullable|string|max:120',
+            'items.*.category_id'=>'nullable|string',
+
+        ]);
+
+        $date = $d['date'] ?? Carbon::now()->format('Y-m-d');
+        $computedTotal = round(collect($d['items'])->sum(fn($i) => round($i['qty'] * $i['price'], 2)), 2);
+        abort_if(isset($d['total']) && abs($computedTotal - (float)$d['total']) > 0.02, 422, 'Итог не совпадает с суммой позиций. Проверьте количество и цены.');
+        $previous = $row->review_payload ? json_decode($row->review_payload, true) : [];
+        $receiptTotal = array_key_exists('receipt_total', $d) ? $d['receipt_total'] : ($previous['receipt_total'] ?? $previous['total'] ?? null);
+        abort_unless($receiptTotal !== null && (float)$receiptTotal > 0, 422, 'Укажите итог на чеке перед подтверждением.');
+        abort_if(abs($computedTotal - (float)$receiptTotal) > 0.02, 422, 'Сумма позиций не совпадает с итогом на чеке. Проверьте данные перед подтверждением.');
+        $d['receipt_total'] = (float)$receiptTotal;
+        $d['total'] = $computedTotal;
+        // Idempotency: if already has expense_id and confirmed, abort
+        if (!empty($row->expense_id)) {
+            $exists = DB::table('finance_transactions')->where('id',$row->expense_id)->exists();
+            if ($exists && $status==='CONFIRMED') abort(409, 'Чек уже подтверждён');
+        }
+
+        $createdIds = [];
+        DB::transaction(function() use ($d, $date, $m, $receipt, &$createdIds, $row) {
+            $locked = DB::table('receipts')->where('id', $receipt)->whereNull('deleted_at')->lockForUpdate()->first();
+            abort_unless($locked, 404, 'Чек удалён или недоступен.');
+            abort_if($locked->ocr_status === 'CONFIRMED', 409, 'Чек уже подтверждён.');
+            foreach ($d['items'] as $item) {
+                $qty = isset($item['qty']) ? (float)$item['qty'] : 1;
+                $price = (float)$item['price'];
+                // Each line creates an expense for its actual quantity and unit price.
+                $amount = round($qty * $price, 2);
+                if ($amount <= 0) $amount = round($price,2);
+                $catName = $item['category'] ?? 'Покупки';
+                $catId = $this->resolveCategoryId($m->family_id, $catName, $item['category_id'] ?? null);
+                $id = (string) Str::ulid();
+                DB::table('finance_transactions')->insert([
+                    'id'=>$id,
+                    'family_id'=>$m->family_id,
+                    'type'=>'EXPENSE',
+                    'amount'=>$amount,
+                    'category'=>$catName,
+                    'category_id'=>$catId,
+                    'description'=>mb_substr($item['name'],0,255),
+                    'occurred_on'=>$date,
+                    'created_by'=>$m->user_id,
+                    'created_at'=>now(),
+                    'updated_at'=>now(),
+                    // receipt_id if column exists — try, ignore if not
+                ]);
+                // Try to set receipt_id if column exists
+                try {
+                    DB::table('finance_transactions')->where('id',$id)->update(['receipt_id'=>$receipt]);
+                } catch(\Throwable $e){}
+                $createdIds[] = $id;
+            }
+            // Update receipt as confirmed
+            $update = ['ocr_status'=>'CONFIRMED','qr_state'=>$locked->qr_state==='WAITING'?'MANUAL':$locked->qr_state,'qr_next_attempt_at'=>null,'updated_at'=>now()];
+            try { $update['confirmed_at']=now(); } catch(\Throwable $e){}
+            // Store review_payload final
+            $payload = ['receipt_total'=>$d['receipt_total'],'merchant'=>$d['merchant']??null,'total'=>$d['total']??null,'date'=>$date,'currency'=>$d['currency']??'RUB','items'=>$d['items']];
+            try { $update['review_payload']=json_encode($payload,JSON_UNESCAPED_UNICODE); } catch(\Throwable $e){}
+            // Do NOT set expense_id (FK to expenses table) — link via finance_transactions.receipt_id instead
+            // Clear heavy image_data after 30 days? For now keep but optionally truncate preview — we keep it, but frontend should not refetch huge
+            DB::table('receipts')->where('id',$receipt)->update($update);
+        });
+
+        $transactions = DB::table('finance_transactions')->whereIn('id',$createdIds)->get()->map(fn($x)=>array_merge((array)$x,['amount'=>(float)$x->amount]));
+        $row = DB::table('receipts')->where('id',$receipt)->first();
+        $arr=(array)$row;
+        $arr['can_edit'] = $m->role === 'ADMIN' || $row->uploaded_by === $m->user_id;
+        unset($arr['image_data']);
+        $arr['ai_result']=$row->ai_result?json_decode($row->ai_result,true):null;
+        if (isset($row->review_payload)) $arr['review_payload']=is_string($row->review_payload)?json_decode($row->review_payload,true):$row->review_payload;
+
+        return response()->json(['data'=>[
+            'receipt'=>$arr,
+            'transactions'=>$transactions,
+            'created_count'=>count($createdIds),
+            'total_amount'=>round($transactions->sum('amount'),2),
+        ]], 201);
+    }
+
+    public function deleteReceipt(Request $request, string $receipt): JsonResponse
+    {
+        $m = $this->viewMembership($request);
+        DB::transaction(function () use ($m, $receipt) {
+            $row = DB::table('receipts')->where('id', $receipt)->where('family_id', $m->family_id)->whereNull('deleted_at')->lockForUpdate()->first();
+            abort_unless($row, 404, 'Черновик уже удалён или недоступен.');
+            abort_unless($m->role === 'ADMIN' || $row->uploaded_by === $m->user_id, 403, 'Удалить черновик может его автор или администратор семьи.');
+            abort_if($row->ocr_status === 'CONFIRMED', 409, 'Чек уже подтверждён. Расходы по нему сохранены.');
+            DB::table('receipts')->where('id', $receipt)->update([
+                'deleted_at' => now(), 'updated_at' => now(), 'image_data' => null,
+                'ocr_text' => null, 'review_payload' => null, 'ai_result' => null,
+            ]);
+        });
+        return response()->json([], 204);
+    }
+
+    public function retryReceipt(Request $request, string $receipt): JsonResponse
+    {
+        $m = $this->viewMembership($request);
+        $row = $this->ownedRow('receipts', $receipt, $m->family_id);
+        abort_unless($m->role === 'ADMIN' || $row->uploaded_by === $m->user_id, 403);
+        abort_if($row->ocr_status === 'CONFIRMED', 409, 'Чек уже подтверждён.');
+        $resolved=$this->tryAnalyzeReceipt($receipt, $m->family_id);
+        return $this->receiptShow($request, $resolved);
+    }
+
+    private function tryAnalyzeReceipt(string $id, string $familyId): string
+    {
+        $row = DB::table('receipts')->where('id', $id)->where('family_id', $familyId)->whereNull('deleted_at')->first();
+        if (!$row) return $id;
+        $qr=app(\App\Services\Finance\FiscalQr::class)->decode($row->image_data);
+        if ($qr) {
+            $existing=DB::table('receipts')->where('family_id',$familyId)->where('qr_fingerprint',app(\App\Services\Finance\FiscalQr::class)->fingerprint($qr))->whereNull('deleted_at')->where('id','!=',$id)->first();
+            if ($existing) {
+                DB::table('receipts')->where('id',$id)->whereNull('deleted_at')->where('ocr_status','!=','CONFIRMED')->update(['deleted_at'=>now(),'image_data'=>null,'qr_next_attempt_at'=>null,'updated_at'=>now()]);
+                return $existing->id;
+            }
+        }
+        $result = app(\App\Services\Finance\ReceiptRecognizer::class)->recognize($row->image_data,$qr,true);
+        $result['payload'] = app(\App\Services\Finance\ReceiptCategoryMatcher::class)->categorize($familyId,$result['payload']);
+        return DB::transaction(function() use ($result,$id,$familyId,$row) {
+            // Serialize fingerprint assignment within this family, including parallel uploads.
+            DB::table('families')->where('id',$familyId)->lockForUpdate()->first();
+            $current=DB::table('receipts')->where('id',$id)->whereNull('deleted_at')->lockForUpdate()->first();
+            if (!$current || $current->ocr_status==='CONFIRMED' || $current->updated_at!==$row->updated_at || $current->qr_state!==$row->qr_state) return $id;
+            $qr=$result['qr_data'] ?? null;
+            $fingerprint=$qr?app(\App\Services\Finance\FiscalQr::class)->fingerprint($qr):null;
+            if ($fingerprint) {
+                $existing=DB::table('receipts')->where('family_id',$familyId)->where('qr_fingerprint',$fingerprint)->whereNull('deleted_at')->where('id','!=',$id)->first();
+                if ($existing) {
+                    DB::table('receipts')->where('id',$id)->update(['deleted_at'=>now(),'image_data'=>null,'qr_next_attempt_at'=>null,'updated_at'=>now()]);
+                    return $existing->id;
+                }
+            }
+            DB::table('receipts')->where('id',$id)->update([
+                'ocr_status'=>$result['status'],'ocr_text'=>$result['text'],
+                'review_payload'=>json_encode($result['payload'],JSON_UNESCAPED_UNICODE),
+                'qr_data'=>$qr?json_encode($qr):null,'qr_fingerprint'=>$fingerprint,
+                'qr_state'=>$result['qr_state'] ?? null,'qr_attempts'=>1,
+                'qr_next_attempt_at'=>($result['qr_state'] ?? '')==='WAITING'?now()->addMinute():null,'updated_at'=>now(),
+            ]);
+            return $id;
+        });
+    }
+
+    private function ownedRow(string $table,string $id,string $familyId): object { $query=DB::table($table)->where('id',$id)->where('family_id',$familyId); if ($table === 'receipts') $query->whereNull('deleted_at'); $row=$query->first(); abort_unless($row,404); return $row; }
+}

@@ -14,22 +14,43 @@ RUN composer install \
 
 FROM php:8.5-fpm-alpine
 
-RUN apk add --no-cache \
+ARG ALPINE_MIRROR=https://dl-cdn.alpinelinux.org/alpine
+
+RUN sed -i "s|https://dl-cdn.alpinelinux.org/alpine|${ALPINE_MIRROR%/}|g" /etc/apk/repositories \
+    && apk add --no-cache \
     bash \
     icu-dev \
     libzip-dev \
+    libpng-dev \
+    libjpeg-turbo-dev \
+    libwebp-dev \
     oniguruma-dev \
     postgresql-dev \
+    su-exec \
+    zbar \
+    imagemagick \
+    tesseract-ocr \
+    tesseract-ocr-data-rus \
+    tesseract-ocr-data-eng \
+    && docker-php-ext-configure gd --with-jpeg --with-webp \
     && docker-php-ext-install \
+        gd \
         intl \
         mbstring \
         pdo_pgsql \
         zip
 
+RUN apk add --no-cache poppler-utils
+
+RUN printf "post_max_size=16M\nmemory_limit=256M\nmax_execution_time=120\n" > /usr/local/etc/php/conf.d/finance-uploads.ini
+
 WORKDIR /var/www/html
 
 COPY --from=vendor /app/vendor ./vendor
 COPY . .
+
+COPY docker-entrypoint.sh /usr/local/bin/family-hub-entrypoint
+RUN chmod 755 /usr/local/bin/family-hub-entrypoint
 
 RUN mkdir -p \
         storage/framework/cache/data \
@@ -41,7 +62,7 @@ RUN mkdir -p \
         storage \
         bootstrap/cache
 
-USER www-data
+ENTRYPOINT ["/usr/local/bin/family-hub-entrypoint"]
 
 EXPOSE 9000
 
