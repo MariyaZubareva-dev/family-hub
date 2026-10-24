@@ -1,6 +1,8 @@
 import {expect,test,type Page} from '@playwright/test'
 import {readFileSync} from 'node:fs'
 
+function forecastSample(mode:string,extra:any={}){return {kind:'ESTIMATE',recalculation_mode:mode,interest_policy:'NEXT_PAYMENT',original_last_payment_date:'2027-01-22',last_payment_date:mode==='TERM'?'2026-12-22':'2027-01-22',payment_before:200,payment_after:mode==='TERM'?200:166.67,payment_reduction:mode==='TERM'?0:33.33,term_reduction_months:mode==='TERM'?1:0,term_reduction_days:0,remaining_payments_before:3,remaining_payments_after:mode==='TERM'?2:3,final_payment_before:200,final_payment_after:200,final_payment_reduction:0,next_payment:{date:'2026-11-22',payment:mode==='TERM'?200:166.67},bank_snapshot_date:'2026-10-04',interest_saved:12.5,prepayment:{principal:100},assumptions:['Обычные платежи вносятся вовремя.'],rows:[],...extra}}
+
 async function setup(page:Page){
   const today=new Date().toLocaleDateString('sv-SE')
   const credit:any={id:'c1',name:'Техника',type:'INSTALLMENT',principal:600,annual_rate:0,standard_payment:200,term_months:3,start_date:'2026-01-01',first_payment_date:'2026-02-01',recalculation_mode:'TERM',payments:[],prepayments:[{id:'early',paid_on:'2026-03-01',amount:100,recalculation_mode:'TERM'}],summary:{last_payment_date:'2026-04-01',last_paid_on:'2026-03-01',next_payment:{date:today,amount:200}}}
@@ -21,7 +23,7 @@ async function setup(page:Page){
     else if(path==='/credit-payments/pay1'){if(method==='DELETE')credit.payments=[];else{Object.assign(credit.payments[0],body);data=credit.payments[0]}}
     else if(path==='/credit-prepayments/early'){if(method==='DELETE')credit.prepayments=[];else{Object.assign(credit.prepayments[0],body);data=credit.prepayments[0]}}
     else if(path==='/credits/c1/bank-schedule'){credit.bank_schedule={...body,version:1,complete:true,stale:false};data=credit.bank_schedule}
-    else if(path==='/credits/c1/forecast')data={kind:'ESTIMATE',last_payment_date:'2026-12-22',next_payment:{payment:200},interest_saved:12.5,prepayment:{principal:100},assumptions:['Предварительный расчёт по графику банка.'],rows:[]}
+    else if(path==='/credits/c1/forecast')data=forecastSample(body.recalculation_mode)
     else if(path==='/finance/analytics')data={total_income:0,total_expense:0,ranked:[],trend:[]}
     if(method==='DELETE'){await route.fulfill({status:204});return}
     await route.fulfill({json:{data}})
@@ -96,12 +98,39 @@ test('schedule checkbox preserves its selected period across another payment dat
 test('calculator remains usable after recorded prepayments without uploading the same graph again',async({page})=>{
   const state=await setup(page);state.credit.bank_schedule={as_of:'2026-03-01',complete:true,stale:true,stale_reason:'PREPAYMENTS',rows:[]}
   await page.reload();await page.getByRole('tab',{name:'Кредиты',exact:true}).click();await page.getByRole('button',{name:'Расчёт досрочного погашения',exact:true}).click()
-  const dialog=page.getByRole('dialog',{name:'Расчёт досрочного погашения',exact:true});await dialog.getByLabel('Досрочная сумма, ₽').fill('100');await dialog.getByLabel('Как банк списывает накопленные проценты').selectOption('NEXT_PAYMENT');await dialog.getByRole('button',{name:'Рассчитать',exact:true}).click();await expect(dialog).toContainText('Предварительный расчёт')
+  const dialog=page.getByRole('dialog',{name:'Расчёт досрочного погашения',exact:true});await dialog.getByLabel('Досрочная сумма, ₽').fill('100');await dialog.getByLabel('Как будут оплачены проценты').selectOption('NEXT_PAYMENT');await dialog.getByRole('button',{name:'Рассчитать',exact:true}).click();await expect(dialog).toContainText('Предварительный расчёт')
+})
+for(const [width,height] of [[320,480],[320,852],[393,852]])for(const mode of ['TERM','PAYMENT'])test(`calculator shows before, after and an explicit ${mode} reduction at ${width}x${height}`,async({page})=>{
+  const state=await setup(page);state.credit.bank_schedule={as_of:'2026-10-04',complete:true,stale:true,stale_reason:'PREPAYMENTS',rows:[]}
+  await page.setViewportSize({width,height});await page.reload();await page.getByRole('tab',{name:'Кредиты',exact:true}).click();await page.getByRole('button',{name:'Расчёт досрочного погашения',exact:true}).click()
+  const dialog=page.getByRole('dialog',{name:'Расчёт досрочного погашения',exact:true});await expect(dialog.getByLabel('Как будут оплачены проценты')).toHaveValue('AUTO')
+  await dialog.getByLabel('Досрочная сумма, ₽').fill('100');await dialog.getByRole('combobox',{name:'Что уменьшить',exact:true}).selectOption(mode);await dialog.getByRole('button',{name:'Рассчитать',exact:true}).click()
+  const result=dialog.getByRole('region',{name:'Результат расчёта'});await expect(result.locator('.credit-impact strong')).toHaveText(mode==='TERM'?'1 месяц':'33,33 ₽');await expect(result.locator('.credit-impact strong')).toBeInViewport()
+  await expect(result.locator('.credit-impact-compare')).toContainText(mode==='TERM'?'22.01.2027':'200 ₽');await expect(result.locator('.credit-impact-compare')).toContainText(mode==='TERM'?'22.12.2026':'166,67 ₽')
+  expect(state.requests.find(r=>r.path==='/credits/c1/forecast')?.body.interest_policy).toBe('AUTO');await expect(dialog.getByRole('alert')).toHaveCount(0)
+  expect(await dialog.evaluate(el=>el.scrollWidth<=el.clientWidth)).toBe(true);expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true)
+  await page.screenshot({path:`test-results/forecast-${mode}-${width}-${height}.png`})
+  await dialog.getByLabel('Досрочная сумма, ₽').fill('10');await expect(result).toHaveCount(0)
+})
+test('calculator explains when the final payment falls but the payoff date does not move',async({page})=>{
+  const state=await setup(page);state.credit.bank_schedule={complete:true,rows:[]}
+  await page.route('**/api/v1/credits/c1/forecast',route=>route.fulfill({json:{data:forecastSample('TERM',{last_payment_date:'2027-01-22',term_reduction_months:0,remaining_payments_after:3,final_payment_after:190,final_payment_reduction:10})}}))
+  await page.reload();await page.getByRole('tab',{name:'Кредиты',exact:true}).click();await page.getByRole('button',{name:'Расчёт досрочного погашения',exact:true}).click();const dialog=page.getByRole('dialog')
+  await dialog.getByLabel('Досрочная сумма, ₽').fill('10');await dialog.getByRole('button',{name:'Рассчитать',exact:true}).click()
+  await expect(dialog.locator('.credit-impact strong')).toHaveText('Не изменится');await expect(dialog.locator('.credit-last-payment')).toContainText('Последний платёж меньше на 10 ₽');await expect(dialog.locator('.credit-last-payment')).toContainText('200 ₽ → 190 ₽')
+})
+test('unknown bank rule shows both distinct outcomes and a tooltip with a concrete example',async({page})=>{
+  const state=await setup(page);state.credit.bank_schedule={complete:true,rows:[]}
+  await page.route('**/api/v1/credits/c1/forecast',route=>route.fulfill({json:{data:{...forecastSample('PAYMENT'),interest_policy:'AUTO',policy_changes_result:true,policy_errors:[],policy_variants:[forecastSample('PAYMENT',{payment_after:160,payment_reduction:40}),forecastSample('PAYMENT',{interest_policy:'FROM_PREPAYMENT',payment_after:165,payment_reduction:35})]}}}))
+  await page.reload();await page.getByRole('tab',{name:'Кредиты',exact:true}).click();await page.getByRole('button',{name:'Расчёт досрочного погашения',exact:true}).click();const dialog=page.getByRole('dialog')
+  await dialog.getByRole('button',{name:'Как выбрать оплату процентов',exact:true}).click();await expect(page.getByRole('tooltip')).toContainText('10 000 ₽');await dialog.getByRole('button',{name:'Как выбрать оплату процентов',exact:true}).click()
+  await dialog.getByLabel('Досрочная сумма, ₽').fill('100');await dialog.getByRole('button',{name:'Рассчитать',exact:true}).click()
+  await expect(dialog.getByRole('region',{name:'Проценты — в обычном платеже'}).locator('.credit-impact strong')).toHaveText('40 ₽');await expect(dialog.getByRole('region',{name:'Проценты — из досрочной суммы'}).locator('.credit-impact strong')).toHaveText('35 ₽')
 })
 test('bank CSV validates columns, saves graph and requires an explicit interest policy for estimate',async({page})=>{
   const state=await setup(page);await page.setViewportSize({width:320,height:852})
   await page.getByRole('button',{name:'Расчёт досрочного погашения',exact:true}).click()
-  await expect(page.getByRole('dialog')).toContainText('Добавьте полный актуальный график банка');await page.getByRole('dialog').getByRole('button',{name:'Закрыть',exact:true}).click()
+  await expect(page.getByRole('dialog')).toContainText('Для расчёта загрузите полный график');await page.getByRole('dialog').getByRole('button',{name:'Закрыть',exact:true}).click()
   await page.getByRole('tab',{name:'Данные',exact:true}).click();await page.getByRole('button',{name:'Добавить график',exact:true}).click()
   let dialog=page.getByRole('dialog',{name:'График банка',exact:true})
   await dialog.getByLabel('Дата; платёж; долг; проценты; услуги; остаток').fill('неверная строка');await dialog.getByRole('button',{name:'Проверить строки'}).click();await expect(dialog.getByRole('alert')).toContainText('шесть столбцов')
@@ -111,7 +140,7 @@ test('bank CSV validates columns, saves graph and requires an explicit interest 
   await dialog.getByRole('checkbox').check();await dialog.getByRole('button',{name:'Сохранить график'}).click();await expect(dialog).toHaveCount(0)
   expect(state.credit.bank_schedule.rows).toHaveLength(3)
   await page.getByRole('button',{name:'Расчёт досрочного погашения',exact:true}).click();dialog=page.getByRole('dialog',{name:'Расчёт досрочного погашения',exact:true})
-  await dialog.getByLabel('Досрочная сумма, ₽').fill('100');await dialog.getByLabel('Как банк списывает накопленные проценты').selectOption('FROM_PREPAYMENT');await dialog.getByRole('button',{name:'Рассчитать',exact:true}).click()
+  await dialog.getByLabel('Досрочная сумма, ₽').fill('100');await dialog.getByLabel('Как будут оплачены проценты').selectOption('FROM_PREPAYMENT');await dialog.getByRole('button',{name:'Рассчитать',exact:true}).click()
   await expect(dialog).toContainText('Предварительный расчёт');expect(state.requests.find(r=>r.path.endsWith('/forecast')).body.interest_policy).toBe('FROM_PREPAYMENT')
   expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true)
 })

@@ -110,5 +110,11 @@
 .credits-screen .credit-overview{padding:14px}.credit-overview .credit-hero-amount{margin:8px 0 11px}.credit-overview .credit-key-metrics{padding-bottom:11px}.credit-overview .credit-bank-confirmation{margin-top:9px}
 .credit-forecast-comparison{display:grid;grid-template-columns:1fr 1fr;gap:10px;padding:12px 0;border-bottom:1px solid #E4EAE7}.credit-forecast-comparison small{display:block;color:#718078;font-size:10px;margin-bottom:5px}.credit-forecast-comparison b{font-size:14px}.credit-forecast-comparison>div:last-child b{color:#147F74}
 .credit-savings{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:14px 0;font-size:11px}.credit-savings b{font-size:18px;font-weight:600;color:#147F74}
+.credit-policy-field{display:grid;grid-template-columns:minmax(0,1fr) 28px;align-items:center;gap:6px;min-width:0}.credit-policy-field .f-help-button{width:26px;height:26px}
+.credit-forecast-outcome{border:1px solid #DDE9E2;border-radius:12px;padding:12px;margin-top:10px;background:#FAFCFB;min-width:0}.credit-forecast-outcome h4{font-size:12px;margin:0 0 10px;color:#526A5E}
+.credit-impact small{display:block;color:#61776B;font-size:11px;line-height:1.5}.credit-impact strong{display:block;font-size:22px;line-height:1.3;letter-spacing:-.3px;color:#147F74;margin:4px 0 12px}
+.credit-impact-compare{display:grid;grid-template-columns:1fr 1fr;gap:7px 12px;padding-bottom:12px;border-bottom:1px solid #E1EAE5}.credit-impact-compare>span{grid-column:1/-1;font-size:11px;color:#61776B}.credit-impact-compare small{display:block;font-size:10px;color:#7C8982;margin-bottom:4px}.credit-impact-compare b{font-size:13px;font-variant-numeric:tabular-nums}.credit-impact-compare>div:last-child b{color:#147F74}
+.credit-last-payment{display:flex;flex-direction:column;gap:5px;padding:10px 0;font-size:11px;line-height:1.45}.credit-last-payment b{font-weight:500;color:#147F74}.credit-last-payment span{color:#64766C;font-variant-numeric:tabular-nums}.credit-forecast-outcome details{font-size:11px;line-height:1.5}.credit-forecast-outcome .f-row{font-size:11px}
+.credit-policy-warning{font-size:11px;line-height:1.5;color:#6F644A;background:#FCF9F0;border-radius:8px;padding:10px}
 @keyframes credit-pdf-spin{to{transform:rotate(360deg)}}
 @media(prefers-reduced-motion:reduce){.credit-pdf-spinner{animation:none;border-right-color:#147F74}}

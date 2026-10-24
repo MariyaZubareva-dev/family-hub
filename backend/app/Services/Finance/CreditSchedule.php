@@ -68,14 +68,15 @@ class CreditSchedule
         usort($result,fn($a,$b)=>strcmp($a['date'],$b['date']));return $result;
     }
     /** Replay new prepayments against the original bank intervals, without changing the bank graph. */
-    public function projection(Credit $credit,?array $scenario=null): array
+    public function projection(Credit $credit,?array $scenario=null,?string $defaultPolicy=null): array
     {
         $graph=$credit->bank_schedule;
         abort_unless($graph && ($graph['complete']??false),422,'Для пересчёта даты окончания нужен полный график банка.');
-        abort_if(($graph['stale']??false)&&($graph['stale_reason']??'CONTRACT')==='CONTRACT',422,'Условия кредита изменились. Загрузите новый график банка.');
-        $basis=$this->prepaymentBasis($credit,$graph['as_of']);
-        abort_if($basis!==($graph['prepayment_basis']??[]),422,'Изменён платёж, уже учтённый в исходном остатке. Обновите график банка.');
+        abort_if(($graph['stale']??false)&&($graph['stale_reason']??'CONTRACT')==='CONTRACT',422,'Условия кредита изменились после загрузки графика. Откройте «Данные» и загрузите новый график банка.');
+        // The bank opening balance already includes every payment up to as_of.
+        // Journal edits before that date must not change or block this calculation basis.
         $events=$credit->prepayments->filter(fn($p)=>$p->paid_on->toDateString()>$graph['as_of'])->sortBy(fn($p)=>$p->paid_on->toDateString().$p->id)->values();
+        if($defaultPolicy)$events=$events->map(function($p)use($defaultPolicy){$copy=clone $p;if(!$copy->interest_policy)$copy->interest_policy=$defaultPolicy;return $copy;});
         if($scenario){$event=new \App\Models\CreditPrepayment([...$scenario,'id'=>'zz_scenario']);$events=$events->push($event)->sortBy(fn($p)=>$p->paid_on->toDateString().$p->id)->values();}
         $future=[];$opening=$this->cents($graph['opening_balance']);$previous=$graph['as_of'];
         foreach($graph['rows'] as $row){$future[]=[...$row,'opening'=>$opening,'previous_date'=>$previous];$opening=$this->cents($row['balance']);$previous=$row['date'];}
@@ -107,10 +108,11 @@ class CreditSchedule
     private function applyEvent($event,Credit $credit,array $future,int $i,string $date,int &$balance,float &$accrued,float &$scale): array
     {
         $policy=$event->interest_policy;
-        abort_if(!$policy&&array_sum(array_column($future,'interest'))>0,422,'Укажите порядок списания процентов у досрочного платежа от '.CarbonImmutable::parse($date)->format('d.m.Y').'.');
+        abort_if(!$policy&&array_sum(array_column($future,'interest'))>0,422,'Откройте «История» и измените досрочный платёж от '.CarbonImmutable::parse($date)->format('d.m.Y').': укажите, вычел ли банк проценты из внесённой суммы.');
         $amount=$this->cents($event->amount);$interest=$policy==='FROM_PREPAYMENT'?min($amount,(int)round($accrued)):0;
         $principal=$amount-$interest;
-        abort_if($principal<=0||$principal>$balance,422,'Досрочная сумма не соответствует основному долгу. Сверьте платёж с банком.');
+        abort_if($principal<=0,422,'Вся сумма уйдёт на проценты. Увеличьте сумму, чтобы уменьшить долг.');
+        abort_if($principal>$balance,422,'Сумма больше оставшегося долга. Укажите меньшую сумму.');
         $balance-=$principal;$accrued-=$interest;
         if(($event->recalculation_mode?:$credit->recalculation_mode)==='PAYMENT'&&$balance>0){
             $remaining=array_slice($future,$i);abort_unless($remaining,422,'После досрочного платежа нет будущих строк графика.');
@@ -135,21 +137,40 @@ class CreditSchedule
     }
     public function forecast(Credit $credit,array $data,string $today): array
     {
+        if($data['interest_policy']==='AUTO'){
+            $variants=[];$errors=[];
+            foreach(['NEXT_PAYMENT','FROM_PREPAYMENT'] as $policy){
+                try{$variants[]=$this->forecast($credit,[...$data,'interest_policy'=>$policy],$today);}
+                catch(\Symfony\Component\HttpKernel\Exception\HttpException $e){if($e->getStatusCode()!==422)throw $e;$errors[]=['interest_policy'=>$policy,'message'=>$e->getMessage()];}
+            }
+            abort_unless($variants,422,$errors[0]['message']??'Не удалось рассчитать. Проверьте сумму и дату платежа.');
+            $impact=fn($v)=>[$v['last_payment_date'],$v['payment_after'],$v['final_payment_after'],$v['interest_saved']];
+            $different=count($errors)>0||(count($variants)>1&&$impact($variants[0])!==$impact($variants[1]));
+            return [...$variants[0],'interest_policy'=>'AUTO','policy_variants'=>$variants,'policy_errors'=>$errors,'policy_changes_result'=>$different];
+        }
         $graph=$credit->bank_schedule;
         abort_unless($graph && !empty($graph['rows']),422,'Сначала добавьте график банка.');
         $date=$data['paid_on'];
         abort_unless($date>=max($today,$graph['as_of']),422,'Дата расчёта не может быть раньше сегодняшнего дня и даты исходного остатка.');
-        $before=$this->projection($credit);
+        $before=$this->projection($credit,null,$data['interest_policy']);
         abort_unless($date<$before['last_payment_date'],422,'Выберите дату до расчётного окончания кредита.');
-        $after=$this->projection($credit,$data);
+        $after=$this->projection($credit,$data,$data['interest_policy']);
         $original=array_values(array_filter($before['rows'],fn($row)=>$row['date']>$date));
         $rows=array_values(array_filter($after['rows'],fn($row)=>$row['date']>$date));
         $interestBefore=array_sum(array_column($before['rows'],'interest'))+array_sum(array_column($before['applied_prepayments'],'interest'));
         $interestAfter=array_sum(array_column($after['rows'],'interest'))+array_sum(array_column($after['applied_prepayments'],'interest'));
+        $interval=CarbonImmutable::parse($after['last_payment_date'])->diff(CarbonImmutable::parse($before['last_payment_date']));
+        $paymentBefore=$original[0]['payment']??0;$paymentAfter=$rows[0]['payment']??0;
+        $lastBefore=$original?end($original)['payment']:0;$lastAfter=$rows?end($rows)['payment']:0;
         return ['kind'=>'ESTIMATE','basis'=>'BANK_SCHEDULE','interest_policy'=>$data['interest_policy'],'recalculation_mode'=>$data['recalculation_mode'],
             'prepayment'=>$after['applied_prepayments']['zz_scenario'],'next_payment'=>$rows[0]??null,'last_payment_date'=>$after['last_payment_date'],
             'original_last_payment_date'=>$before['last_payment_date'],'payments_removed'=>count($original)-count($rows),'interest_saved'=>round($interestBefore-$interestAfter,2),'rows'=>$rows,
-            'assumptions'=>['Расчёт основан на графике банка и сохранённых досрочных платежах. Журнал регулярных оплат не меняет суммы и проценты банковского графика.','Плановые платежи считаются внесёнными по графику; в день досрочного погашения сначала проходит плановый платёж.','Проценты распределяются по дням каждого банковского интервала. Фактическое округление и изменение условий определяет банк.']];
+            'payment_before'=>$paymentBefore,'payment_after'=>$paymentAfter,'payment_reduction'=>round($paymentBefore-$paymentAfter,2),
+            'remaining_payments_before'=>count($original),'remaining_payments_after'=>count($rows),
+            'term_reduction_months'=>$interval->invert?0:$interval->y*12+$interval->m,'term_reduction_days'=>$interval->invert?0:$interval->d,
+            'final_payment_before'=>$lastBefore,'final_payment_after'=>$lastAfter,'final_payment_reduction'=>round($lastBefore-$lastAfter,2),
+            'bank_snapshot_date'=>$graph['as_of'],
+            'assumptions'=>['Берём долг и проценты из банковского графика на '.CarbonImmutable::parse($graph['as_of'])->format('d.m.Y').'. Прошлые оплаты уже учтены в этой сумме.','Обычные платежи вносятся вовремя. Если досрочный платёж в ту же дату, сначала проходит обычный.','Это предварительная оценка. Точные суммы и даты после досрочной оплаты подтвердит банк.']];
     }
     private function simulate(array $future,string $date,int $balance,int $carry,float $scale,bool $clip): array
     {

@@ -88,7 +88,7 @@ class CreditLedgerController extends BaseApiController
     {
         $loan=$this->credit($request,$credit);$loan->load('payments');
         $data=$request->validate(['paid_on'=>['required','date_format:Y-m-d'],'amount'=>['required','numeric','gt:0'],
-            'recalculation_mode'=>['required','in:TERM,PAYMENT'],'interest_policy'=>['required','in:NEXT_PAYMENT,FROM_PREPAYMENT']]);
+            'recalculation_mode'=>['required','in:TERM,PAYMENT'],'interest_policy'=>['required','in:NEXT_PAYMENT,FROM_PREPAYMENT,AUTO']]);
         return response()->json(['data'=>$schedule->forecast($loan,$data,now($loan->family->timezone?:'Europe/Moscow')->toDateString())]);
     }
     public function importPdf(Request $request,string $credit,\App\Services\Finance\CreditPdfImporter $importer): JsonResponse

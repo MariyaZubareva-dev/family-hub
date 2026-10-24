@@ -146,7 +146,7 @@ class CreditLedgerTest extends TestCase
     {
         $this->putJson($this->url('bank-schedule'),$this->graph())->assertOk();
         $id=$this->postJson($this->url('prepayments'),['paid_on'=>'2026-10-22','amount'=>100,'recalculation_mode'=>'TERM'])->assertCreated()->json('data.id');
-        $this->postJson($this->url('forecast'),$this->forecast())->assertUnprocessable();
+        $this->postJson($this->url('forecast'),$this->forecast())->assertOk();
         $this->getJson('/api/v1/credits')->assertJsonPath('data.0.summary.bank_schedule_stale',true);
         $this->deleteJson('/api/v1/credit-prepayments/'.$id)->assertNoContent();
         $this->getJson('/api/v1/credits')->assertJsonCount(0,'data.0.prepayments');
@@ -166,7 +166,7 @@ class CreditLedgerTest extends TestCase
         $this->getJson('/api/v1/credits')->assertJsonPath('data.0.summary.estimated_last_payment_date','2027-01-22');
         $this->assertEquals($graph['rows'],$this->credit->fresh()->bank_schedule['rows']);
     }
-    public function test_reimport_includes_existing_prepayments_once_and_changed_basis_requires_bank_graph(): void
+    public function test_history_edits_before_bank_snapshot_do_not_reapply_old_prepayments_or_block_calculator(): void
     {
         $graph=$this->graph();$graph['as_of']='2026-10-01';$this->putJson($this->url('bank-schedule'),$graph)->assertOk();
         $id=$this->postJson($this->url('prepayments'),['paid_on'=>'2026-10-04','amount'=>200,'recalculation_mode'=>'TERM'])->json('data.id');
@@ -176,7 +176,64 @@ class CreditLedgerTest extends TestCase
         $this->postJson($this->url('prepayments'),['paid_on'=>'2026-10-22','amount'=>200,'recalculation_mode'=>'TERM'])->assertCreated();
         $this->getJson('/api/v1/credits')->assertJsonPath('data.0.summary.estimated_last_payment_date','2026-11-22');
         $this->patchJson('/api/v1/credit-prepayments/'.$id,['amount'=>150])->assertOk();
-        $this->getJson('/api/v1/credits')->assertJsonPath('data.0.summary.estimated_last_payment_date',null)->assertJsonPath('data.0.summary.projection_error','Изменён платёж, уже учтённый в исходном остатке. Обновите график банка.');
+        $this->getJson('/api/v1/credits')->assertJsonPath('data.0.summary.estimated_last_payment_date','2026-11-22')->assertJsonPath('data.0.summary.projection_error',null);
+        $this->postJson($this->url('forecast'),$this->forecast())->assertOk()->assertJsonPath('data.prepayment.principal',100)->assertJsonPath('data.payment_after',100);
+        $this->assertEquals(400,$this->credit->fresh()->bank_schedule['opening_balance']);
+    }
+    public function test_forecast_compares_payment_and_term_in_money_calendar_time_and_payment_count(): void
+    {
+        $this->putJson($this->url('bank-schedule'),$this->graph())->assertOk();
+        $this->postJson($this->url('forecast'),$this->forecast(['amount'=>200]))->assertOk()
+            ->assertJsonPath('data.payment_before',200)->assertJsonPath('data.payment_after',200)->assertJsonPath('data.payment_reduction',0)
+            ->assertJsonPath('data.term_reduction_months',1)->assertJsonPath('data.term_reduction_days',0)
+            ->assertJsonPath('data.remaining_payments_before',3)->assertJsonPath('data.remaining_payments_after',2);
+        $result=$this->postJson($this->url('forecast'),$this->forecast(['recalculation_mode'=>'PAYMENT']))->assertOk()->json('data');
+        $this->assertEqualsWithDelta(166.67,$result['payment_after'],0.01);$this->assertEqualsWithDelta(33.33,$result['payment_reduction'],0.01);
+        $this->assertEquals(0,$result['term_reduction_months']);$this->assertEquals('2027-01-22',$result['last_payment_date']);
+    }
+    public function test_small_term_prepayment_can_reduce_last_payment_without_removing_a_month(): void
+    {
+        $this->putJson($this->url('bank-schedule'),$this->graph())->assertOk();
+        $this->postJson($this->url('forecast'),$this->forecast(['amount'=>10]))->assertOk()
+            ->assertJsonPath('data.term_reduction_months',0)->assertJsonPath('data.term_reduction_days',0)->assertJsonPath('data.payments_removed',0)
+            ->assertJsonPath('data.final_payment_before',200)->assertJsonPath('data.final_payment_after',190)->assertJsonPath('data.final_payment_reduction',10);
+    }
+    public function test_legacy_snapshot_without_prepayment_metadata_still_calculates_after_past_record_edit(): void
+    {
+        $this->putJson($this->url('bank-schedule'),$this->graph())->assertOk();
+        $graph=$this->credit->fresh()->bank_schedule;unset($graph['prepayment_basis']);$this->credit->update(['bank_schedule'=>$graph]);
+        $id=$this->postJson($this->url('prepayments'),['paid_on'=>'2026-10-04','amount'=>100,'recalculation_mode'=>'TERM'])->assertCreated()->json('data.id');
+        $this->patchJson('/api/v1/credit-prepayments/'.$id,['amount'=>150])->assertOk();
+        $this->postJson($this->url('forecast'),$this->forecast())->assertOk()->assertJsonPath('data.payment_before',200)->assertJsonPath('data.final_payment_after',100);
+        $this->assertEquals(600,$this->credit->fresh()->bank_schedule['opening_balance']);
+    }
+    public function test_unknown_interest_rule_calculates_both_variants_without_writing_records(): void
+    {
+        $this->putJson($this->url('bank-schedule'),$this->graph())->assertOk();
+        $this->postJson($this->url('forecast'),$this->forecast(['interest_policy'=>'AUTO']))->assertOk()
+            ->assertJsonPath('data.interest_policy','AUTO')->assertJsonPath('data.policy_changes_result',false)->assertJsonCount(2,'data.policy_variants');
+        $this->assertDatabaseCount('credit_prepayments',0);$this->assertDatabaseCount('credit_payments',0);
+    }
+    public function test_unknown_interest_rule_reports_differences_and_a_variant_that_only_covers_interest(): void
+    {
+        $graph=['as_of'=>'2026-10-01','opening_balance'=>1000,'base_version'=>0,'rows'=>[
+            ['date'=>'2026-11-01','payment'=>510,'principal'=>500,'interest'=>10,'fees'=>0,'balance'=>500],
+            ['date'=>'2026-12-01','payment'=>507,'principal'=>500,'interest'=>7,'fees'=>0,'balance'=>0],
+        ]];$this->putJson($this->url('bank-schedule'),$graph)->assertOk();
+        $result=$this->postJson($this->url('forecast'),$this->forecast(['interest_policy'=>'AUTO','amount'=>200]))->assertOk()->assertJsonPath('data.policy_changes_result',true)->assertJsonCount(2,'data.policy_variants')->json('data');
+        $this->assertNotEquals($result['policy_variants'][0]['prepayment']['principal'],$result['policy_variants'][1]['prepayment']['principal']);
+        $this->postJson($this->url('forecast'),$this->forecast(['interest_policy'=>'AUTO','amount'=>1]))->assertOk()->assertJsonPath('data.policy_changes_result',true)
+            ->assertJsonCount(1,'data.policy_variants')->assertJsonCount(1,'data.policy_errors')->assertJsonPath('data.policy_errors.0.interest_policy','FROM_PREPAYMENT');
+    }
+    public function test_unknown_rule_in_saved_future_prepayment_is_assumed_only_in_calculator_not_saved_to_database(): void
+    {
+        $graph=['as_of'=>'2026-10-01','opening_balance'=>1000,'base_version'=>0,'rows'=>[
+            ['date'=>'2026-11-01','payment'=>510,'principal'=>500,'interest'=>10,'fees'=>0,'balance'=>500],
+            ['date'=>'2026-12-01','payment'=>507,'principal'=>500,'interest'=>7,'fees'=>0,'balance'=>0],
+        ]];$this->putJson($this->url('bank-schedule'),$graph)->assertOk();
+        $id=$this->postJson($this->url('prepayments'),['paid_on'=>'2026-10-11','amount'=>100,'recalculation_mode'=>'TERM'])->assertCreated()->json('data.id');
+        $this->postJson($this->url('forecast'),$this->forecast(['interest_policy'=>'AUTO','amount'=>100]))->assertOk()->assertJsonCount(2,'data.policy_variants');
+        $this->assertDatabaseHas('credit_prepayments',['id'=>$id,'interest_policy'=>null]);
     }
     public function test_interest_policy_and_actual_event_dates_drive_projection_without_using_upload_date(): void
     {
