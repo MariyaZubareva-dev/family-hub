@@ -7,7 +7,7 @@ use Symfony\Component\Process\Process;
 
 class ReceiptRecognizer
 {
-    public const VERSION = 'table-v5';
+    public const VERSION = 'table-v6';
     private array $ocrAttempts=[];
     private ?string $ocrFailure=null;
 
@@ -132,7 +132,9 @@ class ReceiptRecognizer
                 if ($mode==='6' && (($candidate['total']>0 && $valid>=3)||$valid>=8||$index===3)) {
                     // One candidate is kept; separate passes never add the same items twice.
                     $attempts=array_slice($attempts,0,$index+1);
-                    $attempts[]=[$bestAngle,'4']; $attempts[]=[$bestAngle,'11'];
+                    $attempts[]=[$bestAngle,'4'];
+                    if (max(imagesx($source),imagesy($source))>1800 && max(imagesx($source),imagesy($source))>min(imagesx($source),imagesy($source))*2.5) $attempts[]=[$bestAngle,'bands'];
+                    $attempts[]=[$bestAngle,'11'];
                 }
             }
             if (!$payload['items'] && $payload['total']===null && $this->ocrFailure) $payload['review_reason']=$this->ocrFailure;
@@ -145,6 +147,7 @@ class ReceiptRecognizer
 
     protected function readText(string $path,string $mode,float $deadline): ?string
     {
+        if ($mode==='bands') return $this->readBands($path,$deadline);
         $process=new Process(['tesseract',$path,'stdout','-l','rus+eng','--psm',$mode]);
         // Four OCR threads on a one-core VPS can exceed the timeout on a long receipt.
         $process->setEnv(['OMP_THREAD_LIMIT'=>'1']);
@@ -163,6 +166,74 @@ class ReceiptRecognizer
             }
         }
         return $process->isSuccessful()?trim($process->getOutput()):null;
+    }
+
+    private function readBands(string $path,float $deadline): ?string
+    {
+        $image=@imagecreatefrompng($path);
+        if (!$image) return null;
+        $tmp=tempnam(sys_get_temp_dir(),'receipt_band_'); $text=[];
+        try {
+            if ($tmp===false) return null;
+            $height=imagesy($image); $width=imagesx($image);
+            $count=8;
+            for ($i=0;$i<$count;$i++) {
+                if (microtime(true)>=$deadline) return null; // Never rank a truncated pass as a full receipt.
+                $start=(int)floor($height*$i/$count); $end=(int)floor($height*($i+1)/$count);
+                $top=max(0,$start-60); $bottom=min($height,$end+60);
+                $band=imagecrop($image,['x'=>0,'y'=>$top,'width'=>$width,'height'=>$bottom-$top]);
+                $angle=$this->bandAngle($band);
+                $straight=imagerotate($band,$angle,0xffffff);
+                try { imagepng($straight,$tmp,1); $straightHeight=imagesy($straight); }
+                finally { imagedestroy($band); imagedestroy($straight); }
+                $process=new Process(['tesseract',$tmp,'stdout','-l','rus+eng','--psm','6','tsv']);
+                $process->setEnv(['OMP_THREAD_LIMIT'=>'1']);
+                $process->setTimeout(max(.1,min(25,$deadline-microtime(true))));
+                $began=microtime(true); $timedOut=false;
+                try { $process->run(); }
+                catch (\Symfony\Component\Process\Exception\ProcessTimedOutException $e) { $timedOut=true; $this->ocrFailure='OCR_TIMEOUT'; }
+                $this->ocrAttempts[]=['mode'=>'band-'.$i,'elapsed_ms'=>(int)round((microtime(true)-$began)*1000),'timed_out'=>$timedOut,'exit_code'=>$process->getExitCode()];
+                if ($timedOut || !$process->isSuccessful()) return null;
+                $lines=[];
+                foreach (explode("\n",$process->getOutput()) as $row) {
+                    $cols=explode("\t",$row,12);
+                    if (count($cols)!==12 || $cols[0]!=='5' || trim($cols[11])==='') continue;
+                    $key=implode(':',array_slice($cols,1,4));
+                    $lines[$key]['words'][]=$cols[11];
+                    $lines[$key]['top']=min($lines[$key]['top']??PHP_INT_MAX,(int)$cols[7]);
+                    $lines[$key]['bottom']=max($lines[$key]['bottom']??0,(int)$cols[7]+(int)$cols[9]);
+                }
+                foreach ($lines as $line) {
+                    // Each physical row belongs to one band, even if two rows have identical text.
+                    $center=$top+($bottom-$top)/2+cos(deg2rad($angle))*(($line['top']+$line['bottom'])/2-$straightHeight/2);
+                    if ($center>=$start && $center<$end) $text[]=implode(' ',$line['words']);
+                }
+            }
+            return implode("\n",$text);
+        } finally { imagedestroy($image); if ($tmp!==false) @unlink($tmp); }
+    }
+
+    private function bandAngle($image): float
+    {
+        // A bent receipt can have different baseline angles at its top and bottom.
+        // Maximise the horizontal ink projection independently in each fragment.
+        $scale=min(1,500/imagesx($image));
+        $sample=imagescale($image,max(1,(int)(imagesx($image)*$scale)),max(1,(int)(imagesy($image)*$scale)));
+        try {
+            $points=[]; $w=imagesx($sample); $h=imagesy($sample);
+            for ($y=0;$y<$h;$y++) for ($x=0;$x<$w;$x++) {
+                $c=imagecolorat($sample,$x,$y);
+                if (max(($c>>16)&255,($c>>8)&255,$c&255)<150) $points[]=[$x-$w/2,$y-$h/2];
+            }
+            $best=0; $bestScore=0;
+            for ($step=-10;$step<=10;$step++) {
+                $angle=$step/2; $s=sin(deg2rad($angle)); $c=cos(deg2rad($angle)); $rows=[];
+                foreach ($points as [$x,$y]) { $row=(int)round(-$s*$x+$c*$y); $rows[$row]=($rows[$row]??0)+1; }
+                $score=array_sum(array_map(fn($count)=>$count*$count,$rows));
+                if ($score>$bestScore) { $best=$angle; $bestScore=$score; }
+            }
+            return $best;
+        } finally { imagedestroy($sample); }
     }
 
     private function ocrScore(array $payload): float
@@ -235,6 +306,28 @@ class ReceiptRecognizer
             }
             // Tax belongs to a product row. Parse the arithmetic before skipping tax/footer lines.
             $product=preg_replace('/\s+(?:[НH][ДDАAОOИIЦUN]?[СC]|VAT)\b.*$/ui','',$line);
+            $product=preg_replace('/\s+[A-ZА-Я]{2,4}\s+\d{1,3}%?$/ui','',$product);
+            $product=preg_replace('/(?<=\d)[`\x{0027}](?=\d{2}(?:\s|$))/u','.',$product);
+            // Table prices have their own column: a trailing pack size ("20 138.99")
+            // is part of the name, not a thousands separator in the unit price.
+            $cell='(\d+[.,]\s*\d{1,2})';
+            $amountCell='(\d+(?:[.,]| )\s*\d{2})';
+            if (preg_match('/^(.+?\p{L}.*?)\s+'.$cell.'\s+(.{1,14}?)\s*[=:]\s*'.$amountCell.'\s*$/u',$product,$m)) {
+                $price=$number($m[2]); $amount=$number(preg_replace('/ (\d{2})$/u', '.$1',$m[4]));
+                $token=trim($m[3]); $qty=null; $recovered=false;
+                if (preg_match('/^[xXхХ×*#жЖмМ«»+]?\s*(\d+(?:[.,]\d+)?)\.?$/u',$token,$q)) $qty=$number($q[1]);
+                // OCR substitutes a marker with 8/9/2 or a letter. Accept a repair
+                // only when the remaining printed number matches price × quantity.
+                if ($qty===null || abs(round($price*$qty,2)-$amount)>.02) {
+                    $clean=strtr($token,['|'=>'1',']'=>'1','!'=>'1']);
+                    if (preg_match('/^[^\d.,]{0,4}(\d+(?:[.,]\d+)?)$/u',$clean,$q) && abs(round($price*$number($q[1]),2)-$amount)<=.02) { $qty=$number($q[1]); $recovered=true; }
+                    elseif (preg_match('/^[892](\d+(?:[.,]\d+)?)$/u',$clean,$q) && abs(round($price*$number($q[1]),2)-$amount)<=.02) { $qty=$number($q[1]); $recovered=true; }
+                }
+                if ($price===0.0 && $amount===0.0 && $qty>0) continue;
+                $item=['name'=>mb_substr(trim($m[1]),0,255),'qty'=>$qty??0,'price'=>$price,'category'=>'Покупки'];
+                if ($sparseRow || $recovered || $qty===null || $qty<=0 || $price<=0 || abs(round($price*$qty,2)-$amount)>.02) $item['needs_review']=true;
+                $items[]=$item; continue;
+            }
             if (preg_match('/^(.+?\p{L}.*?)\s+'.$money.'\s*(?:[xXхХ×*#жЖмМ«]\s*|\s+)(\d+(?:[.,]\d+)?)\.?\s*=\s*'.$money.'\s*$/u',$product,$m)) {
                 $price=$number($m[2]); $qty=$number($m[3]); $amount=$number($m[4]);
                 // A free gift is not an expense; it does not change the receipt total.
@@ -247,7 +340,7 @@ class ReceiptRecognizer
             if (preg_match('/^(.+?\p{L}.*?)\s+'.$money.'\s*[xXхХ×*#жЖмМ«].*=.*$/u',$product,$m)) {
                 $items[]=['name'=>mb_substr(trim($m[1]),0,255),'qty'=>0,'price'=>$number($m[2]),'category'=>'Покупки','needs_review'=>true]; continue;
             }
-            if (preg_match('/итог|всего|сумма|оплат|налич|безнал|скидк|сдача|ндс|терминал|касс|фиск|ИНН|ФН|ФД|ФП|TOTAL|CASH|VISA|MASTERCARD/ui', $line)) continue;
+            if (preg_match('/итог|всего|сумма|оплат|налич|безнал|скидк|сдача|ндс|терминал|касс|фиск|ИНН|ФН|ФД|ФП|TOTAL|CASH|VISA|MASTERCARD|^(?:РОССИЯ\b|г\.|ул\.|адрес\b)/ui', $line)) continue;
             if (preg_match('/^(.+?\p{L}.*?)\s+'.$money.'\s*(?:[A-ZА-Я])?$/u', $line, $m)) {
                 $name = trim($m[1]); $amount = $number($m[2]); $qty = 1; $price = $amount;
                 if (preg_match('/^(.*?)\s+(\d+(?:[.,]\d+)?)\s*[xхХ*×]\s*'.$money.'\s*$/u', $name, $q)) {

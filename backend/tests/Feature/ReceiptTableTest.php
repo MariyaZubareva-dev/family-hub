@@ -7,6 +7,47 @@ use Tests\TestCase;
 
 class ReceiptTableTest extends TestCase
 {
+    public function test_pack_size_does_not_become_part_of_price_and_ambiguous_markers_require_review(): void
+    {
+        $p=(new ReceiptRecognizer)->parseText("г.Город, ул. Тестовая, д. 12\nПанировка 20 138.99 «1 =138.99 НДС 10%\nСливки 10 119.99 #1 =119.99 НДС 10%\nФиле 579.99 »0.940 =545.19 НДС 10%\nЯблоки 159.98 90.596 =95.35 НДС 10%\nХлеб 50.00 в] =50.00 НДС 10%\nИТОГО 949.52");
+        $this->assertCount(5,$p['items']);
+        $this->assertSame('Панировка 20',$p['items'][0]['name']);
+        $this->assertSame(138.99,$p['items'][0]['price']);
+        $this->assertSame(119.99,$p['items'][1]['price']);
+        $this->assertSame(0.94,$p['items'][2]['qty']);
+        $this->assertSame(0.596,$p['items'][3]['qty']);
+        $this->assertTrue($p['items'][3]['needs_review']);
+        $this->assertSame(1.0,$p['items'][4]['qty']);
+        $this->assertTrue($p['items'][4]['needs_review']);
+    }
+
+    public function test_damaged_quantity_is_not_invented_from_total(): void
+    {
+        $p=(new ReceiptRecognizer)->parseText("Товар 100.00 *? =200.00 НДС 10%\nИТОГО 200.00");
+        $this->assertCount(1,$p['items']);
+        $this->assertSame(0,$p['items'][0]['qty']);
+        $this->assertTrue($p['items'][0]['needs_review']);
+    }
+
+    public function test_overlapping_ocr_fragments_preserve_repeated_products_once_per_physical_row(): void
+    {
+        $reader=new class extends ReceiptRecognizer {
+            public function fragments(string $path): ?string { return $this->readText($path,'bands',microtime(true)+35); }
+        };
+        $im=imagecreatetruecolor(600,2400); imagefill($im,0,0,0xffffff);
+        for ($i=0;$i<24;$i++) imagestring($im,5,40,40+$i*92,'MILK 100.00 *2 =200.00 VAT 10%',0);
+        $path=tempnam(sys_get_temp_dir(),'bands_test_');
+        try {
+            imagepng($im,$path);
+            $p=$reader->parseText($reader->fragments($path)??'');
+            $this->assertCount(24,$p['items']);
+            foreach ($p['items'] as $item) {
+                $this->assertSame(2.0,$item['qty']);
+                $this->assertSame(100.0,$item['price']);
+            }
+        } finally { imagedestroy($im); @unlink($path); }
+    }
+
     public function test_table_receipt_keeps_quantity_price_and_weight_and_ignores_tax_and_free_gifts(): void
     {
         $text="Магазин\nЙогурт 120.00 *2 =240.00 НДС 10%\nАпельсины вес 300,00 x0,650 =195,00 НДС 10%\nПодарок 0.00 *1 =0.00 НДС 22%\nИТОГО К ОПЛАТЕ =435.00\nБЕЗНАЛИЧНЫМИ =435.00\nСУММА НДС 10% =39.55\nВАША СКИДКА 10.00\n24.10.26 18:11";
@@ -136,7 +177,7 @@ class ReceiptTableTest extends TestCase
         $exit=\Illuminate\Support\Facades\Artisan::call('family:check-receipt-ocr');
         $out=json_decode(\Illuminate\Support\Facades\Artisan::output(),true);
         $this->assertSame(0,$exit);
-        $this->assertSame('table-v5',$out['OCR_VERSION']);
+        $this->assertSame('table-v6',$out['OCR_VERSION']);
         $this->assertTrue($out['OCR_ROTATION_OK']);
         $this->assertTrue($out['OCR_LONG_RECEIPT_PROCESSED']);
         $this->assertGreaterThan(0,$out['OCR_LONG_ITEM_COUNT']);

@@ -71,6 +71,14 @@ class ReceiptCategoryMatcherTest extends TestCase
         foreach ($result['items'] as $item) { $this->assertSame($fallback->id,$item['category_id']); $this->assertTrue($item['category_needs_review']); }
     }
 
+    public function test_receipt_food_names_use_existing_food_category_without_changing_values(): void
+    {
+        $food=$this->category('Продукты'); $this->category('Покупки');
+        $p=$this->match(['СУП YELLI С НУТОМ','ПАНИРОВКА 20','СЛИВКИ 10','ФАРШ ДОМАШНИЙ','ФИЛЕ КУР','БАТАРЕЙКИ']);
+        foreach (array_slice($p['items'],0,5) as $item) $this->assertSame($food->id,$item['category_id']);
+        $this->assertTrue($p['items'][5]['category_needs_review']);
+    }
+
     public function test_latest_confirmed_family_choice_wins_but_drafts_and_deleted_receipts_do_not_teach(): void
     {
         $food=$this->category('Продукты'); $custom=$this->category('Для детей'); $fallback=$this->category('Покупки');
