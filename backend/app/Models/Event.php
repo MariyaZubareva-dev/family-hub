@@ -12,9 +12,10 @@ class Event extends Model
 {
     use HasUlids, SoftDeletes;
     protected $guarded = [];
+    protected $dateFormat = 'Y-m-d H:i:sP';
     protected $keyType = 'string';
     public $incrementing = false;
-    protected $casts = ['start_at' => 'datetime', 'end_at' => 'datetime'];
+    protected $casts = ['responsible_member_ids' => 'array', 'start_at' => 'datetime', 'end_at' => 'datetime'];
     public function family(): BelongsTo { return $this->belongsTo(Family::class); }
     public function creator(): BelongsTo { return $this->belongsTo(User::class, 'created_by'); }
     public function responsibleMember(): BelongsTo { return $this->belongsTo(FamilyMember::class, 'responsible_member_id'); }

@@ -1,0 +1,102 @@
+name: CI
+
+on:
+  push:
+    branches: [main, 'feature/**']
+  pull_request:
+
+jobs:
+  frontend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+      - run: npm run build
+      - run: npx playwright install --with-deps chromium --only-shell
+      - run: npm run test:ui
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: family-ui-results
+          path: frontend/test-results
+          retention-days: 7
+
+  backend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_DB: family_hub
+          POSTGRES_USER: family_hub
+          POSTGRES_PASSWORD: family_hub
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U family_hub -d family_hub"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.5'
+          extensions: mbstring, intl, pdo_pgsql, gd
+          coverage: none
+      - run: mkdir -p bootstrap/cache storage/framework/cache/data storage/framework/sessions storage/framework/views storage/logs
+      - run: composer install --no-interaction --prefer-dist
+      - run: cp .env.example .env
+      - run: php artisan key:generate
+      - run: php artisan migrate --force
+        env:
+          DB_CONNECTION: pgsql
+          DB_HOST: 127.0.0.1
+          DB_PORT: 5432
+          DB_DATABASE: family_hub
+          DB_USERNAME: family_hub
+          DB_PASSWORD: family_hub
+      - name: Check shopping and cashback APIs before OCR tool setup
+        run: vendor/bin/phpunit --filter 'StoreListTest|PlannedPurchaseApiTest|CashbackBankTest|CreditLedgerTest'
+        env:
+          DB_CONNECTION: pgsql
+          DB_HOST: 127.0.0.1
+          DB_PORT: 5432
+          DB_DATABASE: family_hub
+          DB_USERNAME: family_hub
+          DB_PASSWORD: family_hub
+      - run: sudo apt-get update -qq && sudo apt-get install -y tesseract-ocr tesseract-ocr-rus tesseract-ocr-eng zbar-tools qrencode poppler-utils
+      - run: vendor/bin/phpunit
+        env:
+          DB_CONNECTION: pgsql
+          DB_HOST: 127.0.0.1
+          DB_PORT: 5432
+          DB_DATABASE: family_hub
+          DB_USERNAME: family_hub
+          DB_PASSWORD: family_hub
+
+  docker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - run: docker build -t family-hub-backend-ci ./backend
+      - name: Decode a fiscal QR using the production image and application user
+        run: docker run --rm family-hub-backend-ci php artisan family:check-receipt-qr
+      - name: Read rotated and long receipts in the production image on one CPU
+        run: docker run --rm --cpus=1 family-hub-backend-ci php artisan family:check-receipt-ocr
+      - run: docker build -t family-hub-frontend-ci ./frontend
+      - run: docker build -f backend/Dockerfile.nginx -t family-hub-backend-nginx-ci .
+      - run: cp .env.production.example .env.production
+      - run: docker compose --env-file .env.production -f docker-compose.prod.yml config --quiet

@@ -1,0 +1,72 @@
+/* Calendar follows the accepted Family / Finance density and form styles. */
+.calendar-page{width:100%;max-width:640px;margin-inline:auto;display:flex;flex-direction:column;gap:12px;min-width:0;padding-bottom:8px}
+.calendar-page :where(div,section,form,label){min-width:0}
+.calendar-page .section-title{align-items:center;min-height:36px}
+.calendar-page .section-title h2{font-size:23px;line-height:1.2}
+.calendar-page .card{padding:14px;border-radius:16px;border-color:#E5E9E6;box-shadow:0 2px 8px #1A1E2206;overflow:visible}
+.c-icon{width:32px;height:32px;flex:0 0 32px;display:grid;place-items:center;border:0;background:transparent;border-radius:9px;color:var(--primary);font-size:22px;cursor:pointer;padding:0}
+.c-icon:hover{background:#EAF4F0}
+.c-month-head{display:flex;align-items:center;gap:4px;margin-bottom:10px}
+.c-month-head h3{flex:1;margin:0;font-size:14px;font-weight:600;line-height:1.35;text-transform:capitalize}
+.c-today,.c-link{border:0;background:transparent;color:var(--primary);font:inherit;font-size:11px;min-height:32px;padding:4px 6px;cursor:pointer;border-radius:8px}
+.c-today{background:#EAF4F0;margin-left:4px}
+.c-weekdays,.c-grid{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:4px;text-align:center}
+.c-weekdays{font-size:10px;color:#718078;margin-bottom:4px;line-height:24px}
+.c-day{min-width:0;min-height:38px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:0;padding:3px 0;border:1px solid transparent;border-radius:9px;background:transparent;color:var(--text);font:inherit;cursor:pointer;font-variant-numeric:tabular-nums}
+.c-day>span{font-size:12px;line-height:16px;font-weight:500}
+.c-day>small{height:12px;font-size:10px;line-height:12px;color:var(--primary);font-weight:600}
+.c-day[aria-current=date]{background:#EAF4F0;color:var(--primary);font-weight:600}
+.c-day:hover{border-color:#BFD9CD}
+.c-day[aria-pressed=true]{background:var(--primary);color:#fff;border-color:var(--primary)}
+.c-day[aria-pressed=true]>small{color:#fff}
+.c-month-footer{display:flex;align-items:center;justify-content:space-between;min-height:32px;margin:4px 0 8px;font-size:11px;color:#718078;border-top:1px solid #EDF0ED}
+.c-create-actions{display:flex;gap:8px}
+.c-create-actions>.button{flex:1;min-width:0}
+.calendar-page .button{min-height:36px;padding:8px 10px;border-radius:9px;font-size:12px;box-shadow:none}
+.calendar-page .button.primary{background-image:linear-gradient(180deg,#147F74,#0F766E);box-shadow:0 2px 5px #0F766E18}
+.calendar-page button:disabled{opacity:.55;cursor:default;transform:none}
+.c-head{display:flex;align-items:center;justify-content:space-between;gap:8px;min-height:32px;margin-bottom:4px}
+.c-head h3{margin:0;font-size:14px;font-weight:600;line-height:1.35}
+.c-count{color:#718078;font-size:11px;font-weight:500;margin-left:4px}
+.c-entry{display:flex;align-items:flex-start;gap:9px;padding:12px 0;border-bottom:1px solid #EDF0ED}
+.c-entry:last-child{border-bottom:0;padding-bottom:0}
+.c-date{width:34px;flex:0 0 34px;background:#EAF4F0;border-radius:9px;padding:5px 0;display:flex;flex-direction:column;align-items:center;gap:1px;color:var(--primary)}
+.c-date b{font-size:14px;font-weight:600;line-height:16px;font-variant-numeric:tabular-nums}
+.c-date small{font-size:9px;line-height:12px}
+.c-copy{display:flex;flex:1;flex-direction:column;gap:4px;min-width:0}
+.c-copy strong{font-size:13px;font-weight:600;line-height:1.4;overflow-wrap:anywhere}
+.c-copy small,.c-kind{font-size:10px;color:#718078;line-height:1.4;overflow-wrap:anywhere}
+.c-kind{color:#64736B}
+.c-description{font-size:11px;color:#64736B;line-height:1.5;overflow-wrap:anywhere}
+.c-description summary{cursor:pointer;color:var(--primary);padding:4px 0}
+.c-description p{margin:4px 0;white-space:pre-wrap}
+.c-entry time{flex:0 0 auto;font-size:12px;font-weight:600;line-height:18px;font-variant-numeric:tabular-nums}
+.c-empty{padding:10px 0;margin:0;color:#64748B;font-size:12px;line-height:1.5}
+.c-message{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:9px 11px;border:1px solid #BFE5DC;background:#F0FDFA;color:#115E59;border-radius:10px;font-size:12px;line-height:1.5;overflow-wrap:anywhere}
+.c-error{background:#FFF1F2;border-color:#FECDD3;color:#9F1239}
+.calendar-page button:focus-visible,.c-description summary:focus-visible{outline:2px solid var(--primary);outline-offset:2px}
+@media(max-width:360px){.calendar-page .card{padding:12px}.c-month-head{gap:1px}.c-month-head h3{font-size:13px}.c-copy strong{font-size:12px}.c-entry{gap:7px}}
+/* Leave enough room for the full responsible-person label at 320px. */
+.calendar-page .finance-dialog .f-form-fields>.f-field:has(select){grid-template-columns:104px minmax(0,1fr)}
+.calendar-page .finance-dialog .f-field select{text-overflow:ellipsis}
+.c-responsibles{border:0;border-bottom:1px solid #E5ECE8;margin:0;padding:0 10px 4px;min-width:0}
+.c-responsibles legend{padding:8px 0 2px;font-size:12px;font-weight:500;color:#64736B}
+.c-responsibles legend>span{margin-left:5px;font-size:11px;color:var(--primary)}
+.c-responsibles>div{max-height:160px;overflow-y:auto}
+.c-responsibles label{display:flex;align-items:center;gap:8px;min-height:36px;padding:4px 0;font-size:13px;line-height:1.4;color:var(--text);cursor:pointer}
+.finance-dialog .c-responsibles input[type=checkbox]{appearance:auto;-webkit-appearance:checkbox;width:18px;height:18px;min-height:18px;flex:0 0 18px;margin:0;padding:0;accent-color:var(--primary)}
+.c-responsibles label>span{overflow-wrap:anywhere;min-width:0}
+.c-responsibles label:focus-within{outline:2px solid var(--primary);outline-offset:-2px;border-radius:4px}
+/* Start with one week; the full month is available on demand. */
+.calendar-page .c-month{padding:10px 12px}
+.c-month-head{margin-bottom:4px}
+.c-weekdays{line-height:18px;margin-bottom:0}
+.c-day{min-height:32px;padding:1px 0}
+.c-month-footer{margin:4px 0 6px;min-height:28px;gap:4px}
+.c-month-footer .c-link{font-size:10px;padding-inline:0;min-height:28px}
+.c-filters{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:3px;padding:3px;background:#EFF2F6;border-radius:10px}
+.c-filters button{min-width:0;min-height:32px;padding:5px 3px;background:transparent;border:0;border-radius:8px;font:inherit;font-size:11px;color:#64748B;cursor:pointer}
+.c-filters button[aria-selected=true]{background:#fff;color:var(--primary);box-shadow:0 1px 4px #0F172A0D}
+.c-filters small{font-size:9px;margin-left:2px}
+.c-zone{display:flex;align-items:center;gap:8px;justify-content:space-between;padding:8px 10px;border-bottom:1px solid #E5ECE8;font-size:11px;color:#64736B}
+.c-zone strong{font-weight:500;text-align:right;overflow-wrap:anywhere}

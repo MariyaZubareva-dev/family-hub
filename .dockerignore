@@ -1,9 +1,10 @@
-.DS_Store
 .git
-.gitignore
 .env
+.env.*
 **/.env
-frontend/node_modules
-frontend/dist
-backend/vendor
-backend/storage/logs/*
+**/.env.*
+**/node_modules
+**/vendor
+**/dist
+**/*.log
+.family-hub-*-backup-*/
