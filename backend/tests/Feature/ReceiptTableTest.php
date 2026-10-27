@@ -7,6 +7,16 @@ use Tests\TestCase;
 
 class ReceiptTableTest extends TestCase
 {
+    public function test_decimal_spaces_and_ocr_quantity_noise_keep_printed_arithmetic(): void
+    {
+        $p=(new ReceiptRecognizer)->parseText("Торт 724 99 *1 =724.99 НДС 10%\nСуп 100.00 81. =100.00 НДС 10%\nЯблоки 100.00 *0. 650 — =65.00 НДС 10%\nИТОГО 889.99");
+        $this->assertCount(3,$p['items']);
+        $this->assertSame(724.99,$p['items'][0]['price']);
+        $this->assertSame(1.0,$p['items'][1]['qty']);
+        $this->assertTrue($p['items'][1]['needs_review']);
+        $this->assertSame(0.65,$p['items'][2]['qty']);
+    }
+
     public function test_pack_size_does_not_become_part_of_price_and_ambiguous_markers_require_review(): void
     {
         $p=(new ReceiptRecognizer)->parseText("г.Город, ул. Тестовая, д. 12\nПанировка 20 138.99 «1 =138.99 НДС 10%\nСливки 10 119.99 #1 =119.99 НДС 10%\nФиле 579.99 »0.940 =545.19 НДС 10%\nЯблоки 159.98 90.596 =95.35 НДС 10%\nХлеб 50.00 в] =50.00 НДС 10%\nИТОГО 949.52");
@@ -177,7 +187,7 @@ class ReceiptTableTest extends TestCase
         $exit=\Illuminate\Support\Facades\Artisan::call('family:check-receipt-ocr');
         $out=json_decode(\Illuminate\Support\Facades\Artisan::output(),true);
         $this->assertSame(0,$exit);
-        $this->assertSame('table-v6',$out['OCR_VERSION']);
+        $this->assertSame('table-v7',$out['OCR_VERSION']);
         $this->assertTrue($out['OCR_ROTATION_OK']);
         $this->assertTrue($out['OCR_LONG_RECEIPT_PROCESSED']);
         $this->assertGreaterThan(0,$out['OCR_LONG_ITEM_COUNT']);

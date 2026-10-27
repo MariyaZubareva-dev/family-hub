@@ -62,7 +62,10 @@ class ReceiptCategoryMatcher
 
     private function normalize(string $value): string
     {
-        return trim(preg_replace('/[^\p{L}\p{N}]+/u',' ',str_replace('ё','е',mb_strtolower($value))));
+        $value=trim(preg_replace('/[^\p{L}\p{N}]+/u',' ',str_replace('ё','е',mb_strtolower($value))));
+        // Interpret OCR aliases only in a cheese context, preserving arbitrary brands.
+        if (preg_match('/^(?:сыр|с[иiуuyыw]?[рp]|[cс][иiуuyыw][рp]) (?=село|pretto|рико|город|горо)/u',$value)) $value=preg_replace('/^\S+/u','сыр',$value);
+        return $value;
     }
 
     private function contains(string $name, string $pattern): bool

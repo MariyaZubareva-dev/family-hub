@@ -7,7 +7,7 @@ use Symfony\Component\Process\Process;
 
 class ReceiptRecognizer
 {
-    public const VERSION = 'table-v6';
+    public const VERSION = 'table-v7';
     private array $ocrAttempts=[];
     private ?string $ocrFailure=null;
 
@@ -310,18 +310,20 @@ class ReceiptRecognizer
             $product=preg_replace('/(?<=\d)[`\x{0027}](?=\d{2}(?:\s|$))/u','.',$product);
             // Table prices have their own column: a trailing pack size ("20 138.99")
             // is part of the name, not a thousands separator in the unit price.
-            $cell='(\d+[.,]\s*\d{1,2})';
+            $cell='(\d+(?:[.,]\s*\d{1,2}| \d{2}))';
             $amountCell='(\d+(?:[.,]| )\s*\d{2})';
             if (preg_match('/^(.+?\p{L}.*?)\s+'.$cell.'\s+(.{1,14}?)\s*[=:]\s*'.$amountCell.'\s*$/u',$product,$m)) {
-                $price=$number($m[2]); $amount=$number(preg_replace('/ (\d{2})$/u', '.$1',$m[4]));
+                $price=$number(preg_replace('/ (\d{2})$/u', '.$1',$m[2])); $amount=$number(preg_replace('/ (\d{2})$/u', '.$1',$m[4]));
                 $token=trim($m[3]); $qty=null; $recovered=false;
+                $token=preg_replace('/\s*[—–_-]+\s*$/u','',$token);
+                $token=preg_replace('/(?<=\d)[.,]\s+(?=\d)/u','.',$token);
                 if (preg_match('/^[xXхХ×*#жЖмМ«»+]?\s*(\d+(?:[.,]\d+)?)\.?$/u',$token,$q)) $qty=$number($q[1]);
                 // OCR substitutes a marker with 8/9/2 or a letter. Accept a repair
                 // only when the remaining printed number matches price × quantity.
                 if ($qty===null || abs(round($price*$qty,2)-$amount)>.02) {
                     $clean=strtr($token,['|'=>'1',']'=>'1','!'=>'1']);
                     if (preg_match('/^[^\d.,]{0,4}(\d+(?:[.,]\d+)?)$/u',$clean,$q) && abs(round($price*$number($q[1]),2)-$amount)<=.02) { $qty=$number($q[1]); $recovered=true; }
-                    elseif (preg_match('/^[892](\d+(?:[.,]\d+)?)$/u',$clean,$q) && abs(round($price*$number($q[1]),2)-$amount)<=.02) { $qty=$number($q[1]); $recovered=true; }
+                    elseif (preg_match('/^[2489](\d+(?:[.,]\d+)?)\.?$/u',$clean,$q) && abs(round($price*$number($q[1]),2)-$amount)<=.02) { $qty=$number($q[1]); $recovered=true; }
                 }
                 if ($price===0.0 && $amount===0.0 && $qty>0) continue;
                 $item=['name'=>mb_substr(trim($m[1]),0,255),'qty'=>$qty??0,'price'=>$price,'category'=>'Покупки'];
