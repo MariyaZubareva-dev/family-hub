@@ -5,10 +5,11 @@ type Item={id:string;name:string;quantity?:string|null;notes?:string|null;is_com
 const endpoint='/planned-purchases/store-items'
 const errorText=(e:unknown)=>e instanceof Error?e.message:'Не удалось сохранить изменения. Попробуйте ещё раз.'
 
-export default function StoreList({refreshVersion,onBusyChange}:{refreshVersion:number;onBusyChange:(busy:boolean)=>void}){
+export default function StoreList({refreshVersion,onBusyChange,initialAdd=false,onInitialAddConsumed}:{refreshVersion:number;onBusyChange:(busy:boolean)=>void;initialAdd?:boolean;onInitialAddConsumed?:()=>void}){
   const [items,setItems]=useState<Item[]>([]),[loading,setLoading]=useState(true),[busy,setBusy]=useState(false)
-  const [error,setError]=useState(''),[formError,setFormError]=useState(''),[show,setShow]=useState(false),[editing,setEditing]=useState<Item|null>(null),[deleting,setDeleting]=useState<Item|null>(null)
+  const [error,setError]=useState(''),[formError,setFormError]=useState(''),[show,setShow]=useState(initialAdd),[editing,setEditing]=useState<Item|null>(null),[deleting,setDeleting]=useState<Item|null>(null)
   const [name,setName]=useState(''),[quantity,setQuantity]=useState(''),[notes,setNotes]=useState('')
+  useEffect(()=>{if(initialAdd)onInitialAddConsumed?.()},[])
   const revision=useRef(0)
   const load=async()=>{
     const version=revision.current
@@ -26,7 +27,7 @@ export default function StoreList({refreshVersion,onBusyChange}:{refreshVersion:
   const save=async(e:FormEvent)=>{
     e.preventDefault();if(busy||!name.trim())return
     revision.current++;setBusy(true);setFormError('')
-    try{const j=await request(endpoint+(editing?'/'+editing.id:''),editing?'PATCH':'POST',{name:name.trim(),quantity:quantity.trim()||null,notes:notes.trim()||null});setItems(rows=>editing?rows.map(x=>x.id===editing.id?j.data:x):[j.data,...rows]);setShow(false)}catch(e){setFormError(errorText(e))}finally{setBusy(false)}
+    try{const j=await request(endpoint+(editing?'/'+editing.id:''),editing?'PATCH':'POST',{name:name.trim(),quantity:quantity.trim()||null,notes:notes.trim()||null});setItems(rows=>editing?rows.map(x=>x.id===editing.id?j.data:x):[j.data,...rows]);setShow(false);if(!editing)window.dispatchEvent(new Event('family-first-entry-saved'))}catch(e){setFormError(errorText(e))}finally{setBusy(false)}
   }
   const toggle=async(item:Item)=>{
     if(busy)return;revision.current++;setBusy(true);setError('')

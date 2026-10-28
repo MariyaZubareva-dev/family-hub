@@ -103,7 +103,7 @@ function CategorySelect({categories,type='EXPENSE',admin,value,onSelect,onCreate
   </>
 }
 
-export default function FinanceScreen({initialTab='overview',initialReceiptFile,onReceiptConsumed,initialCashbackFiles,onCashbackConsumed}:{initialTab?:Tab;initialReceiptFile?:File|null;onReceiptConsumed?:()=>void;initialCashbackFiles?:File[]|null;onCashbackConsumed?:()=>void}) {
+export default function FinanceScreen({initialExpense=false,onInitialExpenseConsumed,initialTab='overview',initialReceiptFile,onReceiptConsumed,initialCashbackFiles,onCashbackConsumed}:{initialExpense?:boolean;onInitialExpenseConsumed?:()=>void;initialTab?:Tab;initialReceiptFile?:File|null;onReceiptConsumed?:()=>void;initialCashbackFiles?:File[]|null;onCashbackConsumed?:()=>void}) {
   const [tab,setTab]=useState<Tab>(initialTab), [kind,setKind]=useState<Kind>('EXPENSE')
   const [period,setPeriod]=useState('month'), [categories,setCategories]=useState<Category[]>([])
   const [incomePeriod,setIncomePeriod]=useState('all'),[incomeLimit,setIncomeLimit]=useState(20)
@@ -122,6 +122,7 @@ export default function FinanceScreen({initialTab='overview',initialReceiptFile,
     } catch(e) {setError(errorText(e))} finally {setLoading(false)}
   }
   useEffect(()=>{void refresh()},[period])
+  useEffect(()=>{if(initialExpense&&!loading&&!error){setTx({type:'EXPENSE'});onInitialExpenseConsumed?.()}},[initialExpense,loading,error])
   useEffect(()=>{if(!notice)return;const t=setTimeout(()=>setNotice(''),7000);return()=>clearTimeout(t)},[notice])
   const done=(text:string)=>{setNotice(text);void refresh()}
   const rememberCategory=(category:Category)=>setCategories(rows=>[...rows.filter(c=>c.id!==category.id),category].sort((a,b)=>a.name.localeCompare(b.name,'ru')))
@@ -171,7 +172,7 @@ export default function FinanceScreen({initialTab='overview',initialReceiptFile,
     {tab==='credits'&&<Credits admin={admin}/>}
     {tab==='budget'&&<Budget categories={categories.filter(c=>c.transaction_type==='EXPENSE')} admin={admin} onCategoryCreated={rememberCategory} onSaved={done} periodControl={periodControl} income={income} expense={expense}/>}
     </div>
-    {tx&&<Transaction type={tx.type} categories={categories.filter(c=>c.transaction_type===tx.type)} admin={admin} onCategoryCreated={rememberCategory} onClose={()=>setTx(null)} onSaved={()=>{setTx(null);done(tx.type==='INCOME'?'Доход сохранён.':'Расход сохранён.')}}/>}
+    {tx&&<Transaction type={tx.type} categories={categories.filter(c=>c.transaction_type===tx.type)} admin={admin} onCategoryCreated={rememberCategory} onClose={()=>setTx(null)} onSaved={()=>{window.dispatchEvent(new Event('family-first-entry-saved'));setTx(null);done(tx.type==='INCOME'?'Доход сохранён.':'Расход сохранён.')}}/>}
     {addingCategory&&<Modal title={kind==='INCOME'?'Категория дохода':'Категория расхода'} onClose={()=>setAddingCategory(false)} busy={saving}><form className="f-form" onSubmit={createCategory}><div className="f-form-fields"><Field label="Название"><input required maxLength={80} placeholder="Введите название" value={categoryName} onChange={e=>setCategoryName(e.target.value)} autoFocus/></Field></div><Message text={categoryError} error/><button className="button primary" disabled={saving||!categoryName.trim()}>{saving?'Сохраняем…':'Создать категорию'}</button></form></Modal>}
   </div>
 }

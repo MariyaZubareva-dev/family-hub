@@ -5,6 +5,7 @@ import FinanceScreen from './FinanceScreen'
 import ShoppingScreen from './ShoppingScreen'
 import CalendarScreen from './CalendarScreen'
 import HomeScreen from './HomeScreen'
+import WelcomeScreen, { type FirstAction } from './WelcomeScreen'
 import { DEFAULT_TIMEZONE, TIMEZONES, timezoneLabel } from './lib/timezone'
 
 function FamilySymbol({kind}:{kind:string}) {
@@ -121,10 +122,31 @@ export default function App(){
   const [financeTarget,setFinanceTarget]=useState<'overview'|'receipts'|'credits'|'cashback'>('overview')
   const [homeReceipt,setHomeReceipt]=useState<File|null>(null)
   const [accessError,setAccessError]=useState('')
+  const [hasFamily,setHasFamily]=useState<boolean|null>(null)
+  const [firstAction,setFirstAction]=useState<FirstAction|null>(null)
+  const [onboardingActive,setOnboardingActive]=useState(false)
+  const [showFirstSuccess,setShowFirstSuccess]=useState(false)
+  const [openFamilyInvite,setOpenFamilyInvite]=useState(false)
+  const completeWelcome=async(action:FirstAction,created:boolean)=>{
+    const result=await apiGet('/me')
+    if(!result.data?.family)throw new Error('Не удалось загрузить семью. Попробуйте ещё раз.')
+    const visibility={...ALL_VISIBLE,...result.data.family.visibility}
+    setAccess(visibility);setFamilyRole(result.data.family.role||'');setHasFamily(true)
+    setFirstAction(created?action:null);setOnboardingActive(created)
+    if(action==='calendar')setCalendarAction('EVENT')
+    const target=action==='shopping'?'lists':action
+    setSection(canOpenSection(target,visibility)?target:'home')
+  }
+  useEffect(()=>{
+    const saved=()=>{if(onboardingActive){setShowFirstSuccess(true);setOnboardingActive(false)}}
+    window.addEventListener('family-first-entry-saved',saved)
+    return()=>window.removeEventListener('family-first-entry-saved',saved)
+  },[onboardingActive])
   useEffect(()=>{
     let active=true
     const refreshAccess=()=>apiGet('/me').then(result=>{
       if(!active)return
+      setHasFamily(!!result.data?.family)
       setFamilyRole(result.data?.family?.role||'')
       const v={...ALL_VISIBLE,...result.data?.family?.visibility}
       setAccess(result.data?.family?v:{calendar:false,shopping:false,finance:false})
@@ -147,7 +169,7 @@ export default function App(){
   const donutOtherAmount = totalExpense - donutTop5.reduce((s,c)=>s+c.amount,0)
   const donutData: Cat[] = (donutTop5.length===5 && donutOtherAmount>0) ? [...donutTop5, {id:'other', name:`Остальные ${sortedAll.length-5}`, icon:'•', color:'#9CA3AF', amount: donutOtherAmount}] : donutTop5
 
-  return <div className="app-shell">
+  return <div className={`app-shell${hasFamily===false?' is-welcome':''}`}>
     {/* TOPBAR */}
     <header className="topbar">
       <h1>Family Hub</h1>
@@ -156,20 +178,22 @@ export default function App(){
     <main className="page">
       {accessError&&<div className="family-alert" role="alert">{accessError}</div>}
       {!access&&!accessError&&<div className="family-loading">Загружаем пространство…</div>}
-      {access&&section==='home' && <HomeScreen apiGet={apiGet} visibility={access} onFamily={()=>setSection('family')} onCalendar={kind=>{setCalendarAction(kind);setSection('calendar')}} onFinance={tab=>{setFinanceTarget(tab);setSection('finance')}} onReceipt={file=>{setHomeReceipt(file);setFinanceTarget('receipts');setSection('finance')}} />}
+      {access&&hasFamily===false&&<WelcomeScreen apiGet={apiGet} apiPost={apiPost} onComplete={completeWelcome}/>}
+      {hasFamily&&showFirstSuccess&&<aside className="onboarding-success" role="status"><strong>Первая запись сохранена</strong><p>Пригласите близкого, чтобы пользоваться Family Hub вместе. Видимость общих разделов настраивается в «Семье».</p><div className="onboarding-success-actions"><button className="button primary" onClick={()=>{setShowFirstSuccess(false);setOpenFamilyInvite(true);setSection('family')}}>Пригласить близкого</button><button className="button secondary" onClick={()=>setShowFirstSuccess(false)}>Позже</button></div></aside>}
+      {hasFamily&&access&&section==='home' && <HomeScreen apiGet={apiGet} visibility={access} onFamily={()=>setSection('family')} onCalendar={kind=>{setCalendarAction(kind);setSection('calendar')}} onFinance={tab=>{setFinanceTarget(tab);setSection('finance')}} onReceipt={file=>{setHomeReceipt(file);setFinanceTarget('receipts');setSection('finance')}} />}
       {access?.calendar&&section==='calendar' && <CalendarScreen initialKind={calendarAction} onActionConsumed={()=>setCalendarAction(undefined)} />}
-      {access?.shopping&&section==='lists' && <ShoppingScreen isAdmin={familyRole==='ADMIN'} />}
-      {access?.finance&&section==='finance' && <FinanceScreen initialTab={financeTarget} initialReceiptFile={homeReceipt} onReceiptConsumed={()=>setHomeReceipt(null)} />}
-      {access&&section==='family' && <FamilyV07 />}
+      {access?.shopping&&section==='lists' && <ShoppingScreen isAdmin={familyRole==='ADMIN'} startInStore={firstAction==='shopping'} onStartConsumed={()=>setFirstAction(null)} />}
+      {access?.finance&&section==='finance' && <FinanceScreen initialExpense={firstAction==='finance'} onInitialExpenseConsumed={()=>setFirstAction(null)} initialTab={financeTarget} initialReceiptFile={homeReceipt} onReceiptConsumed={()=>setHomeReceipt(null)} />}
+      {hasFamily&&access&&section==='family' && <FamilyV07 initialInvite={openFamilyInvite} onInviteConsumed={()=>setOpenFamilyInvite(false)} />}
     </main>
 
-    <nav className="bottom-nav" aria-label="Основная навигация" style={{gridTemplateColumns:`repeat(${2+Number(!!access?.calendar)+Number(!!access?.shopping)+Number(!!access?.finance)},minmax(0,1fr))`}}>
+    {hasFamily&&<nav className="bottom-nav" aria-label="Основная навигация" style={{gridTemplateColumns:`repeat(${2+Number(!!access?.calendar)+Number(!!access?.shopping)+Number(!!access?.finance)},minmax(0,1fr))`}}>
       <Nav active={section==='home'} label="Главная" icon="⌂" onClick={()=>setSection('home')} />
       {access?.calendar&&<Nav active={section==='calendar'} label="Календарь" icon="▦" onClick={()=>setSection('calendar')} />}
       {access?.shopping&&<Nav active={section==='lists'} label="Покупки" icon="☷" onClick={()=>setSection('lists')} />}
       {access?.finance&&<Nav active={section==='finance'} label="Финансы" icon="₽" onClick={()=>{setFinanceTarget('overview');setSection('finance')}} />}
       <Nav active={section==='family'} label="Семья" icon="👨‍👩‍👧" onClick={()=>setSection('family')} />
-    </nav>
+    </nav>}
   </div>
 }
 
@@ -179,7 +203,7 @@ function Nav(p:{active:boolean; label:string; icon:string; onClick:()=>void}){
   </button>
 }
 
-function FamilyV07(){
+function FamilyV07({initialInvite=false,onInviteConsumed}:{initialInvite?:boolean;onInviteConsumed?:()=>void}){
   const [family,setFamily]=useState<any>(null)
   const [invitations,setInvitations]=useState<any[]>([])
   const [error,setError]=useState('')
@@ -187,7 +211,8 @@ function FamilyV07(){
   const [loading,setLoading]=useState(true)
   const [loaded,setLoaded]=useState(false)
   const [busy,setBusy]=useState('')
-  const [showInvite,setShowInvite]=useState(false)
+  const [showInvite,setShowInvite]=useState(initialInvite)
+  useEffect(()=>{if(initialInvite)onInviteConsumed?.()},[])
   const [expandedMemberId,setExpandedMemberId]=useState<string|null>(null)
   const [inviteTarget,setInviteTarget]=useState('')
   const [inviteName,setInviteName]=useState('')

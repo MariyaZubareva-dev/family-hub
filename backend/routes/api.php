@@ -1,5 +1,6 @@
 <?php
 use App\Http\Controllers\Api\CreditController;use App\Http\Controllers\Api\EventController;use App\Http\Controllers\Api\FamilyController;use App\Http\Controllers\Api\FinanceCoreController;use App\Http\Controllers\Api\FinanceTransactionController;use App\Http\Controllers\Api\IdeaController;use App\Http\Controllers\Api\ListController;use App\Http\Controllers\Api\ListItemController;use App\Http\Controllers\Api\NoteController;use App\Http\Controllers\Api\PlannedPurchaseController;use App\Http\Controllers\Api\ReminderController;use App\Http\Middleware\TelegramAuthenticate;use Illuminate\Http\Request;use Illuminate\Support\Facades\Route;
+Route::post('/telegram/webhook', \App\Http\Controllers\Telegram\BotWebhookController::class);
 Route::prefix('v1')->group(function(){
  Route::get('/health',fn()=>response()->json(['ok'=>true,'service'=>'family-hub-api','version'=>'0.6.0']));
  Route::middleware([TelegramAuthenticate::class, \App\Http\Middleware\FamilySectionAccess::class])->group(function(){

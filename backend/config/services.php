@@ -1,2 +1,2 @@
 <?php
-return ['telegram'=>['bot_token'=>env('TELEGRAM_BOT_TOKEN')], 'openai'=>['key'=>env('OPENAI_API_KEY'), 'model'=>env('OPENAI_MODEL','gpt-4.1-mini')], 'receipts'=>['token'=>env('RECEIPTS_API_TOKEN')]];
+return ['telegram'=>['bot_token'=>env('TELEGRAM_BOT_TOKEN'), 'webhook_secret'=>env('TELEGRAM_WEBHOOK_SECRET')], 'openai'=>['key'=>env('OPENAI_API_KEY'), 'model'=>env('OPENAI_MODEL','gpt-4.1-mini')], 'receipts'=>['token'=>env('RECEIPTS_API_TOKEN')]];

@@ -61,7 +61,7 @@ export default function CalendarScreen({initialKind,onActionConsumed}:{initialKi
       const date=wallTimeToDate(when,timezone)
       const j=await request(kind==='EVENT'?'/events':'/reminders',kind==='EVENT'?{...base,start_at:date.toISOString(),end_at:new Date(date.getTime()+3600000).toISOString(),participant_member_ids:members.map(m=>m.id)}:{...base,scheduled_at:date.toISOString()})
       if(kind==='EVENT')setEvents(rows=>[...rows,j.data]);else setReminders(rows=>[...rows,j.data])
-      const p=zoneParts(date,timezone);setMonth(new Date(p.year,p.month-1,1));setSelectedDay(zoneInput(date,timezone).slice(0,10));setFilter(kind);setShow(false)
+      const p=zoneParts(date,timezone);setMonth(new Date(p.year,p.month-1,1));setSelectedDay(zoneInput(date,timezone).slice(0,10));setFilter(kind);setShow(false);window.dispatchEvent(new Event('family-first-entry-saved'))
       setNotice((kind==='EVENT'?'Встреча':'Напоминание')+' «'+j.data.title+'» добавлено на '+date.toLocaleDateString('ru-RU',{timeZone:timezone,day:'numeric',month:'long'})+', '+date.toLocaleTimeString('ru-RU',{timeZone:timezone,hour:'2-digit',minute:'2-digit'})+'.')
     }catch(e){setFormError(errorText(e))}finally{setSaving(false)}
   }
