@@ -27,6 +27,7 @@ class StoreListService
                     $created+=DB::table('store_list_items')->insertOrIgnore([
                         'id'=>(string)Str::ulid(),'family_id'=>$familyId,'created_by'=>$source->created_by,'name'=>$source->name,
                         'recurring_purchase_id'=>$source->id,'recurring_due_date'=>$source->due_date->toDateString(),'notes'=>$source->notes?mb_substr($source->notes,0,500):null,
+                        'quantity'=>($source->quantity ?: 1).' шт.',
                         'is_completed'=>false,'created_at'=>now(),'updated_at'=>now(),
                     ]);
                 });

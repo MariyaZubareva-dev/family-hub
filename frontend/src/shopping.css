@@ -41,3 +41,5 @@
 .shopping-page button:disabled{opacity:.55;cursor:default;transform:none}
 .s-tabs button:focus-visible,.s-add:focus-visible,.s-icon:focus-visible{outline:2px solid var(--primary);outline-offset:2px}
 @media(max-width:360px){.shopping-page .card{padding:12px}.s-head h3{font-size:13px}.s-item{gap:7px}.s-copy strong{font-size:12px}.s-copy small{font-size:10px}.s-end b{font-size:11px}}
+
+.s-purchase-form output{display:block;width:100%;text-align:right;font-variant-numeric:tabular-nums;font-weight:600}

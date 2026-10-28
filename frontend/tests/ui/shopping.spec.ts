@@ -12,8 +12,10 @@ async function mockShopping(page:Page){
       if(req.method()==='POST'){const body=req.postDataJSON();requests.push({path,body});const cat={id:'c'+(categories.length+1),name:body.name};categories.push(cat);data=cat}else data=categories
     }else if(path.endsWith('/purchased')){
       const body=req.postDataJSON();requests.push({path,body});data=items.find(x=>path.includes('/'+x.id+'/'));data.due_date='2027-01-21'
+    }else if(req.method()==='PATCH'){
+      const body=req.postDataJSON();requests.push({path,body});data=items.find(x=>path.endsWith('/'+x.id));Object.assign(data,body,{estimated_amount:body.unit_price==null?null:String(body.unit_price*body.quantity)})
     }else if(path.endsWith('/planned-purchases')){
-      if(req.method()==='POST'){const body=req.postDataJSON();requests.push({path,body});data={...body,id:'p'+(items.length+1)};items.push(data)}else data=items
+      if(req.method()==='POST'){const body=req.postDataJSON();requests.push({path,body});data={...body,estimated_amount:body.type==='RECURRING'?(body.unit_price==null?null:String(body.unit_price*body.quantity)):body.estimated_amount,id:'p'+(items.length+1)};items.push(data)}else data=items
     }
     await route.fulfill({json:{data}})
   })
@@ -58,10 +60,14 @@ for(const width of [320,393,768]){
     await recurring.getByRole('combobox',{name:'Категория',exact:true}).selectOption({label:'Участок'})
     await recurring.getByLabel('Следующая дата',{exact:true}).fill('2026-12-21')
     await recurring.getByRole('spinbutton',{name:'Каждые, мес.'}).fill('3')
+    await recurring.getByLabel('Цена за штуку, ₽').fill('250.15')
+    await recurring.getByLabel('Количество, шт.').fill('3')
+    await expect(recurring.locator('output')).toHaveText('750,45 ₽')
     await page.screenshot({path:`test-results/shopping-form-recurring-${width}.png`,fullPage:true})
     await recurring.getByRole('button',{name:'Сохранить',exact:true}).click()
     await expect(recurring).toHaveCount(0)
-    expect(requests[2].body).toMatchObject({name:'Туалетная бумага',type:'RECURRING',category:'Участок',cadence_months:3})
+    expect(requests[2].body).toMatchObject({name:'Туалетная бумага',type:'RECURRING',category:'Участок',cadence_months:3,unit_price:250.15,quantity:3})
+    await expect(page.locator('article').filter({hasText:'Туалетная бумага'})).toContainText('750,45 ₽')
     await page.getByRole('button',{name:'Отметить покупку: Бумага',exact:true}).click()
     await expect(page.getByRole('status')).toContainText('Следующая дата:')
     expect(requests[3].path).toBe('/api/v1/planned-purchases/p2/purchased')
@@ -110,3 +116,27 @@ test('family member chooses shared categories without creating Finance categorie
   await select.selectOption('Для дома')
   await expect(select).toHaveValue('Для дома')
 })
+
+ test('recurring quantity and price can be changed and survive reload',async({page})=>{
+  await mockShopping(page)
+  await page.goto('/?section=lists')
+  await page.getByRole('tab',{name:'Регулярные',exact:true}).click()
+  await page.getByRole('button',{name:'Изменить покупку: Бумага',exact:true}).click()
+  const dialog=page.getByRole('dialog')
+  await expect(dialog.getByLabel('Количество, шт.')).toHaveValue('1')
+  await expect(dialog.getByLabel('Цена за штуку, ₽')).toHaveValue('350')
+  await dialog.getByLabel('Количество, шт.').fill('0')
+  await dialog.getByRole('button',{name:'Сохранить',exact:true}).click()
+  await expect(dialog).toBeVisible()
+  await dialog.getByLabel('Количество, шт.').fill('4')
+  await dialog.getByRole('button',{name:'Сохранить',exact:true}).click()
+  await expect(dialog).toHaveCount(0)
+  await page.reload()
+  await page.getByRole('tab',{name:'Регулярные',exact:true}).click()
+  await expect(page.locator('article').filter({hasText:'Бумага'})).toContainText('1 400 ₽')
+  await page.getByRole('button',{name:'Изменить покупку: Бумага',exact:true}).click()
+  await expect(page.getByLabel('Количество, шт.')).toHaveValue('4')
+  await page.getByLabel('Цена за штуку, ₽').fill('')
+  await page.getByRole('button',{name:'Сохранить',exact:true}).click()
+  await expect(page.locator('article').filter({hasText:'Бумага'})).toContainText('Сумма не задана')
+ })

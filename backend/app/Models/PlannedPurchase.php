@@ -17,6 +17,8 @@ class PlannedPurchase extends Model
 
     protected $casts = [
         'estimated_amount' => 'decimal:2',
+        'unit_price' => 'decimal:2',
+        'quantity' => 'integer',
         'due_date' => 'date:Y-m-d',
         'last_purchased_at' => 'date:Y-m-d',
         'cadence_months' => 'integer',

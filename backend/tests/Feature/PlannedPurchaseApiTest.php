@@ -44,6 +44,46 @@ class PlannedPurchaseApiTest extends TestCase
             ->assertJsonPath('data.last_purchased_at', '2026-03-31');
     }
 
+    public function test_recurring_price_is_calculated_validated_and_transferred_to_store(): void
+    {
+        $user = User::create(['telegram_user_id' => 30999, 'first_name' => 'Owner']);
+        $family = Family::create(['name' => 'Family', 'created_by' => $user->id]);
+        FamilyMember::create(['family_id' => $family->id, 'user_id' => $user->id, 'role' => 'ADMIN', 'status' => 'ACTIVE']);
+        $this->withoutMiddleware(TelegramAuthenticate::class)->actingAs($user);
+        $payload = ['type' => 'RECURRING', 'name' => 'Бумага', 'due_date' => '2026-01-01', 'cadence_months' => 3, 'unit_price' => '250.15', 'quantity' => 3];
+        $item = $this->postJson('/api/v1/planned-purchases', $payload + ['estimated_amount' => 1])
+            ->assertCreated()->assertJsonPath('data.estimated_amount', '750.45')->assertJsonPath('data.quantity', 3)->json('data');
+        $url = '/api/v1/planned-purchases/'.$item['id'];
+        $this->patchJson($url, ['quantity' => 4])->assertOk()->assertJsonPath('data.estimated_amount', '1000.60');
+        $this->patchJson($url, ['unit_price' => '0.10'])->assertOk()->assertJsonPath('data.estimated_amount', '0.40');
+        foreach ([0, -1, 1.5, 10000, null] as $invalid) {
+            $this->patchJson($url, ['quantity' => $invalid])->assertUnprocessable();
+        }
+        foreach (['-1', '0.001', '999999999999.99'] as $invalid) {
+            $this->patchJson($url, ['unit_price' => $invalid])->assertUnprocessable();
+        }
+        $this->getJson('/api/v1/planned-purchases/store-items')->assertOk()->assertJsonPath('data.0.quantity', '4 шт.');
+        $this->patchJson($url, ['unit_price' => null])->assertOk()->assertJsonPath('data.estimated_amount', null);
+        $this->patchJson($url, ['unit_price' => 0])->assertOk()->assertJsonPath('data.estimated_amount', '0.00');
+        $this->patchJson($url, ['estimated_amount' => 350])->assertOk()
+            ->assertJsonPath('data.estimated_amount', '350.00')->assertJsonPath('data.unit_price', '350.00')->assertJsonPath('data.quantity', 1);
+    }
+
+    public function test_pricing_migration_preserves_existing_totals(): void
+    {
+        $user = User::create(['telegram_user_id' => 30998, 'first_name' => 'Owner']);
+        $family = Family::create(['name' => 'Family', 'created_by' => $user->id]);
+        $item = \App\Models\PlannedPurchase::create(['family_id' => $family->id, 'created_by' => $user->id,
+            'type' => 'RECURRING', 'name' => 'Бумага', 'estimated_amount' => '375.45', 'status' => 'ACTIVE']);
+        $migration = require database_path('migrations/2026_10_28_000033_add_recurring_purchase_pricing.php');
+        $migration->down();
+        $migration->up();
+        $item->refresh();
+        $this->assertSame(1, $item->quantity);
+        $this->assertSame('375.45', $item->unit_price);
+        $this->assertSame('375.45', $item->estimated_amount);
+    }
+
     public function test_recurring_purchase_requires_due_date_and_cadence(): void
     {
         $user = User::create(['telegram_user_id' => 30103, 'first_name' => 'Admin']);
