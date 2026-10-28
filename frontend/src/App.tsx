@@ -7,12 +7,14 @@ import CalendarScreen from './CalendarScreen'
 import HomeScreen from './HomeScreen'
 import WelcomeScreen, { type FirstAction } from './WelcomeScreen'
 import { DEFAULT_TIMEZONE, TIMEZONES, timezoneLabel } from './lib/timezone'
+import './theme.css'
 
 function FamilySymbol({kind}:{kind:string}) {
   const paths:Record<string,string>={
     home:'m3 10 9-7 9 7 M5 9v12h14V9 M9 21v-8h6v8',
     calendar:'M5 5h14v16H5z M8 3v4 M16 3v4 M5 10h14 M8 14h2 M14 14h2 M8 17h2',
-    shopping:'M9 6h11 M9 12h11 M9 18h11 m-17-12 1 1 2-2 m-3 7 1 1 2-2 m-3 7 1 1 2-2',
+    shopping:'M4 7h16l-2 14H6L4 7Zm4 0V5a4 4 0 0 1 8 0v2',
+    family:'M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8 M2 21v-3a6 6 0 0 1 12 0v3 M16 4a4 4 0 0 1 0 8 M18 15a5 5 0 0 1 4 5v1',
     finance:'M3 6h18v14H3z M3 10h18 M15 15h3 M6 3h12',
     edit:'m4 16 12-12 4 4-12 12-5 1z M13 7l4 4',
     settings:'M8 3h8v4l3 2 3 2-4 7-3-1-3 2-3-2-3 1-4-7 3-2 3-2z M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0',
@@ -188,18 +190,18 @@ export default function App(){
     </main>
 
     {hasFamily&&<nav className="bottom-nav" aria-label="Основная навигация" style={{gridTemplateColumns:`repeat(${2+Number(!!access?.calendar)+Number(!!access?.shopping)+Number(!!access?.finance)},minmax(0,1fr))`}}>
-      <Nav active={section==='home'} label="Главная" icon="⌂" onClick={()=>setSection('home')} />
-      {access?.calendar&&<Nav active={section==='calendar'} label="Календарь" icon="▦" onClick={()=>setSection('calendar')} />}
-      {access?.shopping&&<Nav active={section==='lists'} label="Покупки" icon="☷" onClick={()=>setSection('lists')} />}
-      {access?.finance&&<Nav active={section==='finance'} label="Финансы" icon="₽" onClick={()=>{setFinanceTarget('overview');setSection('finance')}} />}
-      <Nav active={section==='family'} label="Семья" icon="👨‍👩‍👧" onClick={()=>setSection('family')} />
+      <Nav active={section==='home'} label="Главная" icon="home" onClick={()=>setSection('home')} />
+      {access?.calendar&&<Nav active={section==='calendar'} label="Календарь" icon="calendar" onClick={()=>setSection('calendar')} />}
+      {access?.shopping&&<Nav active={section==='lists'} label="Покупки" icon="shopping" onClick={()=>setSection('lists')} />}
+      {access?.finance&&<Nav active={section==='finance'} label="Финансы" icon="finance" onClick={()=>{setFinanceTarget('overview');setSection('finance')}} />}
+      <Nav active={section==='family'} label="Семья" icon="family" onClick={()=>setSection('family')} />
     </nav>}
   </div>
 }
 
 function Nav(p:{active:boolean; label:string; icon:string; onClick:()=>void}){
-  return <button className={p.active?'nav-item active':'nav-item'} onClick={p.onClick}>
-    <span aria-hidden="true" style={{fontSize:18}}>{p.icon}</span><small>{p.label}</small>
+  return <button className={p.active?'nav-item active':'nav-item'} aria-current={p.active?'page':undefined} onClick={p.onClick}>
+    <FamilySymbol kind={p.icon}/><small>{p.label}</small>
   </button>
 }
 

@@ -1,0 +1,159 @@
+/* Shared visual language of the welcome screen. Keep existing form density and layout. */
+:root {
+  --bg: #f8f6f3;
+  --text: #203c38;
+  --muted: #65776d;
+  --muted-2: #72847a;
+  --surface: #fff;
+  --surface-2: #f3f7f2;
+  --border: #dfe7df;
+  --border-2: #e8ede5;
+  --primary: #0f766e;
+  --primary-hover: #115e59;
+  --primary-soft: #dfeee7;
+  --primary-soft-2: #f0f6f1;
+  --accent-soft: #fff0d8;
+  --shadow: 0 5px 18px #294e3509;
+  --shadow-2: 0 8px 24px #294e3512;
+  --radius: 18px;
+  --radius-sm: 12px;
+}
+.app-shell .topbar {
+  background: #f8f6f3f5;
+  border-bottom-color: #e5e8df;
+  color: var(--text);
+}
+.app-shell .section-title h2 {
+  color: var(--text);
+  letter-spacing: -.035em;
+  font-weight: 650;
+}
+.app-shell .page :is(.home-page,.finance-page,.shopping-page,.calendar-page,.family-page) > .section-title {
+  margin-bottom: 4px;
+}
+.app-shell .page .card {
+  background: var(--surface);
+  border-color: var(--border);
+  border-radius: 18px;
+  box-shadow: var(--shadow);
+}
+/* The main summary echoes the soft green frame around the welcome examples. */
+.app-shell .home-page .h-budget {
+  background: linear-gradient(140deg,#e5f0e9,#f0eee2);
+  border-color: transparent;
+  border-radius: 24px;
+  box-shadow: none;
+}
+.app-shell .h-chart {
+  padding: 14px 10px;
+  background: #fff;
+  border-radius: 18px;
+  gap: 12px;
+}
+.app-shell .h-metrics {
+  background: #ffffffd9;
+  border-color: #e0e8dd;
+  border-radius: 14px;
+}
+.app-shell .h-metrics > div { border-color: #dfe7df; }
+.app-shell :is(.h-symbol,.family-hero-icon,.family-section-icon) {
+  color: var(--primary);
+  background: var(--primary-soft);
+  border-radius: 10px;
+}
+.app-shell :is(.h-plan time) {
+  background: var(--accent-soft);
+  color: #88602e;
+  padding: 8px 7px;
+  border-radius: 10px;
+}
+.app-shell :is(.f-tabs,.s-tabs,.f-segment) {
+  background: #eaf0e8;
+  border-radius: 12px;
+}
+.app-shell :is(.f-tabs,.s-tabs) button,
+.app-shell .f-segment button { color: #5a6e69; border-radius: 9px; }
+.app-shell :is(.f-tabs,.s-tabs) button[aria-selected=true],
+.app-shell .f-segment button[aria-pressed=true] {
+  background: #fff;
+  color: var(--primary);
+  box-shadow: 0 2px 6px #294e350d;
+}
+.app-shell .button.primary:not(.danger):not(.family-danger-button):not(.f-danger-button),
+.finance-dialog .button.primary:not(.danger):not(.f-danger-button),
+.family-visibility-dialog .button.primary {
+  background: var(--primary);
+  background-image: none;
+  border-color: var(--primary);
+  border-radius: 12px;
+  box-shadow: 0 3px 8px #0f766e12;
+}
+.app-shell .button.secondary,
+.finance-dialog .button.secondary {
+  background: #f0f6f1;
+  border-color: #dce7dc;
+  color: var(--primary);
+  border-radius: 12px;
+  box-shadow: none;
+}
+.app-shell .button:disabled,
+.finance-dialog .button:disabled { box-shadow: none; }
+.app-shell .h-photo { min-height: 40px; }
+.app-shell .f-metrics > div {
+  background: #f3f7f2;
+  border-color: var(--border);
+  border-radius: 14px;
+}
+.app-shell .family-page .family-role.admin { background: #dfeee7; }
+.app-shell .family-page .family-avatar {
+  background: #f7dfbf;
+  color: #7c5428;
+}
+.app-shell .family-page .family-invite-form { background: #f0f6f1; border-color: #dce7dc; }
+.app-shell .page input:not([type=checkbox]):not([type=radio]):not([type=file]),
+.app-shell .page select,
+.app-shell .page textarea,
+.finance-dialog input:not([type=checkbox]):not([type=radio]):not([type=file]),
+.finance-dialog select,
+.finance-dialog textarea {
+  color: var(--text);
+  border-color: #cddbd2;
+  border-radius: 10px;
+}
+.app-shell .page input::placeholder,
+.app-shell .page textarea::placeholder,
+.finance-dialog input::placeholder,
+.finance-dialog textarea::placeholder { color: #72847a; }
+.finance-dialog,.family-visibility-dialog,.modal-sheet {
+  background: #fff;
+  color: var(--text);
+  border-radius: 22px 22px 0 0;
+  box-shadow: 0 -8px 40px #203c3826;
+}
+.finance-dialog::backdrop,.family-visibility-dialog::backdrop { background: #203c3866; }
+.app-shell .bottom-nav {
+  background: #fafbf8f5;
+  border-color: #dfe7df;
+  box-shadow: 0 -3px 16px #294e3508;
+}
+.app-shell .nav-item { color: #65776d; border-radius: 12px; gap: 4px; }
+.app-shell .nav-item.active { color: var(--primary); background: #dfeee7; }
+.app-shell .nav-item svg { display: block; width: 21px; height: 21px; }
+.app-shell .nav-item small { font-weight: 550; }
+.app-shell .nav-item.active small { font-weight: 650; }
+.app-shell button:focus-visible,
+.finance-dialog button:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 3px;
+}
+@media (hover:hover) {
+  .app-shell .button.primary:not(:disabled):not(.danger):not(.family-danger-button):not(.f-danger-button):hover,
+  .finance-dialog .button.primary:not(:disabled):not(.danger):not(.f-danger-button):hover { background: var(--primary-hover); }
+  .app-shell .nav-item:not(.active):hover { background: #edf3eb; }
+}
+@media (max-width:359px) {
+  .app-shell .h-chart { padding: 12px 7px; gap: 8px; }
+}
+@media (prefers-reduced-motion:reduce) {
+  .app-shell button,.finance-dialog button { transition: none; }
+}
