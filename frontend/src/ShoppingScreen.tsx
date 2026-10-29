@@ -66,7 +66,7 @@ export default function ShoppingScreen({isAdmin=false,startInStore=false,onStart
   const shown=items.filter(x=>x.type===type).sort((a,b)=>(a.due_date||'9999').localeCompare(b.due_date||'9999'))
   return <div className="shopping-page">
     <div className="section-title"><h2>Покупки</h2><button className="s-icon" aria-label="Обновить покупки" disabled={loading||!!busy||storeBusy} onClick={()=>{if(type==='STORE')setStoreReload(v=>v+1);else void refresh()}}>↻</button></div>
-    <div className="s-tabs" role="tablist" aria-label="Виды покупок">{([['LARGE','Крупные и подарки'],['RECURRING','Регулярные'],['STORE','Магазин']] as [Kind|'STORE',string][]).map(([value,label])=><button key={value} id={'shopping-tab-'+value} role="tab" aria-selected={type===value} aria-controls="shopping-list" onClick={()=>{setType(value);setNotice('');if(value!=='STORE')void refresh()}}>{label}</button>)}</div>
+    <div className="s-tabs" role="tablist" aria-label="Виды покупок">{([['STORE','Магазин'],['RECURRING','Регулярные'],['LARGE','Крупные']] as [Kind|'STORE',string][]).map(([value,label])=><button key={value} id={'shopping-tab-'+value} role="tab" aria-selected={type===value} aria-controls="shopping-list" onClick={()=>{setType(value);setNotice('');if(value!=='STORE')void refresh()}}>{label}</button>)}</div>
     {error&&<div className="s-message s-error" role="alert">{error}</div>}
     {notice&&<div className="s-message" role="status">{notice}<button className="s-icon" aria-label="Закрыть уведомление" onClick={()=>setNotice('')}>×</button></div>}
     {loading&&<p className="s-empty" role="status">Загружаем покупки…</p>}
