@@ -24,7 +24,7 @@ async function mockStore(page:Page){
 for(const width of [320,393,768])test(`store list edits, checkboxes, undo and removal persist at ${width}px`,async({page})=>{
   await page.setViewportSize({width,height:852})
   const state=await mockStore(page)
-  await page.goto('/?section=lists');await page.getByRole('tab',{name:'Магазин',exact:true}).click()
+  await page.goto('/?section=lists');await expect(page.getByRole('tab',{name:'Магазин',exact:true})).toHaveAttribute('aria-selected','true')
   await expect(page.getByText('Из регулярных покупок',{exact:true})).toBeVisible()
   await page.getByRole('button',{name:'＋ Добавить',exact:true}).click()
   let dialog=page.getByRole('dialog',{name:'Добавить товар',exact:true})
@@ -59,7 +59,7 @@ for(const width of [320,393,768])test(`store list edits, checkboxes, undo and re
 test('store list errors preserve draft and checkbox state; polling discovers new due items',async({page})=>{
   await page.clock.install()
   const state=await mockStore(page)
-  await page.goto('/?section=lists');await page.getByRole('tab',{name:'Магазин',exact:true}).click()
+  await page.goto('/?section=lists');await expect(page.getByRole('tab',{name:'Магазин',exact:true})).toHaveAttribute('aria-selected','true')
   await expect(page.getByRole('checkbox',{name:'Куплено: Шампунь',exact:true})).toBeVisible()
   state.items.push({id:'auto2',name:'Бумага',is_completed:false,recurring_purchase_id:'p2'})
   await page.clock.runFor(31000)

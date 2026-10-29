@@ -31,7 +31,7 @@ const errorText=(e:unknown)=>e instanceof Error?e.message:'Не удалось �
 
 export default function ShoppingScreen({isAdmin=false,startInStore=false,onStartConsumed}:{isAdmin?:boolean;startInStore?:boolean;onStartConsumed?:()=>void}){
   const [items,setItems]=useState<Purchase[]>([]),[categories,setCategories]=useState<Category[]>([])
-  const [type,setType]=useState<Kind|'STORE'>(startInStore?'STORE':'LARGE'),[show,setShow]=useState(false),[loading,setLoading]=useState(true)
+  const [type,setType]=useState<Kind|'STORE'>('STORE'),[show,setShow]=useState(false),[loading,setLoading]=useState(true)
   const [storeReload,setStoreReload]=useState(0),[storeBusy,setStoreBusy]=useState(false)
   const [name,setName]=useState(''),[category,setCategory]=useState(''),[amount,setAmount]=useState(''),[due,setDue]=useState(''),[cadence,setCadence]=useState('3')
   const [quantity,setQuantity]=useState('1'),[editing,setEditing]=useState<Purchase|null>(null)
