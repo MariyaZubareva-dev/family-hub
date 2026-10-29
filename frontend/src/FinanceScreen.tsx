@@ -2,17 +2,18 @@ import { useEffect, useLayoutEffect, useId, useRef, useState, type ReactNode, ty
 import { createPortal } from 'react-dom'
 import './finance.css'
 import CashbackScreen from './CashbackScreen'
+import PersonalFinanceScreen, {SavingsFamilyHistory} from './PersonalFinanceScreen'
 import CreditTools, {CreditActionIcon} from './CreditTools'
 
 type Kind = 'EXPENSE' | 'INCOME'
-type Tab = 'overview' | 'income' | 'categories' | 'receipts' | 'stocks' | 'credits' | 'budget' | 'cashback'
+type Tab = 'overview' | 'income' | 'categories' | 'receipts' | 'credits' | 'budget' | 'cashback'
 type Category = { id:string; name:string; transaction_type:Kind; icon?:string; color?:string }
 type Item = { name:string; qty:number; price:number; category:string; category_id?:string; needs_review?:boolean; category_needs_review?:boolean }
 const money = (value:unknown) => `${Number(value || 0).toLocaleString('ru-RU', { maximumFractionDigits:2 })} ₽`
 const today = () => new Date().toLocaleDateString('sv-SE')
 const dateLabel = (value:string) => value ? new Date(value.slice(0,10)+'T12:00:00').toLocaleDateString('ru-RU') : '—'
 const authorName = (creator?:{first_name?:string;last_name?:string;username?:string}|null) => [creator?.first_name,creator?.last_name].filter(Boolean).join(' ').trim() || (creator?.username?'@'+creator.username:'Не указан')
-const tabs: [Tab,string][] = [['overview','Обзор'],['income','Доходы'],['categories','Категории'],['receipts','Чеки'],['stocks','Запасы'],['credits','Кредиты'],['budget','Бюджет'],['cashback','Кешбэк']]
+const tabs: [Tab,string][] = [['overview','Обзор'],['income','Доходы'],['categories','Категории'],['receipts','Чеки'],['credits','Кредиты'],['budget','Бюджет'],['cashback','Кешбэк']]
 const inPeriod = (date:string,period:string) => {
   if(period==='all')return true
   const d=new Date(date.slice(0,10)+'T12:00:00'),n=new Date(),start=new Date(n.getFullYear(),period==='year'?0:n.getMonth()-(period==='3m'?2:period==='6m'?5:0),1)
@@ -108,7 +109,7 @@ export default function FinanceScreen({initialExpense=false,onInitialExpenseCons
   const [period,setPeriod]=useState('month'), [categories,setCategories]=useState<Category[]>([])
   const [incomePeriod,setIncomePeriod]=useState('all'),[incomeLimit,setIncomeLimit]=useState(20)
   const [analytics,setAnalytics]=useState<any>(null), [transactions,setTransactions]=useState<any[]>([])
-  const [admin,setAdmin]=useState(false), [shopping,setShopping]=useState(false)
+  const [admin,setAdmin]=useState(false), [scope,setScope]=useState<'family'|'personal'>('family')
   const [error,setError]=useState(''), [notice,setNotice]=useState(''), [loading,setLoading]=useState(true)
   const [tx,setTx]=useState<null|{type:Kind;category?:string}>(null), [addingCategory,setAddingCategory]=useState(false)
   const [categoryName,setCategoryName]=useState(''), [categoryError,setCategoryError]=useState(''), [saving,setSaving]=useState(false)
@@ -118,7 +119,7 @@ export default function FinanceScreen({initialExpense=false,onInitialExpenseCons
     const now=new Date()
     try {
       const [c,a,t,m]=await Promise.all([request('/finance/categories'),request(`/finance/analytics?period=${period}&year=${now.getFullYear()}&month=${now.getMonth()+1}`),request('/finances'),request('/me')])
-      setCategories(c.data||[]);setAnalytics(a.data);setTransactions(t.data||[]);setAdmin(m.data?.family?.role==='ADMIN');setShopping(m.data?.family?.visibility?.shopping!==false)
+      setCategories(c.data||[]);setAnalytics(a.data);setTransactions(t.data||[]);setAdmin(m.data?.family?.role==='ADMIN')
     } catch(e) {setError(errorText(e))} finally {setLoading(false)}
   }
   useEffect(()=>{void refresh()},[period])
@@ -137,13 +138,16 @@ export default function FinanceScreen({initialExpense=false,onInitialExpenseCons
   const periodControl=<div className="f-segment" aria-label="Период">{[['month','Месяц'],['3m','3 мес.'],['6m','6 мес.'],['year','Год']].map(([value,label])=><button key={value} aria-pressed={period===value} onClick={()=>{setPeriod(value);setSelected(null)}}>{label}</button>)}</div>
   return <div className="finance-page">
     <div className="section-title"><h2>Финансы</h2><button className="f-icon" aria-label="Обновить финансы" disabled={loading} onClick={()=>void refresh()}>↻</button></div>
-    <div className="f-tabs" role="tablist" aria-label="Разделы финансов">{tabs.map(([key,label])=><button role="tab" id={`finance-tab-${key}`} aria-selected={tab===key} aria-controls={`finance-panel-${key}`} key={key} onClick={()=>{setTab(key);setError('');setNotice('')}}>{label}</button>)}</div>
+    <div className="f-segment" aria-label="Область финансов"><button aria-pressed={scope==='family'} onClick={()=>setScope('family')}>Семейные</button><button aria-pressed={scope==='personal'} onClick={()=>setScope('personal')}>Мои</button></div>
+    {scope==='family'&&<div className="f-tabs" role="tablist" aria-label="Разделы финансов">{tabs.map(([key,label])=><button role="tab" id={`finance-tab-${key}`} aria-selected={tab===key} aria-controls={`finance-panel-${key}`} key={key} onClick={()=>{setTab(key);setError('');setNotice('')}}>{label}</button>)}</div>}
     <Message text={error} error/><Message text={notice}/>
     {loading&&<p className="f-loading" role="status">Обновляем данные…</p>}
-    <div role="tabpanel" id={`finance-panel-${tab}`} aria-labelledby={`finance-tab-${tab}`} className="f-stack">
+    {scope==='personal'&&<PersonalFinanceScreen categories={categories} admin={admin} onCategoryCreated={rememberCategory} onChanged={()=>void refresh()}/> }
+    {scope==='family'&&<div role="tabpanel" id={`finance-panel-${tab}`} aria-labelledby={`finance-tab-${tab}`} className="f-stack">
+    {(tab==='overview'||tab==='budget')&&<section className="card f-current-cash"><h3>Доступно на общие расходы</h3><strong className="f-savings-total">{analytics?.available_cash!=null?money(analytics.available_cash):'—'}</strong><p className="muted">По внесённым операциям за всё время, без денег в копилках. Будущие платежи ещё не вычтены.</p></section>}
     {tab==='overview'&&<>
       {periodControl}
-      <div className="f-metrics"><div><small>Доходы</small><strong className="f-positive">{money(income)}</strong></div><div><small>Расходы</small><strong>{money(expense)}</strong></div><div><small>Остаток</small><strong className={income<expense?'danger':'f-positive'}>{money(income-expense)}</strong></div></div>
+      <div className="f-metrics"><div><small>Доходы</small><strong className="f-positive">{money(income)}</strong></div><div><small>Расходы</small><strong>{money(expense)}</strong></div><div><small>Разница за период</small><strong className={income<expense?'danger':'f-positive'}>{money(income-expense)}</strong></div></div>
       <div className="f-actions"><button className="button primary" onClick={()=>setTx({type:'EXPENSE'})}>＋ Расход</button><button className="button secondary" onClick={()=>setTx({type:'INCOME'})}>＋ Доход</button><Help label="Как добавить расход по чеку" text="Откройте вкладку «Чеки», загрузите фото и подтвердите позиции. Расходы появятся в обзоре автоматически."/></div>
       <section className="card"><Head title="Расходы по категориям"><Help text="Выберите категорию, чтобы посмотреть её операции. Все категории и создание новых — во вкладке «Категории»."/></Head>
         {ranked.length?<><div className="f-expense-total">{money(selected?ranked.find(c=>c.name===selected)?.amount:expense)}</div>{ranked.map(c=><button key={c.id} className="f-category-stat" aria-pressed={selected===c.name} onClick={()=>setSelected(v=>v===c.name?null:c.name)}><span><strong>{c.name}</strong><small>{expense?Math.round(c.amount/expense*100):0}%</small><b>{money(c.amount)}</b></span><span className="f-progress"><i style={{width:`${expense?Math.min(100,c.amount/expense*100):0}%`,background:c.color||'var(--primary)'}}/></span></button>)}</>:<Empty>Расходов за этот период пока нет.</Empty>}
@@ -167,19 +171,29 @@ export default function FinanceScreen({initialExpense=false,onInitialExpenseCons
       <div className="f-category-list">{rows.map(c=><div className="f-row" key={c.id}><span className="f-category-icon">{c.icon||'•'}</span><strong className="f-copy">{c.name}</strong><small>{kind==='INCOME'?'Доход':'Расход'}</small></div>)}</div>{!rows.length&&<Empty>Категории не найдены.</Empty>}
     </section>}
     {tab==='receipts'&&<Receipts initialFile={initialReceiptFile} onConsumed={onReceiptConsumed} ready={!loading&&!error} categories={categories.filter(c=>c.transaction_type==='EXPENSE')} admin={admin} onCategoryCreated={rememberCategory} onSaved={done}/>}
-    {tab==='stocks'&&<Stocks allowed={shopping}/>}
     {tab==='cashback'&&<CashbackScreen initialFiles={initialCashbackFiles} onConsumed={onCashbackConsumed}/>}
     {tab==='credits'&&<Credits admin={admin}/>}
     {tab==='budget'&&<Budget categories={categories.filter(c=>c.transaction_type==='EXPENSE')} admin={admin} onCategoryCreated={rememberCategory} onSaved={done} periodControl={periodControl} income={income} expense={expense}/>}
-    </div>
+    {tab==='overview'&&<SavingsFamilyHistory key={transactions.length+':'+analytics?.available_cash}/>}
+    </div>}
     {tx&&<Transaction type={tx.type} categories={categories.filter(c=>c.transaction_type===tx.type)} admin={admin} onCategoryCreated={rememberCategory} onClose={()=>setTx(null)} onSaved={()=>{window.dispatchEvent(new Event('family-first-entry-saved'));setTx(null);done(tx.type==='INCOME'?'Доход сохранён.':'Расход сохранён.')}}/>}
     {addingCategory&&<Modal title={kind==='INCOME'?'Категория дохода':'Категория расхода'} onClose={()=>setAddingCategory(false)} busy={saving}><form className="f-form" onSubmit={createCategory}><div className="f-form-fields"><Field label="Название"><input required maxLength={80} placeholder="Введите название" value={categoryName} onChange={e=>setCategoryName(e.target.value)} autoFocus/></Field></div><Message text={categoryError} error/><button className="button primary" disabled={saving||!categoryName.trim()}>{saving?'Сохраняем…':'Создать категорию'}</button></form></Modal>}
   </div>
 }
-function Transaction({type,categories,admin,onCategoryCreated,onClose,onSaved}:{type:Kind;categories:Category[];admin:boolean;onCategoryCreated:(c:Category)=>void;onClose:()=>void;onSaved:()=>void}) {
-  const [amount,setAmount]=useState(''),[category,setCategory]=useState(''),[date,setDate]=useState(today()),[description,setDescription]=useState(''),[error,setError]=useState(''),[saving,setSaving]=useState(false)
-  const submit=async(e:FormEvent)=>{e.preventDefault();if(saving)return;setSaving(true);setError('');try{const c=categories.find(c=>c.id===category);if(!c)throw new Error('Выберите категорию.');await request('/finances','POST',{type,amount:Number(amount),category:c.name,category_id:c.id,occurred_on:date,description});onSaved()}catch(e){setError(errorText(e))}finally{setSaving(false)}}
-  return <Modal title={type==='INCOME'?'Новый доход':'Новый расход'} onClose={onClose} busy={saving}><form className="f-form" onSubmit={submit}><div className="f-form-fields"><Field label="Сумма, ₽"><input type="number" inputMode="decimal" required min="0.01" step="0.01" placeholder="0" value={amount} onChange={e=>setAmount(e.target.value)} autoFocus/></Field><Field label="Категория"><CategorySelect categories={categories} type={type} admin={admin} value={category} onSelect={c=>setCategory(c.id)} onCreated={onCategoryCreated} required disabled={saving}/></Field><div className="f-form-pair"><Field label="Дата"><input type="date" required value={date} onChange={e=>setDate(e.target.value)}/></Field><Field label="Заметка"><input maxLength={255} placeholder="Необязательно" value={description} onChange={e=>setDescription(e.target.value)}/></Field></div></div><Message text={error} error/><button className="button primary" disabled={saving}>{saving?'Сохраняем…':type==='INCOME'?'Сохранить доход':'Сохранить расход'}</button></form></Modal>
+export function Transaction({type,categories,admin,onCategoryCreated,onClose,onSaved,existing}:{type:Kind;categories:Category[];admin:boolean;onCategoryCreated:(c:Category)=>void;onClose:()=>void;onSaved:()=>void;existing?:any}) {
+  const [amount,setAmount]=useState(existing?String(existing.amount):''),[category,setCategory]=useState(existing?.category_id||categories.find(c=>c.name===existing?.category)?.id||''),[date,setDate]=useState(existing?.occurred_on?.slice(0,10)||today()),[description,setDescription]=useState(existing?.description||''),[error,setError]=useState(''),[saving,setSaving]=useState(false)
+  const [pots,setPots]=useState<any[]>([]),[pot,setPot]=useState(''),[reserve,setReserve]=useState(''),[potError,setPotError]=useState('')
+  const requestKey=useRef(crypto.randomUUID()),lastBody=useRef('')
+  useEffect(()=>{if(type==='INCOME'&&!existing){let active=true;request('/finance/personal').then(j=>{if(active)setPots((j.data?.pots||[]).filter((p:any)=>!p.archived_at))}).catch(()=>{if(active)setPotError('Не удалось загрузить копилки. Можно сохранить доход и отложить деньги позже.')});return()=>{active=false}}},[type])
+  const submit=async(e:FormEvent)=>{e.preventDefault();if(saving)return;setSaving(true);setError('');try{
+    const c=categories.find(c=>c.id===category);if(!c)throw new Error('Выберите категорию.')
+    const body={type,amount:Number(amount),category:c.name,category_id:c.id,occurred_on:date,description,...(pot?{savings_pot_id:pot,savings_amount:Number(reserve)}:{})}
+    const text=JSON.stringify(body);if(lastBody.current&&lastBody.current!==text)requestKey.current=crypto.randomUUID();lastBody.current=text
+    await request(existing?`/finances/${existing.id}`:'/finances',existing?'PATCH':'POST',{...body,...(!existing?{request_key:requestKey.current}:{})});onSaved()
+  }catch(e){setError(errorText(e))}finally{setSaving(false)}}
+  return <Modal title={existing?'Редактировать доход':type==='INCOME'?'Новый доход':'Новый расход'} onClose={onClose} busy={saving}><form className="f-form" onSubmit={submit}><div className="f-form-fields"><Field label="Сумма, ₽"><input type="number" inputMode="decimal" required min="0.01" max="9999999999.99" step="0.01" placeholder="0" value={amount} onChange={e=>setAmount(e.target.value)} autoFocus/></Field><Field label="Категория"><CategorySelect categories={categories} type={type} admin={admin} value={category} onSelect={c=>setCategory(c.id)} onCreated={onCategoryCreated} required disabled={saving}/></Field><div className="f-form-pair"><Field label="Дата"><input type="date" required value={date} onChange={e=>setDate(e.target.value)}/></Field><Field label="Заметка"><input maxLength={255} placeholder="Необязательно" value={description} onChange={e=>setDescription(e.target.value)}/></Field></div>
+    {type==='INCOME'&&!existing&&pots.length>0&&<><Field label="Отложить в копилку"><select value={pot} onChange={e=>setPot(e.target.value)}><option value="">Весь доход — в бюджет</option>{pots.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</select></Field>{pot&&<Field label="Отложить, ₽"><input type="number" inputMode="decimal" min="0.01" max={Number(amount)||0} step="0.01" required value={reserve} onChange={e=>setReserve(e.target.value)}/></Field>}</>}
+    </div>{pot&&<p className="muted">Из этого дохода семье останется {money(Math.max(0,Number(amount)-Number(reserve)))}.</p>}{existing&&<p className="muted">Изменение дохода пересчитает доступную семье сумму. Ранее сделанные переводы в копилки сохранятся — их можно вернуть отдельно.</p>}{potError&&<p role="status">{potError}</p>}<Message text={error} error/><button className="button primary" disabled={saving}>{saving?'Сохраняем…':type==='INCOME'?'Сохранить доход':'Сохранить расход'}</button></form></Modal>
 }
 
 async function preparePhoto(file:File):Promise<string> {
@@ -265,12 +279,6 @@ function Receipts({categories,admin,onCategoryCreated,onSaved,initialFile,onCons
   {editMeta&&<Modal title="Данные чека" onClose={()=>setEditMeta(false)}><div className="f-form"><div className="f-form-fields"><Field label="Магазин"><input maxLength={255} value={merchant} onChange={e=>setMerchant(e.target.value)}/></Field><Field label="Дата покупки"><input type="date" value={date} onChange={e=>setDate(e.target.value)}/></Field></div><button className="button primary" onClick={()=>{if(metadataReason==='DATE_UNCERTAIN')setMetadataReviewed(true);setEditMeta(false)}}>Готово</button></div></Modal>}
   </div>
 }
-function Stocks({allowed}:{allowed:boolean}) {
-  const [items,setItems]=useState<any[]>([]),[error,setError]=useState(''),[loading,setLoading]=useState(true)
-  const refresh=async()=>{if(!allowed){setLoading(false);return}setLoading(true);setError('');try{setItems((await request('/planned-purchases?type=RECURRING')).data||[])}catch(e){setError(errorText(e))}finally{setLoading(false)}}
-  useEffect(()=>{void refresh()},[allowed])
-  return <section className="card"><Head title="Регулярные покупки"><Help text="Товары, периодичность и отметки о покупке ведутся в разделе «Покупки» → «Регулярные». Здесь показаны даты следующей покупки из того же списка."/></Head><Message text={error} error/>{loading?<Empty>Загружаем товары…</Empty>:!allowed?<Empty>Доступ к разделу «Покупки» ограничен администратором.</Empty>:items.length?items.map(i=><div key={i.id} className="f-row"><div className="f-copy"><strong>{i.name}</strong><small>{i.last_purchased_at?'Куплено '+dateLabel(i.last_purchased_at):'Покупок ещё не было'}</small></div><div className="f-number"><b>{dateLabel(i.due_date)}</b><small>Следующая покупка</small></div></div>):<Empty>Регулярных покупок пока нет.</Empty>}{error&&<button className="button secondary" onClick={()=>void refresh()}>Повторить загрузку</button>}</section>
-}
 function Credits({admin}:{admin:boolean}) {
   const [credits,setCredits]=useState<any[]>([]),[selected,setSelected]=useState(''),[adding,setAdding]=useState(false),[editCredit,setEditCredit]=useState(false)
   const [loading,setLoading]=useState(true),[error,setError]=useState(''),[notice,setNotice]=useState('')
@@ -306,7 +314,7 @@ function Budget({categories,admin,onCategoryCreated,onSaved,income,expense}:{cat
   const closeEditor=()=>{setEditing(false);void load()}
   return <div className="f-stack f-budget"><section className="card"><Head title="Бюджет на месяц"><Help text="Лимиты задаются здесь. Доходы, расходы и чеки вносятся в соответствующих вкладках. Общий лимит и лимиты категорий настраивает администратор."/></Head><div className="f-budget-month"><Field label="Месяц"><input type="month" required value={month} onChange={e=>{if(e.target.value){setMonth(e.target.value);setEditing(false)}}}/></Field></div><Message text={editing?'':error} error/>{!loaded?<Empty>Загружаем бюджет…</Empty>:<><div className="f-metrics f-budget-summary"><div><small>Общий лимит</small><strong>{hasLimit?money(budget.total_limit):'Не задан'}</strong></div><div><small>Потрачено</small><strong>{money(budget?.spent_amount)}</strong></div><div><small>Осталось</small><strong className={hasLimit?(budget.available_amount<0?'danger':'f-positive'):''}>{hasLimit?money(budget.available_amount):'—'}</strong></div></div>{admin&&<button className="button secondary" onClick={()=>{setError('');setEditing(true)}}>Настроить лимиты</button>}
     {(budget?.categories||[]).map((c:any)=><div className="f-row" key={c.category_id}><strong className="f-copy">{c.name}</strong><div className="f-number"><b>{money(c.spent_amount)}</b><small>из {money(c.limit_amount)}</small></div></div>)}</>}
-  </section><section className="card"><Head title="Выбранный период обзора"><Help text="Эти суммы соответствуют периоду, выбранному во вкладке «Обзор». Лимиты выше всегда относятся к выбранному месяцу бюджета."/></Head><div className="f-row"><span>Доходы</span><b>{money(income)}</b></div><div className="f-row"><span>Расходы</span><b>{money(expense)}</b></div><div className="f-row"><span>Остаток</span><b>{money(income-expense)}</b></div></section>
+  </section><section className="card"><Head title="Выбранный период обзора"><Help text="Эти суммы соответствуют периоду, выбранному во вкладке «Обзор». Лимиты выше всегда относятся к выбранному месяцу бюджета."/></Head><div className="f-row"><span>Доходы</span><b>{money(income)}</b></div><div className="f-row"><span>Расходы</span><b>{money(expense)}</b></div><div className="f-row"><span>Разница за период</span><b>{money(income-expense)}</b></div></section>
   {editing&&<Modal title="Лимиты бюджета" onClose={closeEditor} busy={busy}><form className="f-form f-budget-editor" onSubmit={save}><div className="f-form-fields"><Field label="Общий лимит, ₽"><input type="number" min="0" step="0.01" inputMode="decimal" required placeholder="0" value={limit} onChange={e=>setLimit(e.target.value)}/></Field><div className="f-budget-limits-head"><strong>По категориям</strong><Help text="Добавляйте только категории, для которых нужен отдельный лимит. Суммы указываются в рублях. Удаление строки убирает лимит категории после сохранения. Общий лимит действует независимо от лимитов категорий."/></div>
     <div className="f-budget-limits">{selectedCategories.map(c=><div className="f-budget-limit" key={c.id}><Field label={c.name}><input aria-label={`Лимит: ${c.name}`} type="number" inputMode="decimal" min="0" step="0.01" required placeholder="0" value={limits[c.id]} onChange={e=>setLimits(values=>({...values,[c.id]:e.target.value}))}/></Field><button type="button" className="f-icon danger" aria-label={`Убрать лимит: ${c.name}`} disabled={busy} onClick={()=>setLimits(values=>{const next={...values};delete next[c.id];return next})}>×</button></div>)}</div>
     <Field label="Добавить лимит"><CategorySelect categories={availableCategories} admin={admin} value="" disabled={busy} label="Добавить лимит категории" onSelect={c=>setLimits(values=>({...values,[c.id]:''}))} onCreated={onCategoryCreated}/></Field>

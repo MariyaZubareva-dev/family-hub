@@ -248,3 +248,16 @@
 .finance-dialog .f-form-fields .f-budget-limit>.f-field{border:0;box-shadow:none}
 .finance-dialog .f-form-fields>.f-budget-limits-head{border-block:1px solid #E5ECE8}
 .finance-dialog .f-form-fields>.f-budget-limits-head:first-child{border-top:0}
+
+/* Personal money uses the same surfaces and controls as family finance. */
+.f-savings-total { display:block; margin:12px 0; font-size:clamp(24px,6vw,32px); color:var(--primary); overflow-wrap:anywhere; }
+.f-pot h3 { overflow-wrap:anywhere; min-width:0; }
+.f-pot-actions { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; margin-top:18px; }
+.f-pot-actions .button { white-space:normal; padding:12px 8px; }
+.personal-finance .f-row b { flex-shrink:1; overflow-wrap:anywhere; text-align:right; }
+.personal-finance .muted, .f-current-cash .muted { color:var(--muted); font-size:14px; line-height:1.5; }
+.f-current-cash { margin-bottom:12px; }
+.f-current-cash h3 { margin:0; }
+@media (max-width:359px) { .f-pot-actions { grid-template-columns:1fr; } }
+
+.f-pot .f-progress i { background:var(--primary); }

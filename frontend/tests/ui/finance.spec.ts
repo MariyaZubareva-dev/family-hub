@@ -283,14 +283,13 @@ test('credit, historical prepayment and its purpose persist after reload',async(
   expect(state.credits[0]).toMatchObject({type:'INSTALLMENT',annual_rate:0});expect(state.credits[0].prepayments).toHaveLength(1);expect(state.credits[0].prepayments[0].interest_policy).toBe('NEXT_PAYMENT')
 })
 
-test('budget saves limits; stocks use shopping data and a tooltip instead of duplicate actions',async({page})=>{
+test('budget saves limits and duplicate stocks tab is removed',async({page})=>{
   const state=await mockFinance(page);await page.goto('/?section=finance');await tab(page,'Бюджет')
   await page.getByRole('button',{name:'Настроить лимиты'}).click();await page.getByLabel('Общий лимит, ₽').fill('20000');await page.getByLabel('Добавить лимит категории').selectOption('e1');await page.getByLabel('Лимит: Продукты',{exact:true}).fill('5000');await page.getByRole('button',{name:'Сохранить лимиты'}).click()
   await expect(page.getByText('Лимиты бюджета сохранены.',{exact:true})).toBeVisible()
   expect(state.requests.find(r=>r.path==='/finance/budgets/save')?.body).toMatchObject({total_limit:20000,categories:[{category_id:'e1',limit_amount:5000}]})
   await page.reload();await tab(page,'Бюджет');await expect(page.getByText('20 000 ₽',{exact:true})).toHaveCount(2)
-  await tab(page,'Запасы');await expect(page.getByText('Шампунь',{exact:true})).toBeVisible();await expect(page.getByRole('button',{name:/Купил|Товар/})).toHaveCount(0)
-  await page.getByRole('button',{name:'Подсказка',exact:true}).click();await expect(page.getByRole('tooltip')).toContainText('«Покупки» → «Регулярные»');await page.keyboard.press('Escape');await expect(page.getByRole('tooltip')).toHaveCount(0)
+  await expect(page.getByRole('tab',{name:'Запасы',exact:true})).toHaveCount(0)
 })
 
 for(const width of [320,393,768])test(`finance tabs, dialogs and prepayments fit ${width}px`,async({page})=>{
@@ -298,7 +297,7 @@ for(const width of [320,393,768])test(`finance tabs, dialogs and prepayments fit
   state.credits.push({id:'c1',name:'Ипотека с очень длинным названием банка',principal:4800000,annual_rate:8,standard_payment:34825.63,term_months:240,type:'CREDIT',start_date:'2026-01-01',first_payment_date:'2026-02-01',recalculation_mode:'TERM',prepayments:[{id:'p1',paid_on:'2026-06-04',amount:20222.2,recalculation_mode:'PAYMENT'}]})
   await page.setViewportSize({width,height:852});await page.goto('/?section=finance');await expect(page.getByRole('button',{name:'Обновить финансы'})).toBeEnabled();await page.evaluate(()=>document.fonts.ready)
   await expect(page.getByText(/LIVE v07|Teal|POST \/|CoinKeeper/)).toHaveCount(0)
-  for(const name of ['Обзор','Категории','Чеки','Запасы','Кредиты','Бюджет']){
+  for(const name of ['Обзор','Категории','Чеки','Кредиты','Бюджет']){
     await tab(page,name);await expect(page.getByRole('tabpanel').first()).toBeVisible();expect(await page.evaluate(()=>document.documentElement.scrollWidth)).toBeLessThanOrEqual(width)
     if(['Обзор','Категории','Кредиты'].includes(name))await page.screenshot({path:`test-results/finance-${name==='Обзор'?'overview':name==='Категории'?'categories':'credits'}-${width}.png`,fullPage:true})
     if(name==='Кредиты'){

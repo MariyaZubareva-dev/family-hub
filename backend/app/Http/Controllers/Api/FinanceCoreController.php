@@ -114,6 +114,7 @@ class FinanceCoreController extends FinanceBaseController
             'total_expense' => $totalExpense,
             'total_income' => $totalIncome,
             'balance' => $balance,
+            'available_cash' => \App\Services\Finance\SavingsLedger::available($familyId) / 100,
             // Modern fields
             'donut' => $donut,
             'ranked' => $ranked,
