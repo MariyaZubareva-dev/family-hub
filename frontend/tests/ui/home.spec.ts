@@ -5,7 +5,7 @@ async function mockHome(page:Page,options:{empty?:boolean;finance?:boolean;calen
   await page.clock.install({time:new Date(options.time||'2026-10-21T09:00:00Z')})
   const members=[{id:'m1',user:{first_name:'Мария'}}]
   const events:any[]=options.empty?[]:[{id:'e1',title:'Обсудить семейные планы и покупки на следующую неделю',status:'SCHEDULED',start_at:'2026-10-21T07:00:00Z'},{id:'e2',title:'Завтрашняя встреча',status:'SCHEDULED',start_at:'2026-10-22T12:00:00Z'}]
-  const reminders:any[]=options.empty?[]:[{id:'r1',title:'Забрать заказ',status:'SCHEDULED',scheduled_at:'2026-10-21T14:00:00Z'},{id:'r2',title:'Отменённое напоминание',status:'CANCELLED',scheduled_at:'2026-10-21T12:00:00Z'}]
+  const reminders:any[]=options.empty?[]:[{id:'r1',can_complete:true,title:'Забрать заказ',status:'SCHEDULED',scheduled_at:'2026-10-21T14:00:00Z'},{id:'r2',title:'Отменённое напоминание',status:'CANCELLED',scheduled_at:'2026-10-21T12:00:00Z'}]
   const requests:{path:string;body:any;method:string;search:string}[]=[]
   const receipts:any[]=[],transactions:any[]=[]
   let failBudget=false
@@ -15,6 +15,7 @@ async function mockHome(page:Page,options:{empty?:boolean;finance?:boolean;calen
     let data:any=[]
     if(path==='/me')data={family:{id:'f1',role:'ADMIN',visibility:{finance:options.finance!==false,calendar:options.calendar!==false,shopping:true}}}
     else if(path==='/family')data={timezone:options.timezone||'Europe/Moscow',members,current_member_id:'m1'}
+    else if(path==='/reminders/r1'&&method==='PATCH'){Object.assign(reminders[0],req.postDataJSON());data=reminders[0]}
     else if(path==='/events'||path==='/reminders'){
       const rows=path==='/events'?events:reminders
       if(body)rows.push({id:'created'+rows.length,status:'SCHEDULED',...body})
@@ -131,4 +132,21 @@ test('home uses family timezone at a month boundary',async({page})=>{
   await expect(page.getByRole('region',{name:'Планы на сегодня'})).toContainText('Ноябрьская встреча')
   await expect(page.getByRole('region',{name:'Планы на сегодня'})).toContainText('04:00')
   expect(state.requests.find(x=>x.path==='/finance/analytics')?.search).toBe('?period=month&year=2026&month=11')
+})
+
+test('home reminder completion and undo persist in calendar',async({page})=>{
+  await mockHome(page)
+  await page.goto('/')
+  await page.getByRole('checkbox',{name:'Выполнено: Забрать заказ',exact:true}).click()
+  await expect(page.getByRole('checkbox',{name:'Выполнено: Забрать заказ',exact:true})).toHaveCount(0)
+  await page.getByRole('status').getByRole('button',{name:'Отменить',exact:true}).click()
+  await expect(page.getByRole('checkbox',{name:'Выполнено: Забрать заказ',exact:true})).toBeVisible()
+  await page.getByRole('checkbox',{name:'Выполнено: Забрать заказ',exact:true}).click()
+  await page.reload()
+  await expect(page.getByRole('checkbox',{name:'Выполнено: Забрать заказ',exact:true})).toHaveCount(0)
+  await page.getByRole('button',{name:'Календарь',exact:true}).click()
+  await page.getByText('Выполнено · 1',{exact:true}).click()
+  await page.getByRole('checkbox',{name:'Вернуть в планы: Забрать заказ',exact:true}).click()
+  await page.getByRole('button',{name:'Главная',exact:true}).click()
+  await expect(page.getByRole('checkbox',{name:'Выполнено: Забрать заказ',exact:true})).toBeVisible()
 })

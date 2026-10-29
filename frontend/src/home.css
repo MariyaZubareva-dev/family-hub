@@ -2,3 +2,8 @@
 .home-page .h-plans{overflow:visible}
 .home-page .f-tooltip{top:auto;bottom:38px}
 .h-budget>button.h-photo{width:100%}
+
+.h-reminder-check{width:20px;height:20px;flex:0 0 20px;margin:0;accent-color:var(--primary);cursor:pointer}
+.h-reminder-check:focus-visible{outline:2px solid var(--primary);outline-offset:3px}
+.h-reminder-notice{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:8px 0;font-size:12px;color:var(--primary)}
+.h-reminder-notice>span{min-width:0;overflow-wrap:anywhere}

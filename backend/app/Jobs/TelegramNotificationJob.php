@@ -67,8 +67,26 @@ class TelegramNotificationJob implements ShouldQueue
             return;
         }
 
-        $deepLink = $this->deepLinkForType();
         $fullText = $this->text;
+        if ($this->notificationType === 'REMINDER') {
+            $reminder = \App\Models\Reminder::where('family_id', $this->familyId)->find($this->payload['reminder_id'] ?? '');
+            if (!$reminder || $reminder->status !== 'SCHEDULED'
+                || (int) $reminder->notification_revision !== (int) ($this->payload['notification_revision'] ?? 0)
+                || !$this->scheduledAt || !$reminder->scheduled_at->equalTo(\Carbon\Carbon::parse($this->scheduledAt))) {
+                $this->failNotification('STALE_REMINDER', 'Reminder was completed, deleted or rescheduled.');
+                return;
+            }
+            if (DB::table('telegram_notifications')->where('family_id', $this->familyId)
+                ->where('notifiable_id', $reminder->id)->where('notification_type', 'REMINDER')
+                ->where('recipient_member_id', $this->recipientMemberId)->where('scheduled_at', $reminder->scheduled_at)
+                ->where('status', 'SENT')->exists()) {
+                $this->failNotification('ALREADY_DELIVERED', 'This reminder occurrence has already been delivered.');
+                return;
+            }
+            // Use current text when an author edits a reminder already in the queue.
+            $fullText = \App\Services\Notifications\TelegramNotificationService::reminderText($reminder);
+        }
+        $deepLink = $this->deepLinkForType();
 
         try {
             $message = [

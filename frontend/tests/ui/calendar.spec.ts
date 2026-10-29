@@ -5,13 +5,18 @@ async function mockCalendar(page:Page,omitCreatedStatus=false){
   await page.clock.install({time:new Date('2026-10-21T09:00:00Z')})
   const members=[{id:'m1',user:{first_name:'Мария'}},{id:'m2',user:{first_name:'Оченьдлинноеимяучастникасемьи'}}]
   const events:any[]=[{id:'e1',title:'Длинное название семейного события для проверки на узком экране',description:'Подробности встречи',status:'SCHEDULED',start_at:'2026-10-21T12:00:00Z',responsible_member:members[1]},{id:'e2',title:'Другое событие',status:'SCHEDULED',start_at:'2026-10-22T12:00:00Z'}]
-  const reminders:any[]=[{id:'r1',title:'Напоминание о заказе',status:'SCHEDULED',scheduled_at:'2026-10-21T14:00:00Z'}]
+  const reminders:any[]=[{id:'r1',title:'Напоминание о заказе',description:'Взять паспорт',can_edit:true,can_complete:true,responsible_member_ids:['m1','m2'],status:'SCHEDULED',scheduled_at:'2026-10-21T14:00:00Z'}]
   const requests:{path:string;body:any}[]=[]
   await page.route('**/api/v1/**',async route=>{
     const req=route.request(),path=new URL(req.url()).pathname
     let data:any=[]
     if(path.endsWith('/me'))data={family:{id:'f1',role:'ADMIN',visibility:{finance:true,shopping:true,calendar:true}}}
     else if(path.endsWith('/family'))data={members,current_member_id:'m1'}
+    else if(path.includes('/reminders/')){
+      const index=reminders.findIndex(x=>path.endsWith('/'+x.id))
+      if(req.method()==='DELETE'){reminders.splice(index,1);await route.fulfill({status:204});return}
+      const body=req.postDataJSON();requests.push({path,body});Object.assign(reminders[index],body);data=reminders[index]
+    }
     else if(path.endsWith('/events')||path.endsWith('/reminders')){
       const list=path.endsWith('/events')?events:reminders
       if(req.method()==='POST'){const body=req.postDataJSON();requests.push({path,body});data={...body,id:'new'+list.length,status:'SCHEDULED',responsible_member:members.find(x=>x.id===body.responsible_member_id)};list.push(data);if(omitCreatedStatus){data={...data};delete data.status}}else data=list
@@ -38,7 +43,7 @@ for(const width of [320,393,768]){
     await expect(day).toHaveAttribute('aria-pressed','true')
     await expect(page.getByRole('heading',{name:'Планы на 21 октября 2'})).toBeVisible()
     await expect(page.getByText('Другое событие',{exact:true})).toHaveCount(0)
-    await page.getByText('Описание',{exact:true}).click()
+    await page.locator('article').filter({hasText:'Подробности встречи'}).getByText('Описание',{exact:true}).click()
     await expect(page.getByText('Подробности встречи',{exact:true})).toBeVisible()
     await page.screenshot({path:`test-results/calendar-day-${width}.png`,fullPage:true})
     await page.getByRole('button',{name:'Весь месяц',exact:true}).click()
@@ -130,4 +135,70 @@ test('family timezone controls calendar input across device zones and DST',async
   expect(()=>wallTimeToDate('2026-03-29T02:30','Europe/Warsaw')).toThrow('такого времени нет')
 })
 
+})
+
+for(const width of [320,393])test(`reminders edit complete undo and delete at ${width}px`,async({page})=>{
+  await page.setViewportSize({width,height:740})
+  const requests=await mockCalendar(page)
+  await page.goto('/?section=calendar')
+  await page.getByRole('button',{name:'Изменить напоминание: Напоминание о заказе',exact:true}).click()
+  const form=page.getByRole('dialog',{name:'Изменить напоминание',exact:true})
+  await expect(form.getByLabel('Время',{exact:true})).toHaveValue('17:00')
+  await expect(form.getByRole('checkbox',{name:'Мария',exact:true})).toBeChecked()
+  await expect(form.getByRole('checkbox',{name:'Оченьдлинноеимяучастникасемьи',exact:true})).toBeChecked()
+  await form.getByLabel('Название',{exact:true}).fill('Позвонить в школу')
+  await form.getByRole('textbox',{name:'Описание',exact:true}).fill('')
+  await form.getByLabel('Дата',{exact:true}).fill('2026-10-22')
+  await form.getByLabel('Время',{exact:true}).fill('10:30')
+  await page.screenshot({path:`test-results/reminder-edit-${width}.png`,fullPage:true})
+  await form.getByRole('button',{name:'Сохранить',exact:true}).click()
+  await expect(form).toHaveCount(0)
+  expect(requests.at(-1)).toMatchObject({path:'/api/v1/reminders/r1',body:{title:'Позвонить в школу',description:null,scheduled_at:'2026-10-22T07:30:00.000Z',responsible_member_ids:['m1','m2']}})
+  await page.getByRole('checkbox',{name:'Выполнено: Позвонить в школу',exact:true}).click()
+  await expect(page.getByRole('checkbox',{name:'Выполнено: Позвонить в школу',exact:true})).toHaveCount(0)
+  await page.getByText('Выполнено · 1',{exact:true}).click()
+  await expect(page.getByRole('checkbox',{name:'Вернуть в планы: Позвонить в школу',exact:true})).toBeChecked()
+  await page.screenshot({path:`test-results/reminder-completed-${width}.png`,fullPage:true})
+  expect(await page.evaluate(()=>document.documentElement.scrollWidth)).toBeLessThanOrEqual(width)
+  await page.reload()
+  await page.getByText('Выполнено · 1',{exact:true}).click()
+  await page.getByRole('checkbox',{name:'Вернуть в планы: Позвонить в школу',exact:true}).click()
+  await expect(page.getByRole('checkbox',{name:'Выполнено: Позвонить в школу',exact:true})).toBeVisible()
+  await page.getByRole('button',{name:'Удалить напоминание: Позвонить в школу',exact:true}).click()
+  const confirm=page.getByRole('dialog',{name:'Удалить напоминание?',exact:true})
+  await confirm.getByRole('button',{name:'Отмена',exact:true}).click()
+  await expect(page.getByRole('checkbox',{name:'Выполнено: Позвонить в школу',exact:true})).toBeVisible()
+  await page.getByRole('button',{name:'Удалить напоминание: Позвонить в школу',exact:true}).click()
+  await confirm.getByRole('button',{name:'Удалить',exact:true}).click()
+  await expect(confirm).toHaveCount(0)
+  await page.reload()
+  await expect(page.getByText('Позвонить в школу',{exact:true})).toHaveCount(0)
+  await expect(page.getByText('Другое событие',{exact:true})).toBeVisible()
+})
+
+test('reminder failures retain draft and state, permissions hide unavailable actions',async({page})=>{
+  await mockCalendar(page)
+  await page.goto('/?section=calendar')
+  await page.route('**/api/v1/reminders/r1',route=>route.fulfill({status:500,json:{message:'Unavailable'}}))
+  const check=page.getByRole('checkbox',{name:'Выполнено: Напоминание о заказе',exact:true})
+  await check.click()
+  await expect(page.getByRole('alert')).toContainText('Сервер временно недоступен')
+  await expect(check).not.toBeChecked()
+  await page.getByRole('button',{name:'Изменить напоминание: Напоминание о заказе',exact:true}).click()
+  const form=page.getByRole('dialog')
+  await form.getByLabel('Название',{exact:true}).fill('Черновик правки')
+  await form.getByRole('button',{name:'Сохранить',exact:true}).click()
+  await expect(form.getByRole('alert')).toContainText('Сервер временно недоступен')
+  await expect(form.getByLabel('Название',{exact:true})).toHaveValue('Черновик правки')
+  await form.getByRole('button',{name:'Отмена',exact:true}).click()
+  await page.getByRole('button',{name:'Удалить напоминание: Напоминание о заказе',exact:true}).click()
+  await page.getByRole('dialog').getByRole('button',{name:'Удалить',exact:true}).click()
+  await expect(page.getByRole('dialog').getByRole('alert')).toContainText('Сервер временно недоступен')
+  await page.getByRole('dialog').getByRole('button',{name:'Отмена',exact:true}).click()
+  await page.route('**/api/v1/reminders',route=>route.fulfill({json:{data:[{id:'r1',title:'Только просмотр',status:'SCHEDULED',scheduled_at:'2026-10-21T08:00:00Z',can_edit:false,can_complete:false}]}}))
+  await page.reload()
+  await expect(page.getByRole('checkbox',{name:'Выполнено: Только просмотр',exact:true})).toBeDisabled()
+  await expect(page.getByRole('button',{name:/Изменить напоминание:/})).toHaveCount(0)
+  await expect(page.getByRole('button',{name:/Удалить напоминание:/})).toHaveCount(0)
+  await expect(page.getByText('Просрочено',{exact:true})).toBeVisible()
 })

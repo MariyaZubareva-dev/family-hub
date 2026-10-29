@@ -70,3 +70,14 @@
 .c-filters small{font-size:9px;margin-left:2px}
 .c-zone{display:flex;align-items:center;gap:8px;justify-content:space-between;padding:8px 10px;border-bottom:1px solid #E5ECE8;font-size:11px;color:#64736B}
 .c-zone strong{font-weight:500;text-align:right;overflow-wrap:anywhere}
+
+.c-reminder-check{width:20px;height:20px;flex:0 0 20px;margin:5px 0 0;accent-color:var(--primary);cursor:pointer}
+.c-reminder-check:focus-visible{outline:2px solid var(--primary);outline-offset:3px}
+.c-entry-end{display:flex;flex-direction:column;align-items:flex-end;gap:5px;flex:0 0 auto}
+.c-entry-actions{display:flex;gap:0}
+.c-entry-actions .c-icon{width:28px;flex-basis:28px;min-height:32px}
+.c-completed{margin-top:12px;border-top:1px solid #E5ECE8;padding-top:8px}
+.c-completed>summary{font-size:12px;color:var(--primary);cursor:pointer;padding:6px 0}
+.c-completed-entry .c-copy>strong{text-decoration:line-through;color:#65776D}
+.c-copy .c-overdue{color:#B54738}
+.c-delete-copy{font-size:13px;line-height:1.5;overflow-wrap:anywhere}

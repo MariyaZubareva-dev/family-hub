@@ -1,7 +1,8 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Help, Modal } from './FinanceScreen'
 import { DEFAULT_TIMEZONE, zoneInput, zoneParts } from './lib/timezone'
 import './home.css'
+import { calendarRequest } from './lib/calendarApi'
 import { CashbackSummary } from './CashbackScreen'
 
 type Props={apiGet:(path:string)=>Promise<any>;visibility:{calendar:boolean;finance:boolean;shopping:boolean};onCalendar:(kind?:'EVENT'|'REMINDER')=>void;onFinance:(tab:'overview'|'credits'|'cashback')=>void;onReceipt:(file:File)=>void;onFamily:()=>void}
@@ -11,6 +12,14 @@ function Symbol({kind}:{kind:'camera'|'calendar'|'wallet'}){return <svg width="1
 export default function HomeScreen(p:Props){
   const [analytics,setAnalytics]=useState<any>(null),[events,setEvents]=useState<any[]>([]),[reminders,setReminders]=useState<any[]>([]),[credits,setCredits]=useState<any[]>([])
   const [timezone,setTimezone]=useState(DEFAULT_TIMEZONE),[loading,setLoading]=useState(true),[errors,setErrors]=useState<string[]>([]),[adding,setAdding]=useState(false),[retry,setRetry]=useState(0)
+  const reminderLock=useRef(false)
+  const [reminderBusy,setReminderBusy]=useState(false),[reminderError,setReminderError]=useState(''),[completedReminder,setCompletedReminder]=useState<any>(null)
+  const changeReminder=async(item:any,status:'COMPLETED'|'SCHEDULED')=>{
+    if(reminderLock.current)return
+    reminderLock.current=true;setReminderBusy(true);setReminderError('')
+    try{const j=await calendarRequest('/reminders/'+item.id,{status},'PATCH');setReminders(rows=>rows.map(x=>x.id===item.id?j.data:x));setCompletedReminder(status==='COMPLETED'?j.data:null)}
+    catch(e){setReminderError(e instanceof Error?e.message:'Не удалось изменить напоминание.')}finally{reminderLock.current=false;setReminderBusy(false)}
+  }
   const [choosingReceipt,setChoosingReceipt]=useState(false)
   const takeReceipt=(file?:File)=>{if(file){setChoosingReceipt(false);p.onReceipt(file)}}
   useEffect(()=>{
@@ -55,7 +64,9 @@ export default function HomeScreen(p:Props){
     {p.visibility.finance&&<CashbackSummary onOpen={()=>p.onFinance('cashback')}/>}
     {p.visibility.calendar&&<section className="card h-plans" aria-label="Планы на сегодня"><div className="h-head"><span className="h-symbol"><Symbol kind="calendar"/></span><h3>Сегодня <span className="h-count">{plans.length}</span></h3><button className="h-link" onClick={()=>p.onCalendar()}>Календарь →</button></div>
       {!loading&&!plans.length&&!errors.some(x=>/Встречи:|Напоминания:/.test(x))&&<p className="h-empty">На сегодня планов пока нет.</p>}
-      {plans.map(x=><article className="h-plan" key={x.kind+x.id}><time dateTime={x.at}>{new Date(x.at).toLocaleTimeString('ru-RU',{timeZone:timezone,hour:'2-digit',minute:'2-digit'})}</time><div><small>{x.kind}</small><strong>{x.title}</strong></div></article>)}
+      {reminderError&&<p className="h-error" role="alert">{reminderError}</p>}
+      {completedReminder&&<div className="h-reminder-notice" role="status"><span>Выполнено: {completedReminder.title}</span><button className="h-link" disabled={reminderBusy} onClick={()=>void changeReminder(completedReminder,'SCHEDULED')}>Отменить</button></div>}
+      {plans.map(x=><article className="h-plan" key={x.kind+x.id}>{x.kind==='Напоминание'&&<input className="h-reminder-check" type="checkbox" aria-label={'Выполнено: '+x.title} checked={false} disabled={!x.can_complete||reminderBusy} onChange={()=>void changeReminder(x,'COMPLETED')}/>}<time dateTime={x.at}>{new Date(x.at).toLocaleTimeString('ru-RU',{timeZone:timezone,hour:'2-digit',minute:'2-digit'})}</time><div><small>{x.kind}</small><strong>{x.title}</strong></div></article>)}
       <div className="h-footer"><button className="button secondary" onClick={()=>setAdding(true)}>＋ Добавить</button><Help label="Время планов" text={`Планы показаны в часовом поясе ${timezone}. Изменить его можно в разделе «Семья».`}/></div>
     </section>}
     {p.visibility.finance&&next.length>0&&<section className="card" aria-label="Ближайшие платежи"><div className="h-head"><h3>Ближайшие платежи</h3><button className="h-link" onClick={()=>p.onFinance('credits')}>Кредиты →</button></div>{next.map(c=><article key={c.id} className="h-credit"><div><strong>{c.name||'Кредит'}</strong><small>{c.date.toLocaleDateString('ru-RU',{day:'numeric',month:'long'})}</small></div><b>{money(c.amount)}</b></article>)}</section>}

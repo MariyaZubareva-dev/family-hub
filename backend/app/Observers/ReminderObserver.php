@@ -17,20 +17,29 @@ class ReminderObserver
         }
     }
 
+    public function updating(Reminder $reminder): void
+    {
+        $scheduleChanged = $reminder->isDirty(['scheduled_at', 'responsible_member_id', 'responsible_member_ids']);
+        if ($scheduleChanged || $reminder->isDirty('status')) {
+            $reminder->notification_revision = (int) $reminder->notification_revision + 1;
+        }
+        if ($scheduleChanged || ($reminder->isDirty('status') && $reminder->status === 'SCHEDULED'
+            && $reminder->scheduled_at->isFuture())) {
+            $reminder->notification_sent_at = null;
+        }
+    }
+
     public function updated(Reminder $reminder): void
     {
-        // If scheduled_at or responsible changed, the scheduler will pick up new time via notification_sent_at reset.
-        if ($reminder->wasChanged('scheduled_at') || $reminder->wasChanged('responsible_member_id') || $reminder->wasChanged('responsible_member_ids')) {
-            $reminder->forceFill(['notification_sent_at' => null])->saveQuietly();
-        }
-        if ($reminder->wasChanged('status') && $reminder->status === 'CANCELLED') {
+        $statusChanged = $reminder->wasChanged('status');
+        if ($statusChanged && in_array($reminder->status, ['CANCELLED', 'COMPLETED'], true)) {
             // cancel pending notifications
             try {
                 \Illuminate\Support\Facades\DB::table('telegram_notifications')
                     ->where('notifiable_id', $reminder->id)
                     ->where('status', 'PENDING')
                     ->where('notification_type', 'REMINDER')
-                    ->update(['status' => 'FAILED', 'error_code' => 'CANCELLED', 'updated_at' => now()]);
+                    ->update(['status' => 'FAILED', 'error_code' => $reminder->status, 'updated_at' => now()]);
             } catch (\Throwable $e) {}
         }
     }

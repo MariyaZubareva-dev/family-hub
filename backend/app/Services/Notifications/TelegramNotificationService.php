@@ -42,13 +42,27 @@ class TelegramNotificationService
 
     public static function notifyReminderDue(Reminder $reminder): void
     {
-        $time = $reminder->scheduled_at->copy()->setTimezone($reminder->timezone ?: 'Europe/Moscow')->format('d.m.Y H:i');
+        if ($reminder->status !== 'SCHEDULED') return;
         $recipients = FamilyMember::where('family_id', $reminder->family_id)->where('status', 'ACTIVE')->get();
-        $text = "🔔 Напоминание: " . e($reminder->title) . ($reminder->description ? "\n" . e($reminder->description) : '') . "\n⏰ {$time} · " . e($reminder->timezone);
+        $text = self::reminderText($reminder);
         foreach ($recipients as $member) {
+            // Undo restores pending deliveries without repeating an already delivered occurrence.
+            if (DB::table('telegram_notifications')->where('family_id', $reminder->family_id)
+                ->where('notifiable_id', $reminder->id)->where('notification_type', 'REMINDER')
+                ->where('recipient_member_id', $member->id)->where('scheduled_at', $reminder->scheduled_at)
+                ->where('status', 'SENT')->exists()) continue;
+            $revision = (int) $reminder->notification_revision;
             $key = "reminder:{$reminder->id}:{$reminder->scheduled_at->toIso8601String()}:{$member->id}";
-            self::dispatch($reminder->family_id, $member->id, 'REMINDER', $key, $text, ['reminder_id' => $reminder->id], $reminder->scheduled_at, $reminder);
+            if ($revision > 0) $key .= ":v{$revision}";
+            self::dispatch($reminder->family_id, $member->id, 'REMINDER', $key, $text,
+                ['reminder_id' => $reminder->id, 'notification_revision' => $revision], $reminder->scheduled_at, $reminder);
         }
+    }
+
+    public static function reminderText(Reminder $reminder): string
+    {
+        $time = $reminder->scheduled_at->copy()->setTimezone($reminder->timezone ?: 'Europe/Moscow')->format('d.m.Y H:i');
+        return "🔔 Напоминание: " . e($reminder->title) . ($reminder->description ? "\n" . e($reminder->description) : '') . "\n⏰ {$time} · " . e($reminder->timezone);
     }
 
     public static function notifyPlannedPurchaseDue(PlannedPurchase $purchase): void
