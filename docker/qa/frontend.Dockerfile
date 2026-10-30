@@ -3,7 +3,8 @@ WORKDIR /app
 COPY frontend/package*.json ./
 RUN npm ci
 COPY frontend/ ./
-ENV VITE_API_BASE_URL=/api/v1
+ENV VITE_BASE=/qa/
+ENV VITE_API_BASE_URL=/qa/api/v1
 ENV VITE_QA_STAND=true
 RUN npm run build
 

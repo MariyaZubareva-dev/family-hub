@@ -44,3 +44,62 @@ cd /opt/family-hub-qa && bash scripts/qa-tunnel.sh stop
 - https://developers.cloudflare.com/tunnel/get-started/quick-tunnels/
 - https://nginx.org/en/docs/http/ngx_http_auth_basic_module.html
 - https://httpd.apache.org/docs/2.4/en/programs/htpasswd.html
+
+## Альтернатива: адрес на домене приложения
+
+Если домен `teamportal.ru` доступен в браузере, стенд можно временно открыть как
+`https://teamportal.ru/qa/`. Тестовая сборка использует базовый путь `/qa/`
+и API-префикс `/qa/api/v1`; шлюз с Basic Auth защищает страницу и API.
+
+Этот способ требует дополнительного маршрута на production Caddy, поэтому его нужно
+включать отдельно. Внутри блока `teamportal.ru` в
+`/opt/family-hub/docker/caddy/Caddyfile` добавь:
+
+```caddyfile
+    redir /qa /qa/ 308
+    handle_path /qa/* {
+        reverse_proxy qa-gateway:80
+    }
+```
+
+Затем из каталога production-кода подключи Caddy к сети тестового Compose-проекта:
+
+```bash
+cd /opt/family-hub &&
+docker compose --env-file .env.production -p family-hub \
+  -f docker-compose.prod.yml \
+  -f /opt/family-hub-qa/docker-compose.prod-qa.yml \
+  config --quiet &&
+docker compose --env-file .env.production -p family-hub \
+  -f docker-compose.prod.yml \
+  -f /opt/family-hub-qa/docker-compose.prod-qa.yml \
+  up -d --no-deps caddy
+```
+
+Обнови QA frontend:
+
+```bash
+cd /opt/family-hub-qa &&
+git pull --ff-only origin feature/qa-stand &&
+docker compose --env-file .env.qa -p family-hub-qa -f docker-compose.qa.yml \
+  up -d --build --no-deps frontend
+```
+
+Затем включи уже настроенный password gateway:
+
+```bash
+cd /opt/family-hub-qa &&
+bash scripts/qa-tunnel.sh init &&
+docker compose --env-file .env.qa -p family-hub-qa \
+  -f docker-compose.qa.yml -f docker-compose.qa-tunnel.yml \
+  up -d --no-deps qa-gateway
+```
+
+Открой `https://teamportal.ru/qa/`, логин — `qa`, пароль — заданный при init.
+После проверки удали маршрут `/qa` из production Caddyfile и перепримени Caddy;
+останови только gateway. Стендовые контейнеры и база останутся доступны локально.
+
+Подключение Caddy к QA-сети и применение маршрута меняют production reverse proxy,
+хотя сами рабочие frontend, backend и данные не затрагиваются. Перед этим проверь
+активный production Compose-проект командой `docker compose ls`.
+До выполнения этих шагов маршрут не считается установленным или проверенным.

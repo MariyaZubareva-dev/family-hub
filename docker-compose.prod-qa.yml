@@ -1,0 +1,12 @@
+# Optional overlay: connect production Caddy to the isolated QA Docker network.
+# It does not expose QA services or alter production data volumes.
+services:
+  caddy:
+    networks:
+      - default
+      - qa_stand
+
+networks:
+  qa_stand:
+    external: true
+    name: family-hub-qa_default
