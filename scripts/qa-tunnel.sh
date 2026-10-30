@@ -22,11 +22,21 @@ case "$action" in
     # Stop any previous public tunnel before checking the new gateway.
     "${compose[@]}" stop qa-tunnel
     "${compose[@]}" up -d --build --no-deps qa-gateway
+    ready=false
+    for _ in {1..30}; do
+      if curl --fail --silent --max-time 2 http://127.0.0.1:18081/_qa_health >/dev/null; then
+        ready=true
+        break
+      fi
+      sleep 1
+    done
+    [[ "$ready" == true ]] || { echo 'QA-шлюз не прошёл healthcheck; туннель не запущен.' >&2; exit 1; }
     headers=$(curl --retry 5 --retry-connrefused --retry-delay 1 --silent --show-error \
       --dump-header - --output /dev/null http://127.0.0.1:18081/)
     body=$(curl --retry 5 --retry-connrefused --retry-delay 1 --silent --show-error \
       http://127.0.0.1:18081/)
-    [[ "$headers" == *' 401 '* && "$headers" != *'WWW-Authenticate'* && "$body" == *'name="password"'* ]] || {
+    headers_lc=${headers,,}
+    [[ "$headers" == *' 200 '* && "$headers_lc" != *'www-authenticate'* && "$body" == *'name="password"'* ]] || {
       echo 'Форма входа не подтверждена; туннель не запущен.' >&2
       exit 1
     }

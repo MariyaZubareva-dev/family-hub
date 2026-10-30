@@ -114,7 +114,7 @@ class Gateway(BaseHTTPRequestHandler):
 
     def login(self) -> None:
         if self.login_limited():
-            self.login_page(error="Слишком много попыток. Повторите позже.", status=429)
+            self.login_page(error="Слишком много попыток. Повторите позже.")
             return
         content_type = self.headers.get("Content-Type", "").split(";", 1)[0].strip().lower()
         length = self.content_length()
@@ -155,7 +155,7 @@ class Gateway(BaseHTTPRequestHandler):
         valid_password = hmac.compare_digest(candidate_hash, PASSWORD_HASH)
         if not (valid_origin and valid_referer and valid_csrf and valid_user and valid_password):
             self.record_failed_login()
-            self.login_page(error="Неверный логин или пароль.", status=401)
+            self.login_page(error="Неверный логин или пароль.")
             return
         with FAILED_LOGINS_LOCK:
             FAILED_LOGINS.clear()
@@ -188,7 +188,7 @@ class Gateway(BaseHTTPRequestHandler):
                 return valid_token("session", value, SESSION_SECONDS)
         return False
 
-    def login_page(self, error: str = "", status: int = 401) -> None:
+    def login_page(self, error: str = "", status: int = 200) -> None:
         csrf = signed_token("login", 600)
         safe_error = f'<p class="error" role="alert">{html.escape(error)}</p>' if error else ""
         page = f"""<!doctype html>
