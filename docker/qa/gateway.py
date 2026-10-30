@@ -237,7 +237,7 @@ class Gateway(BaseHTTPRequestHandler):
             for name, value in response.getheaders():
                 if name.lower() not in HOP_HEADERS and name.lower() != "content-length":
                     self.send_header(name, value)
-            self.security_headers()
+            self.security_headers(include_csp=False)
             self.send_header("Cache-Control", "no-store")
             self.send_header("Content-Length", str(len(response_body)))
             self.end_headers()
@@ -271,11 +271,12 @@ class Gateway(BaseHTTPRequestHandler):
         with FAILED_LOGINS_LOCK:
             FAILED_LOGINS.append(time.time())
 
-    def security_headers(self) -> None:
+    def security_headers(self, *, include_csp: bool = True) -> None:
         self.send_header("X-Robots-Tag", "noindex, nofollow")
         self.send_header("X-Content-Type-Options", "nosniff")
         self.send_header("Referrer-Policy", "same-origin")
-        self.send_header("Content-Security-Policy", "default-src 'none'; style-src 'unsafe-inline'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'")
+        if include_csp:
+            self.send_header("Content-Security-Policy", "default-src 'none'; style-src 'unsafe-inline'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'")
 
     def respond(self, status: int, body: bytes, content_type: str) -> None:
         self.send_response(status)
