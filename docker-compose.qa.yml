@@ -1,0 +1,64 @@
+name: family-hub-qa
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: family_hub_qa
+      POSTGRES_USER: family_hub_qa
+      POSTGRES_PASSWORD: ${QA_DB_PASSWORD:?Run scripts/qa.sh up first}
+    volumes:
+      - qa_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: [CMD-SHELL, 'pg_isready -U family_hub_qa -d family_hub_qa']
+      interval: 5s
+      timeout: 5s
+      retries: 20
+  backend:
+    build: ./backend
+    environment:
+      APP_ENV: local
+      APP_DEBUG: 'false'
+      APP_KEY: ${QA_APP_KEY:?Run scripts/qa.sh up first}
+      APP_URL: http://localhost:18080
+      APP_TIMEZONE: Europe/Moscow
+      APP_LOCALE: ru
+      QA_STAND: 'true'
+      DB_CONNECTION: pgsql
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_DATABASE: family_hub_qa
+      DB_USERNAME: family_hub_qa
+      DB_PASSWORD: ${QA_DB_PASSWORD}
+      CACHE_STORE: file
+      SESSION_DRIVER: file
+      QUEUE_CONNECTION: database
+      MAIL_MAILER: log
+      LOG_CHANNEL: stderr
+      TELEGRAM_BOT_TOKEN: ''
+      TELEGRAM_WEBHOOK_SECRET: ''
+      OPENAI_API_KEY: ''
+      RECEIPTS_API_TOKEN: ''
+    volumes:
+      - qa_storage:/var/www/html/storage
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command: [sh, -ec, 'php artisan migrate --force && php artisan db:seed --class=QaStandSeeder --force && exec php artisan serve --host=0.0.0.0 --port=8000']
+    healthcheck:
+      test: [CMD, php, -r, "exit(@file_get_contents('http://127.0.0.1:8000/api/v1/health') === false ? 1 : 0);"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 20s
+  frontend:
+    build:
+      context: .
+      dockerfile: docker/qa/frontend.Dockerfile
+    ports:
+      - '127.0.0.1:18080:80'
+    depends_on:
+      backend:
+        condition: service_healthy
+volumes:
+  qa_pgdata:
+  qa_storage:
