@@ -13,6 +13,13 @@ services:
       interval: 5s
       timeout: 5s
       retries: 20
+  redis:
+    image: redis:7-alpine
+    healthcheck:
+      test: [CMD, redis-cli, ping]
+      interval: 5s
+      timeout: 3s
+      retries: 20
   backend:
     build: ./backend
     environment:
@@ -31,7 +38,11 @@ services:
       DB_PASSWORD: ${QA_DB_PASSWORD}
       CACHE_STORE: file
       SESSION_DRIVER: file
-      QUEUE_CONNECTION: database
+      QUEUE_CONNECTION: redis
+      REDIS_CLIENT: predis
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_PREFIX: family_hub_qa_
       MAIL_MAILER: log
       LOG_CHANNEL: stderr
       TELEGRAM_BOT_TOKEN: ''
@@ -42,6 +53,8 @@ services:
       - qa_storage:/var/www/html/storage
     depends_on:
       postgres:
+        condition: service_healthy
+      redis:
         condition: service_healthy
     command: [sh, -ec, 'php artisan migrate --force && php artisan db:seed --class=QaStandSeeder --force && exec php artisan serve --host=0.0.0.0 --port=8000']
     healthcheck:
