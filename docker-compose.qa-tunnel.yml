@@ -1,0 +1,16 @@
+services:
+  qa-gateway:
+    image: nginx:alpine
+    volumes:
+      - ./docker/qa/gateway.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./.env.qa-secrets/users.htpasswd:/etc/nginx/qa.htpasswd:ro
+    ports:
+      - '127.0.0.1:18081:80'
+    depends_on:
+      - frontend
+  qa-tunnel:
+    image: cloudflare/cloudflared:latest
+    command: [tunnel, --no-autoupdate, --url, 'http://qa-gateway:80']
+    depends_on:
+      - qa-gateway
+    restart: 'no'
