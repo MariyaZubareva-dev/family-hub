@@ -12,7 +12,9 @@ class FinanceTransaction extends Model
     protected $guarded = [];
     protected $keyType = 'string';
     public $incrementing = false;
-    protected $casts = ['amount' => 'decimal:2', 'occurred_on' => 'date'];
+    // This is a calendar date, not a timestamp. Serialize it without a timezone
+    // so clients cannot shift it to the previous day when parsing UTC midnight.
+    protected $casts = ['amount' => 'decimal:2', 'occurred_on' => 'date:Y-m-d'];
     public function family(): BelongsTo { return $this->belongsTo(Family::class); }
     public function creator(): BelongsTo { return $this->belongsTo(User::class, 'created_by'); }
 }
