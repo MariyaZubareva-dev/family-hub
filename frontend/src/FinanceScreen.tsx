@@ -267,6 +267,7 @@ function Receipts({categories,admin,onCategoryCreated,onSaved,initialFile,onCons
       <div className="f-receipt-lines">{items.map((it,index)=><div className="f-receipt-line" key={index}>
         <span className="f-line-index">{index+1}</span><div className="f-copy"><strong title={it.name}>{it.name||'Без названия'}</strong><small>{it.qty>0?it.qty:'?'} × {money(it.price)}{it.needs_review&&<span className="danger"> · Проверьте цифры</span>}</small>{confirmed?<small>Категория: {it.category}</small>:<label className="f-line-category"><span>Категория</span><CategorySelect categories={categories} admin={admin} label={`Категория позиции ${index+1}`} value={it.category_id||''} disabled={busy} onSelect={c=>update(index,{category:c.name,category_id:c.id})} onCreated={onCategoryCreated}/></label>}</div><div className="f-line-end"><b>{money(Math.round(it.qty*it.price*100)/100)}</b>{!confirmed&&<button className="f-icon" aria-label={`Изменить позицию ${index+1}`} disabled={busy} onClick={()=>setEditIndex(index)}>✎</button>}</div>
       </div>)}</div>
+      {!confirmed&&items.length>0&&<ReceiptRegularMatches key={receipt.id} items={items} date={date} disabled={busy||metadataNeedsReview}/>}
       {!confirmed&&items.some(i=>i.category_needs_review)&&<div className="f-row"><small>Есть позиции без точного подбора категории.</small><Help label="Как проверить категории чека" text="Проверьте категории товаров: при неоднозначном названии оставлена общая категория или пустое поле. Выберите подходящую из списка. Подтверждённый выбор будет учтён для такого же товара в следующих чеках семьи."/></div>}
       {!confirmed&&<div className="f-receipt-tools"><button className="button ghost" disabled={busy} onClick={()=>{setItems(rows=>[...rows,{name:'',qty:1,price:0,category:categories.find(c=>c.name==='Покупки')?.name||categories[0]?.name||'Покупки',category_id:categories.find(c=>c.name==='Покупки')?.id||categories[0]?.id}]);setEditIndex(items.length)}}>＋ Позиция</button><button className="button ghost" disabled={busy} onClick={()=>void retry()}>{busy?'Распознаём…':'Распознать ещё раз'}</button></div>}
       <div className="f-receipt-total"><div><span>Итого по позициям</span><b>{receipt.qr_state==='WAITING'&&!items.length?'—':money(total)}</b></div>{!confirmed&&<Field label="Итог на чеке, ₽"><input type="number" inputMode="decimal" min="0.01" step="0.01" placeholder="Введите сумму с чека" value={receiptTotal} disabled={busy} aria-invalid={expected===null||expected<=0} aria-describedby={reviewStatusId} onChange={e=>{setDirty(true);setReceiptTotal(e.target.value);if(metadataReason==='TOTAL_UNCERTAIN')setMetadataReviewed(true)}}/></Field>}<small id={reviewStatusId} aria-live="polite" className={receipt.qr_state==='WAITING'&&!items.length||balanced&&validItems?'f-positive':'danger'}>{finalized?'Расходы по чеку сохранены.':confirmed?'Изменить и подтвердить этот чек может его автор или администратор семьи.':reviewMessage}</small>{!confirmed&&problemIndex>=0&&<button className="f-review-fix" disabled={busy} onClick={()=>setEditIndex(problemIndex)}>Проверить позицию {problemIndex+1} →</button>}</div>
@@ -278,6 +279,53 @@ function Receipts({categories,admin,onCategoryCreated,onSaved,initialFile,onCons
   {editItem&&editIndex!==null&&<Modal title={`Позиция ${editIndex+1}`} onClose={()=>setEditIndex(null)}><div className="f-form"><div className="f-form-fields"><Field label={`Товар ${editIndex+1}`}><textarea rows={3} maxLength={255} value={editItem.name} onChange={e=>update(editIndex,{name:e.target.value})}/></Field><div className="f-receipt-quantity-price"><Field label="Количество"><input type="number" inputMode="decimal" min="0.001" step="0.001" value={editItem.qty} onChange={e=>update(editIndex,{qty:Number(e.target.value)})}/></Field><Field label="Цена, ₽"><input type="number" inputMode="decimal" min="0.01" step="0.01" value={editItem.price} onChange={e=>update(editIndex,{price:Number(e.target.value)})}/></Field></div><Field label="Категория"><CategorySelect categories={categories} admin={admin} value={editItem.category_id||''} onSelect={c=>update(editIndex,{category:c.name,category_id:c.id})} onCreated={onCategoryCreated}/></Field></div><div className="f-actions"><button className="button primary" onClick={()=>{update(editIndex,{needs_review:false});setEditIndex(null)}}>Готово</button><button className="button ghost danger" onClick={()=>{setItems(rows=>rows.filter((_,i)=>i!==editIndex));setEditIndex(null)}}>Удалить позицию</button></div></div></Modal>}
   {editMeta&&<Modal title="Данные чека" onClose={()=>setEditMeta(false)}><div className="f-form"><div className="f-form-fields"><Field label="Магазин"><input maxLength={255} value={merchant} onChange={e=>setMerchant(e.target.value)}/></Field><Field label="Дата покупки"><input type="date" value={date} onChange={e=>setDate(e.target.value)}/></Field></div><button className="button primary" onClick={()=>{if(metadataReason==='DATE_UNCERTAIN')setMetadataReviewed(true);setEditMeta(false)}}>Готово</button></div></Modal>}
   </div>
+}
+function productTokens(value:string):string[] {
+  const ignored=new Set(['шт','штука','штук','кг','г','гр','мл','л','уп','упак','пакет','штучный'])
+  return [...new Set(value.toLocaleLowerCase('ru-RU').replace(/ё/g,'е').replace(/[0-9]+([.,][0-9]+)?/g,' ').replace(/[^а-яa-z]+/gi,' ').split(/\s+/).filter(x=>x.length>=3&&!ignored.has(x)))]
+}
+function productSimilarity(a:string,b:string):number {
+  const left=productTokens(a),right=productTokens(b)
+  if(!left.length||!right.length)return 0
+  const [short,long]=left.length<=right.length?[left,right]:[right,left]
+  return short.reduce((sum,token)=>{
+    const best=Math.max(0,...long.map(other=>token===other?1:Math.min(token.length,other.length)>=4&&(token.startsWith(other)||other.startsWith(token))?0.82:0))
+    return sum+best
+  },0)/short.length
+}
+function ReceiptRegularMatches({items,date,disabled}:{items:Item[];date:string;disabled:boolean}) {
+  const [purchases,setPurchases]=useState<any[]>([]),[loading,setLoading]=useState(true),[error,setError]=useState(''),[pending,setPending]=useState<number|null>(null),[decisions,setDecisions]=useState<Record<number,string>>({}),[choices,setChoices]=useState<Record<number,string>>({}),[notice,setNotice]=useState('')
+  useEffect(()=>{let active=true;request('/planned-purchases?type=RECURRING').then(j=>{if(active)setPurchases(j.data||[])}).catch(e=>{if(active)setError(errorText(e))}).finally(()=>{if(active)setLoading(false)});return()=>{active=false}},[])
+  const used=new Set(Object.values(decisions).filter(x=>x.startsWith('PURCHASED:')).map(x=>x.slice(10)))
+  const matches=items.map((item,index)=>{
+    const candidates=purchases.filter(p=>p.type==='RECURRING'&&p.status==='ACTIVE'&&Number(p.cadence_months)>0&&(!p.last_purchased_at||p.last_purchased_at.slice(0,10)<date)&&!used.has(p.id))
+      .map(p=>({purchase:p,score:productSimilarity(item.name,p.name)})).filter(x=>x.score>=0.45).sort((a,b)=>b.score-a.score)
+    return {item,index,candidates,ambiguous:candidates.length>1&&candidates[0].score-candidates[1].score<=0.15}
+  }).filter(x=>x.candidates.length>0&&!decisions[x.index])
+  const dateValid=!!date&&date<=today()
+  const decide=async(index:number,purchaseId:string,yes:boolean)=>{
+    if(pending!==null||disabled)return
+    if(!yes){setDecisions(d=>({...d,[index]:'REJECTED'}));setNotice('Совпадение отклонено. Дата следующей покупки не изменилась.');return}
+    if(!purchaseId)return
+    if(!dateValid){setError('Проверьте дату чека: для отметки покупки нужна сегодняшняя или прошедшая дата.');return}
+    setPending(index);setError('');setNotice('')
+    try{
+      const j=await request('/planned-purchases/'+purchaseId+'/purchased','POST',{purchased_on:date})
+      setPurchases(rows=>rows.map(p=>p.id===purchaseId?j.data:p))
+      setDecisions(d=>({...d,[index]:'PURCHASED:'+purchaseId}))
+      setNotice('Покупка подтверждена по дате чека '+dateLabel(date)+'. Следующая дата: '+dateLabel(j.data.due_date)+'.')
+    }catch(e){setError(errorText(e))}finally{setPending(null)}
+  }
+  if(loading)return <p className="muted" role="status">Ищем похожие регулярные покупки…</p>
+  return <section className="card f-receipt-regular"><h3>Регулярные покупки в этом чеке</h3><p className="muted">Проверьте совпадение. Расписание изменится только после подтверждения кнопкой «Купили» и будет рассчитано от даты чека: {dateLabel(date)}.</p>{error&&<Message text={error} error/>}{notice&&<Message text={notice}/>}
+    {matches.map(({item,index,candidates,ambiguous})=>{
+      const lineKey=index
+      const suggested=candidates[0]?.purchase.id||''
+      const chosen=choices[lineKey]??(ambiguous?'':suggested)
+      return <div className="f-receipt-regular-match" key={lineKey}><div className="f-copy"><strong>{item.name}</strong><small>{ambiguous?'Найдено несколько похожих регулярных позиций — выберите точную.':'Похоже на «'+candidates[0].purchase.name+'».'}</small></div><Field label="Регулярная позиция"><select value={chosen} disabled={disabled||pending===index} onChange={e=>setChoices(s=>({...s,[lineKey]:e.target.value}))}><option value="">Выберите позицию</option>{candidates.map(({purchase})=><option key={purchase.id} value={purchase.id}>{purchase.name}</option>)}</select></Field><div className="f-actions"><button type="button" className="button primary" disabled={disabled||pending===index||!chosen||!dateValid} onClick={()=>void decide(index,chosen,true)}>{pending===index?'Сохраняем…':'Купили'}</button><button type="button" className="button secondary" disabled={disabled||pending===index} onClick={()=>void decide(index,chosen,false)}>Не покупали</button></div></div>
+    })}
+    {!matches.length&&!notice&&!error&&<p className="muted">Похожих регулярных покупок не найдено.</p>}{!matches.length&&notice&&<p className="muted">Все найденные совпадения обработаны.</p>}
+  </section>
 }
 function Credits({admin}:{admin:boolean}) {
   const [credits,setCredits]=useState<any[]>([]),[selected,setSelected]=useState(''),[adding,setAdding]=useState(false),[editCredit,setEditCredit]=useState(false)
