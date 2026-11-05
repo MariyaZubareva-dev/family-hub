@@ -101,9 +101,7 @@ class BrowserAuthTest extends TestCase
                 'email' => 'owner@example.com', 'password' => 'linked-password-456',
             ])->assertOk();
         $this->assertDatabaseCount('users', 1);
-        $this->assertDatabaseHas('users', [
-            'id' => $user->id, 'telegram_user_id' => 30001, 'email' => 'owner@example.com',
-        ]);
+        $this->assertNull($user->fresh()->email);
 
         $this->codeFor($user);
         $this->postJson('/api/v1/auth/verify', [
