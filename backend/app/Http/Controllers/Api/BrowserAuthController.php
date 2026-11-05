@@ -100,6 +100,36 @@ class BrowserAuthController extends Controller
         return response()->json(['message' => 'Адрес подтверждён. Теперь можно войти по email.']);
     }
 
+    public function requestPasswordReset(Request $request): JsonResponse
+    {
+        $data = $request->validate(['email' => ['required', 'email:rfc']]);
+        $user = User::where('email', Str::lower(trim($data['email'])))->whereNotNull('email_verified_at')->first();
+        if ($user) $this->issueVerification($user);
+        return response()->json(['message' => 'Если email зарегистрирован, на него отправлен код восстановления.']);
+    }
+
+    public function resetPassword(Request $request): JsonResponse
+    {
+        $data = $request->validate([
+            'email' => ['required', 'email:rfc'],
+            'code' => ['required', 'digits:6'],
+            'password' => ['required', 'string', 'min:12', 'max:128'],
+        ]);
+        $user = User::where('email', Str::lower(trim($data['email'])))->whereNotNull('email_verified_at')->first();
+        $record = $user ? DB::table('email_verification_codes')->where('user_id', $user->id)->first() : null;
+        if (!$record || $record->attempts >= 5 || now()->greaterThan($record->expires_at) ||
+            !hash_equals($record->code_hash, hash('sha256', $data['code']))) {
+            if ($record) DB::table('email_verification_codes')->where('user_id', $user->id)->increment('attempts');
+            throw ValidationException::withMessages(['code' => 'Неверный или просроченный код.']);
+        }
+        DB::transaction(function () use ($user, $data) {
+            $user->update(['password' => Hash::make($data['password'])]);
+            DB::table('email_verification_codes')->where('user_id', $user->id)->delete();
+            DB::table('browser_sessions')->where('user_id', $user->id)->delete();
+        });
+        return response()->json(['message' => 'Пароль изменён. Войди с новым паролем.']);
+    }
+
     public function login(Request $request): JsonResponse
     {
         $data = $request->validate(['email' => ['required', 'email:rfc'], 'password' => ['required', 'string']]);
