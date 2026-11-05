@@ -88,6 +88,35 @@ class BrowserAuthTest extends TestCase
         ])->assertOk();
     }
 
+    public function test_telegram_user_links_email_without_changing_family_identity(): void
+    {
+        config(['mail.default' => 'log']);
+        $user = User::create(['telegram_user_id' => 30001, 'first_name' => 'Владелец']);
+        $family = Family::create(['name' => 'Семья', 'created_by' => $user->id]);
+        FamilyMember::create(['family_id' => $family->id, 'user_id' => $user->id, 'role' => 'ADMIN', 'status' => 'ACTIVE']);
+
+        // This test supplies the authenticated user via actingAs(); production verifies signed initData.
+        $this->actingAs($user)->withHeader('X-Telegram-Init-Data', 'signed-telegram-context')
+            ->postJson('/api/v1/auth/link-email', [
+                'email' => 'owner@example.com', 'password' => 'linked-password-456',
+            ])->assertOk();
+        $this->assertDatabaseCount('users', 1);
+        $this->assertDatabaseHas('users', [
+            'id' => $user->id, 'telegram_user_id' => 30001, 'email' => 'owner@example.com',
+        ]);
+
+        $this->codeFor($user);
+        $this->postJson('/api/v1/auth/verify', [
+            'email' => 'owner@example.com', 'code' => '123456',
+        ])->assertOk();
+        $this->postJson('/api/v1/auth/login', [
+            'email' => 'owner@example.com', 'password' => 'linked-password-456',
+        ])->assertOk()->assertJsonPath('data.user.id', $user->id);
+        $this->assertDatabaseHas('family_members', [
+            'user_id' => $user->id, 'family_id' => $family->id, 'status' => 'ACTIVE',
+        ]);
+    }
+
     public function test_email_user_does_not_receive_telegram_invitations_with_null_id(): void
     {
         $admin = User::create(['telegram_user_id' => 20001, 'first_name' => 'Админ']);
