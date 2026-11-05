@@ -67,6 +67,7 @@ export default function BrowserAuth({ children }: {children: ReactNode}) {
         <button type="submit" disabled={busy}>{busy?'Подождите…':mode==='login'?'Войти':mode==='register'?'Зарегистрироваться':'Подтвердить'}</button>
       </form>
       <div className="browser-auth-switch">
+        {mode==='verify'&&<button disabled={busy} onClick={async()=>{try{setNotice((await authRequest('resend',{email})).message);setError('')}catch(e){setError(e instanceof Error?e.message:'Ошибка отправки')}}}>Отправить код повторно</button>}
         {mode==='login'?<><button onClick={()=>{setMode('register');setError('')}}>Создать аккаунт</button><button onClick={()=>{setMode('verify');setError('')}}>Уже есть код?</button></>:<button onClick={()=>{setMode('login');setError('')}}>Вернуться ко входу</button>}
       </div>
       <p className="browser-auth-help">Уже используешь Family Hub через Telegram? Сначала привяжи email в Telegram-версии, чтобы сохранить все семейные данные.</p>
