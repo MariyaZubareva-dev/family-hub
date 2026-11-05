@@ -277,12 +277,12 @@ function FamilyV07({initialInvite=false,onInviteConsumed}:{initialInvite?:boolea
   const removeMember=async()=>{
     if(!confirmMember)return
     setBusy(confirmMember.id);setError('')
-    try{const r=await fetch(`/api/v1/family/members/${confirmMember.id}`,{method:'DELETE',headers:getAuthHeaders()});if(!r.ok)throw await apiError(r);setConfirmMember(null);await refresh()}
+    try{const r=await fetch(`/api/v1/family/members/${confirmMember.id}`,{method:'DELETE',headers:getAuthHeaders('DELETE'),credentials:'same-origin'});if(!r.ok)throw await apiError(r);setConfirmMember(null);await refresh()}
     catch(e:any){setError(String(e.message||e).slice(0,180))}finally{setBusy('')}
   }
   const cancelInvitation=async(invitation:any)=>{
     setBusy(invitation.id);setError('')
-    try{const r=await fetch(`/api/v1/family/invitations/${invitation.id}`,{method:'DELETE',headers:getAuthHeaders()});if(!r.ok)throw await apiError(r);setConfirmInvitation(null);await refresh()}
+    try{const r=await fetch(`/api/v1/family/invitations/${invitation.id}`,{method:'DELETE',headers:getAuthHeaders('DELETE'),credentials:'same-origin'});if(!r.ok)throw await apiError(r);setConfirmInvitation(null);await refresh()}
     catch(e:any){setError(String(e.message||e).slice(0,180))}finally{setBusy('')}
   }
   const copyInvitation=async(invitation:any)=>{
