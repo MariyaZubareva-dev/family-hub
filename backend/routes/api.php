@@ -1,9 +1,19 @@
 <?php
-use App\Http\Controllers\Api\CreditController;use App\Http\Controllers\Api\EventController;use App\Http\Controllers\Api\FamilyController;use App\Http\Controllers\Api\FinanceCoreController;use App\Http\Controllers\Api\FinanceTransactionController;use App\Http\Controllers\Api\IdeaController;use App\Http\Controllers\Api\ListController;use App\Http\Controllers\Api\ListItemController;use App\Http\Controllers\Api\NoteController;use App\Http\Controllers\Api\PlannedPurchaseController;use App\Http\Controllers\Api\ReminderController;use App\Http\Middleware\TelegramAuthenticate;use Illuminate\Http\Request;use Illuminate\Support\Facades\Route;
+use App\Http\Controllers\Api\CreditController;use App\Http\Controllers\Api\EventController;use App\Http\Controllers\Api\FamilyController;use App\Http\Controllers\Api\FinanceCoreController;use App\Http\Controllers\Api\FinanceTransactionController;use App\Http\Controllers\Api\IdeaController;use App\Http\Controllers\Api\ListController;use App\Http\Controllers\Api\ListItemController;use App\Http\Controllers\Api\NoteController;use App\Http\Controllers\Api\PlannedPurchaseController;use App\Http\Controllers\Api\ReminderController;use App\Http\Middleware\BrowserOrTelegramAuthenticate;use Illuminate\Http\Request;use Illuminate\Support\Facades\Route;
 Route::post('/telegram/webhook', \App\Http\Controllers\Telegram\BotWebhookController::class);
 Route::prefix('v1')->group(function(){
  Route::get('/health',fn()=>response()->json(['ok'=>true,'service'=>'family-hub-api','version'=>'0.6.0']));
- Route::middleware([TelegramAuthenticate::class, \App\Http\Middleware\FamilySectionAccess::class])->group(function(){
+ Route::middleware('throttle:10,1')->group(function () {
+  Route::post('/auth/register', [\App\Http\Controllers\Api\BrowserAuthController::class, 'register']);
+  Route::post('/auth/login', [\App\Http\Controllers\Api\BrowserAuthController::class, 'login']);
+  Route::post('/auth/verify', [\App\Http\Controllers\Api\BrowserAuthController::class, 'verify']);
+});
+Route::get('/auth/session', [\App\Http\Controllers\Api\BrowserAuthController::class, 'session'])->middleware('throttle:60,1');
+Route::middleware(BrowserOrTelegramAuthenticate::class)->group(function () {
+  Route::post('/auth/logout', [\App\Http\Controllers\Api\BrowserAuthController::class, 'logout']);
+  Route::post('/auth/link-email', [\App\Http\Controllers\Api\BrowserAuthController::class, 'link'])->middleware('throttle:3,1');
+});
+Route::middleware([BrowserOrTelegramAuthenticate::class, \App\Http\Middleware\FamilySectionAccess::class])->group(function(){
   Route::post('/credits/{credit}/payments',[\App\Http\Controllers\Api\CreditLedgerController::class,'storePayment']);
   Route::put('/credits/{credit}/schedule-payment',[\App\Http\Controllers\Api\CreditLedgerController::class,'markSchedulePayment']);
   Route::patch('/credit-payments/{payment}',[\App\Http\Controllers\Api\CreditLedgerController::class,'updatePayment']);
