@@ -46,7 +46,7 @@ class BrowserOrTelegramAuthenticate
 
         // Local-only test login is retained for the existing QA workflow.
         if (app()->environment('local') && $request->header('X-Dev-Telegram-User-Id')) {
-            return $this->telegram->handle($request, $next);
+            return app(TelegramAuthenticate::class)->handle($request, $next);
         }
         return response()->json(['message' => 'Требуется вход в Family Hub.', 'code' => 'UNAUTHENTICATED'], 401);
     }
