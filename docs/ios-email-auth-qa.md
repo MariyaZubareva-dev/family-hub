@@ -37,3 +37,24 @@ Use HTTPS and `APP_ENV=production` on deployed services. Ensure `APP_DEBUG=false
 - No verified current production commit; compare with server to reconcile newer feature branches.
 - Consider a time-based cleanup for expired `browser_sessions`.
 - New email-only accounts can create a family; email-based family invitations are not yet implemented.
+
+## Временный вход без Resend (только изолированный QA)
+
+Чтобы проверить Safari PWA до восстановления DNS, можно один раз включить email/password для **существующего QA-пользователя**, не создавая вторую семью. Команда не посылает письмо и не требует SMTP. Это осознанное исключение только для тестовой базы.
+
+**Никогда не запускать на production или на копии production с доступом реальных пользователей.** Команда намеренно отклоняет `APP_ENV=production` и `APP_URL=https://teamportal.ru`. Укажи на QA `APP_ENV=staging` и отдельный `APP_URL`, убедись, что база QA отдельная. Используй имеющийся QA-профиль compose, не создавай новый backend поверх production.
+
+Из терминала QA-бэкенда (указать фактическое имя контейнера из QA compose):
+
+```sh
+php artisan family:qa-email-login 999001
+```
+
+Команда интерактивно запросит адрес, пароль дважды (без отображения), а затем подтверждение изменения **существующей** QA-записи. В базе сохраняется только hash пароля; в терминале пароль не пишется и в историю shell не попадает. После команды можно войти с QA URL по email/password. Восстановление пароля и публичная регистрация по-прежнему требуют реальной почты.
+
+До запуска обязательно:
+- подтвердить, что QA отделён от production по URL, БД и конфигурации;
+- выполнить миграции на QA и резервную копию;
+- убедиться, что `APP_ENV` и `APP_URL` не указаны как production;
+- убедиться, что QA доступен только тестировщикам (Basic Auth / туннель);
+- после тестирования отключить временный доступ/сбросить тестовый пароль при необходимости.
