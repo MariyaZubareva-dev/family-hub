@@ -2,7 +2,7 @@
 const CACHE_NAME = 'family-hub-shell-v1';
 const OFFLINE_URL = '/offline.html';
 self.addEventListener('install', event => {
-  event.waitUntil(caches.open(CACHE_NAME).then(cache => cache.addAll([OFFLINE_URL, '/icons/family-hub.svg'])));
+  event.waitUntil(caches.open(CACHE_NAME).then(cache => cache.addAll([OFFLINE_URL, '/icons/icon-192.png'])));
   self.skipWaiting();
 });
 self.addEventListener('activate', event => {
