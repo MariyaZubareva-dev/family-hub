@@ -68,8 +68,18 @@ class BrowserAuthController extends Controller
             throw ValidationException::withMessages(['email' => 'Этот email уже используется.']);
         }
         $user->update(['email' => $email, 'password' => Hash::make($data['password']), 'email_verified_at' => null]);
+        DB::table('browser_sessions')->where('user_id', $user->id)->delete();
         $this->issueVerification($user);
         return response()->json(['message' => 'Код подтверждения отправлен на почту.']);
+    }
+
+    public function resend(Request $request): JsonResponse
+    {
+        $data = $request->validate(['email' => ['required','email:rfc']]);
+        $user = User::where('email', Str::lower(trim($data['email'])))->whereNull('email_verified_at')->first();
+        // Do not disclose whether an account exists.
+        if ($user) $this->issueVerification($user);
+        return response()->json(['message' => 'Если адрес ожидает подтверждения, новый код отправлен.']);
     }
 
     public function verify(Request $request): JsonResponse
