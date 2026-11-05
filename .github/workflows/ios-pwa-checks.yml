@@ -7,6 +7,9 @@ on:
       - "frontend/**"
       - "backend/**"
       - ".github/workflows/ios-pwa-checks.yml"
+      - "docker-compose.ios-qa.yml"
+      - "docker/ios-qa/**"
+      - "scripts/ios-qa.sh"
 jobs:
   frontend:
     runs-on: ubuntu-latest
@@ -33,3 +36,12 @@ jobs:
           coverage: none
       - name: PHP syntax
         run: find backend/app backend/routes backend/config backend/database/migrations -name '*.php' -print0 | xargs -0 -n 1 php -l
+  qa-compose:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate isolated QA compose
+        env:
+          IOS_QA_DB_PASSWORD: ci-only-fake-value
+          IOS_QA_APP_KEY: base64:Y2ktb25seS1mYWtlLWtleS1tdXN0LW5vdC1iZS11c2Vk
+        run: docker compose -p family-hub-ios-qa -f docker-compose.ios-qa.yml config --quiet
