@@ -8,6 +8,8 @@ Route::prefix('v1')->group(function(){
   Route::post('/auth/login', [\App\Http\Controllers\Api\BrowserAuthController::class, 'login']);
   Route::post('/auth/verify', [\App\Http\Controllers\Api\BrowserAuthController::class, 'verify']);
   Route::post('/auth/resend', [\App\Http\Controllers\Api\BrowserAuthController::class, 'resend'])->middleware('throttle:3,1');
+  Route::post('/auth/password/reset-request', [\App\Http\Controllers\Api\BrowserAuthController::class, 'requestPasswordReset'])->middleware('throttle:3,1');
+  Route::post('/auth/password/reset', [\App\Http\Controllers\Api\BrowserAuthController::class, 'resetPassword']);
 });
 Route::get('/auth/session', [\App\Http\Controllers\Api\BrowserAuthController::class, 'session'])->middleware('throttle:60,1');
 Route::middleware(BrowserOrTelegramAuthenticate::class)->group(function () {
