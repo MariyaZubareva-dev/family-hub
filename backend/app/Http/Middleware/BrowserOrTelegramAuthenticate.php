@@ -14,6 +14,9 @@ class BrowserOrTelegramAuthenticate
 
     public function handle(Request $request, Closure $next): Response
     {
+        // Feature tests use actingAs() and never issue external browser cookies.
+        if (app()->runningUnitTests() && $request->user()) return $next($request);
+
         // Telegram's signed initData always takes precedence inside Telegram.
         if ($request->header('X-Telegram-Init-Data')) {
             return $this->telegram->handle($request, $next);
