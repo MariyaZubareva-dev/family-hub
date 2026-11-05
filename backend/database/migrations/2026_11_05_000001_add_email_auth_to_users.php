@@ -23,6 +23,8 @@ return new class extends Migration {
         Schema::create('email_verification_codes', function (Blueprint $table) {
             $table->ulid('user_id')->primary();
             $table->string('code_hash', 64);
+            $table->string('pending_email')->nullable();
+            $table->string('pending_password_hash')->nullable();
             $table->timestamp('expires_at');
             $table->unsignedTinyInteger('attempts')->default(0);
             $table->timestamps();
