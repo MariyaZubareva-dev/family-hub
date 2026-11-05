@@ -2,7 +2,7 @@ import { useEffect, useState, type FormEvent, type ReactNode } from 'react';
 import { authRequest, isTelegram, setBrowserCsrf } from './lib/browserAuth';
 import './browser-auth.css';
 
-type Mode = 'login' | 'register' | 'verify';
+type Mode = 'login' | 'register' | 'verify' | 'reset' | 'reset-confirm';
 export default function BrowserAuth({ children }: {children: ReactNode}) {
   const [mode, setMode] = useState<Mode>('login');
   const [ready, setReady] = useState(false);
@@ -33,7 +33,13 @@ export default function BrowserAuth({ children }: {children: ReactNode}) {
   async function submit(event: FormEvent) {
     event.preventDefault(); setBusy(true); setError(''); setNotice('');
     try {
-      if (mode === 'login') {
+      if (mode === 'reset') {
+        await authRequest('password/reset-request',{email:email.trim()});
+        setMode('reset-confirm'); setNotice('Если адрес зарегистрирован, письмо с кодом отправлено.');
+      } else if (mode === 'reset-confirm') {
+        await authRequest('password/reset',{email:email.trim(),code,password});
+        setPassword('');setCode('');setMode('login');setNotice('Пароль изменён. Войди с новым паролем.');
+      } else if (mode === 'login') {
         const result = await authRequest('login',{email:email.trim(),password});
         setBrowserCsrf(result.data.csrf); setPassword(''); setLogged(true);
       } else if (mode === 'register') {
@@ -54,21 +60,20 @@ export default function BrowserAuth({ children }: {children: ReactNode}) {
       <img src="/icons/icon-192.png" alt="" width="76" height="76" />
       <h1>Family Hub</h1>
       <p>Покупки, бюджет и планы семьи — в одном месте.</p>
-      <h2>{mode==='login'?'Войти':mode==='register'?'Создать аккаунт':'Подтвердить email'}</h2>
+      <h2>{mode==='login'?'Войти':mode==='register'?'Создать аккаунт':mode==='verify'?'Подтвердить email':mode==='reset'?'Восстановить пароль':'Новый пароль'}</h2>
       <form onSubmit={submit}>
         {mode==='register'&&<label>Имя<input required autoComplete="given-name" value={name} onChange={e=>setName(e.target.value)}/></label>}
         <label>Email<input required type="email" autoComplete="email" value={email} onChange={e=>setEmail(e.target.value)}/></label>
-        {mode==='verify'?
-          <label>Код из письма<input required inputMode="numeric" pattern="[0-9]{6}" maxLength={6} value={code} onChange={e=>setCode(e.target.value)}/></label>:
-          <label>Пароль<input required type="password" minLength={mode==='register'?12:undefined} autoComplete={mode==='login'?'current-password':'new-password'} value={password} onChange={e=>setPassword(e.target.value)}/></label>}
+        {(mode==='verify'||mode==='reset-confirm')&&<label>Код из письма<input required inputMode="numeric" pattern="[0-9]{6}" maxLength={6} value={code} onChange={e=>setCode(e.target.value)}/></label>}
+        {(mode==='login'||mode==='register'||mode==='reset-confirm')&&<label>Пароль<input required type="password" minLength={mode==='register'||mode==='reset-confirm'?12:undefined} autoComplete={mode==='login'?'current-password':'new-password'} value={password} onChange={e=>setPassword(e.target.value)}/></label>}
         {mode==='register'&&<small>Минимум 12 символов. Используй уникальный пароль.</small>}
         {error&&<div className="browser-auth-error" role="alert">{error}</div>}
         {notice&&<div className="browser-auth-notice" role="status">{notice}</div>}
-        <button type="submit" disabled={busy}>{busy?'Подождите…':mode==='login'?'Войти':mode==='register'?'Зарегистрироваться':'Подтвердить'}</button>
+        <button type="submit" disabled={busy}>{busy?'Подождите…':mode==='login'?'Войти':mode==='register'?'Зарегистрироваться':mode==='verify'?'Подтвердить':mode==='reset'?'Получить код':'Изменить пароль'}</button>
       </form>
       <div className="browser-auth-switch">
         {mode==='verify'&&<button disabled={busy} onClick={async()=>{try{setNotice((await authRequest('resend',{email})).message);setError('')}catch(e){setError(e instanceof Error?e.message:'Ошибка отправки')}}}>Отправить код повторно</button>}
-        {mode==='login'?<><button onClick={()=>{setMode('register');setError('')}}>Создать аккаунт</button><button onClick={()=>{setMode('verify');setError('')}}>Уже есть код?</button></>:<button onClick={()=>{setMode('login');setError('')}}>Вернуться ко входу</button>}
+        {mode==='login'?<><button onClick={()=>{setMode('register');setError('')}}>Создать аккаунт</button><button onClick={()=>{setMode('verify');setError('')}}>Уже есть код?</button><button onClick={()=>{setMode('reset');setError('')}}>Забыли пароль?</button></>:<button onClick={()=>{setMode('login');setError('')}}>Вернуться ко входу</button>}
       </div>
       <p className="browser-auth-help">Уже используешь Family Hub через Telegram? Сначала привяжи email в Telegram-версии, чтобы сохранить все семейные данные.</p>
     </section>
