@@ -22,15 +22,16 @@ class BrowserAuthController extends Controller
         ]);
     }
 
-    private function issueVerification(User $user): void
+    private function issueVerification(User $user, ?string $pendingEmail = null, ?string $pendingPasswordHash = null): void
     {
         $code = (string) random_int(100000, 999999);
         DB::table('email_verification_codes')->updateOrInsert(
             ['user_id' => $user->id],
-            ['code_hash' => hash('sha256', $code), 'expires_at' => now()->addMinutes(10), 'attempts' => 0, 'created_at' => now(), 'updated_at' => now()]
+            ['code_hash' => hash('sha256', $code), 'pending_email' => $pendingEmail, 'pending_password_hash' => $pendingPasswordHash,
+             'expires_at' => now()->addMinutes(10), 'attempts' => 0, 'created_at' => now(), 'updated_at' => now()]
         );
-        Mail::raw("Код подтверждения Family Hub: {$code}\nОн действует 10 минут. Если вы не запрашивали код, проигнорируйте письмо.", function ($mail) use ($user) {
-            $mail->to($user->email)->subject('Подтверждение email — Family Hub');
+        Mail::raw("Код подтверждения Family Hub: {$code}\nОн действует 10 минут. Если вы не запрашивали код, проигнорируйте письмо.", function ($mail) use ($user, $pendingEmail) {
+            $mail->to($pendingEmail ?? $user->email)->subject('Подтверждение email — Family Hub');
         });
     }
 
@@ -67,18 +68,22 @@ class BrowserAuthController extends Controller
         if (User::where('email', $email)->where('id', '!=', $user->id)->exists()) {
             throw ValidationException::withMessages(['email' => 'Этот email уже используется.']);
         }
-        $user->update(['email' => $email, 'password' => Hash::make($data['password']), 'email_verified_at' => null]);
-        DB::table('browser_sessions')->where('user_id', $user->id)->delete();
-        $this->issueVerification($user);
+        // Existing login and confirmed address remain valid until the new email is verified.
+        $this->issueVerification($user, $email, Hash::make($data['password']));
         return response()->json(['message' => 'Код подтверждения отправлен на почту.']);
     }
 
     public function resend(Request $request): JsonResponse
     {
         $data = $request->validate(['email' => ['required','email:rfc']]);
-        $user = User::where('email', Str::lower(trim($data['email'])))->whereNull('email_verified_at')->first();
+        $email = Str::lower(trim($data['email']));
+        $user = User::where('email', $email)->whereNull('email_verified_at')->first();
+        $pending = DB::table('email_verification_codes')->where('pending_email', $email)->where('expires_at', '>', now())->first();
         // Do not disclose whether an account exists.
         if ($user) $this->issueVerification($user);
+        elseif ($pending && ($linked = User::find($pending->user_id))) {
+            $this->issueVerification($linked, $pending->pending_email, $pending->pending_password_hash);
+        }
         return response()->json(['message' => 'Если адрес ожидает подтверждения, новый код отправлен.']);
     }
 
@@ -87,14 +92,25 @@ class BrowserAuthController extends Controller
         $data = $request->validate(['email' => ['required', 'email:rfc'], 'code' => ['required', 'digits:6']]);
         $email = Str::lower(trim($data['email']));
         $user = User::where('email', $email)->first();
+        $pending = DB::table('email_verification_codes')->where('pending_email', $email)->first();
+        if (!$user && $pending) $user = User::find($pending->user_id);
         $record = $user ? DB::table('email_verification_codes')->where('user_id', $user->id)->first() : null;
         if (!$record || $record->attempts >= 5 || now()->greaterThan($record->expires_at) ||
             !hash_equals($record->code_hash, hash('sha256', $data['code']))) {
             if ($record) DB::table('email_verification_codes')->where('user_id', $user->id)->increment('attempts');
             throw ValidationException::withMessages(['code' => 'Неверный или просроченный код.']);
         }
-        DB::transaction(function () use ($user) {
-            $user->update(['email_verified_at' => now()]);
+        DB::transaction(function () use ($user, $record) {
+            if ($record->pending_email && $record->pending_password_hash) {
+                $user->update([
+                    'email' => $record->pending_email,
+                    'password' => $record->pending_password_hash,
+                    'email_verified_at' => now(),
+                ]);
+                DB::table('browser_sessions')->where('user_id', $user->id)->delete();
+            } else {
+                $user->update(['email_verified_at' => now()]);
+            }
             DB::table('email_verification_codes')->where('user_id', $user->id)->delete();
         });
         return response()->json(['message' => 'Адрес подтверждён. Теперь можно войти по email.']);
