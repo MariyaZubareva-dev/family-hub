@@ -11,6 +11,7 @@ class User extends Authenticatable
     use HasUlids;
 
     protected $guarded = [];
+    protected $hidden = ['password', 'remember_token', 'email', 'email_verified_at'];
     protected $keyType = 'string';
     public $incrementing = false;
 
