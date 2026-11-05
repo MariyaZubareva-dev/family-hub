@@ -68,6 +68,10 @@ class BrowserAuthController extends Controller
         if (User::where('email', $email)->where('id', '!=', $user->id)->exists()) {
             throw ValidationException::withMessages(['email' => 'Этот email уже используется.']);
         }
+        if (DB::table('email_verification_codes')->where('pending_email', $email)
+            ->where('user_id', '!=', $user->id)->where('expires_at', '>', now())->exists()) {
+            throw ValidationException::withMessages(['email' => 'Этот адрес ожидает подтверждения другим пользователем.']);
+        }
         // Existing login and confirmed address remain valid until the new email is verified.
         $this->issueVerification($user, $email, Hash::make($data['password']));
         return response()->json(['message' => 'Код подтверждения отправлен на почту.']);
@@ -102,6 +106,9 @@ class BrowserAuthController extends Controller
         }
         DB::transaction(function () use ($user, $record) {
             if ($record->pending_email && $record->pending_password_hash) {
+                if (User::where('email', $record->pending_email)->where('id', '!=', $user->id)->exists()) {
+                    throw ValidationException::withMessages(['email' => 'Этот адрес уже зарегистрирован.']);
+                }
                 $user->update([
                     'email' => $record->pending_email,
                     'password' => $record->pending_password_hash,
