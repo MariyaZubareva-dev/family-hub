@@ -7,7 +7,6 @@ use Illuminate\Console\Command;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
-use Illuminate\Validation\ValidationException;
 
 class BootstrapQaEmailLogin extends Command
 {
@@ -37,7 +36,7 @@ class BootstrapQaEmailLogin extends Command
             $this->error('Invalid email.');
             return self::FAILURE;
         }
-        if (User::where('email', $email)->whereKeyNot($user->getKey())->exists()) {
+        if (User::where('email', $email)->where('id', '!=', $user->getKey())->exists()) {
             $this->error('Email is already assigned to another user.');
             return self::FAILURE;
         }
