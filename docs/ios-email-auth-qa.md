@@ -38,23 +38,41 @@ Use HTTPS and `APP_ENV=production` on deployed services. Ensure `APP_DEBUG=false
 - Consider a time-based cleanup for expired `browser_sessions`.
 - New email-only accounts can create a family; email-based family invitations are not yet implemented.
 
-## Временный вход без Resend (только изолированный QA)
+## Временный вход без Resend: отдельный iOS QA
 
-Чтобы проверить Safari PWA до восстановления DNS, можно один раз включить email/password для **существующего QA-пользователя**, не создавая вторую семью. Команда не посылает письмо и не требует SMTP. Это осознанное исключение только для тестовой базы.
+В репозитории предусмотрены отдельные `docker-compose.ios-qa.yml`, `scripts/ios-qa.sh` и `IosQaSeeder`. Эти файлы используют **отдельную** базу `family_hub_qa` и Docker volumes `ios_qa_pgdata`, `ios_qa_storage`. Наружу контейнер слушает **только** `127.0.0.1:18082`. Основная система на `teamportal.ru` не меняется.
 
-**Никогда не запускать на production или на копии production с доступом реальных пользователей.** Команда намеренно отклоняет `APP_ENV=production` и `APP_URL=https://teamportal.ru`. Укажи на QA `APP_ENV=staging` и отдельный `APP_URL`, убедись, что база QA отдельная. Используй имеющийся QA-профиль compose, не создавай новый backend поверх production.
-
-Из терминала QA-бэкенда (указать фактическое имя контейнера из QA compose):
+Для проверки на сервере нужно создать отдельный Git worktree. Ниже команды для оператора, работающего непосредственно по SSH на VPS (команды здесь не выполнялись):
 
 ```sh
-php artisan family:qa-email-login 999001
+set -e
+cd /opt/family-hub
+git fetch origin feature/ios-pwa
+test ! -e /opt/family-hub-ios-qa
+git worktree add --detach /opt/family-hub-ios-qa origin/feature/ios-pwa
+cd /opt/family-hub-ios-qa
+bash scripts/ios-qa.sh up
+bash scripts/ios-qa.sh check
+bash scripts/ios-qa.sh provision
 ```
 
-Команда интерактивно запросит адрес, пароль дважды (без отображения), а затем подтверждение изменения **существующей** QA-записи. В базе сохраняется только hash пароля; в терминале пароль не пишется и в историю shell не попадает. После команды можно войти с QA URL по email/password. Восстановление пароля и публичная регистрация по-прежнему требуют реальной почты.
+Команда `provision` интерактивно запросит email и пароль два раза **без отображения пароля** и свяжет их с локальной тестовой записью Telegram ID `999001`. Работает только при `APP_ENV=local`, `QA_STAND=true`, `DB_DATABASE=family_hub_qa` и не-production URL. В реальную БД доступа нет. Пароль не передаётся в командной строке и не пишется в GitHub.
 
-До запуска обязательно:
-- подтвердить, что QA отделён от production по URL, БД и конфигурации;
-- выполнить миграции на QA и резервную копию;
-- убедиться, что `APP_ENV` и `APP_URL` не указаны как production;
-- убедиться, что QA доступен только тестировщикам (Basic Auth / туннель);
-- после тестирования отключить временный доступ/сбросить тестовый пароль при необходимости.
+Тестовый стенд доступен только из **того же сервера**, где запущен Docker: `http://127.0.0.1:18082`. Для компьютера можно создать SSH-туннель:
+
+```sh
+ssh -N -L 18082:127.0.0.1:18082 <your-vps-ssh-host>
+```
+
+Затем открыть `http://127.0.0.1:18082` на компьютере. Для доступа с iPhone потребуется отдельный HTTPS-домен/защищённый туннель. **Не открывать порт 18082 публично**, не добавлять QA в production Caddy без ограничений и не использовать незашифрованный HTTP в интернете.
+
+`MAIL_MAILER=log` в отдельном QA позволяет проверить работу интерфейса с уже подготовленным пользователем, но регистрация по email и восстановление пароля всё ещё требуют реальной доставки писем. Временный dev Telegram header при `QA_STAND=true` отключён.
+
+Остановить стенд без удаления данных: `bash scripts/ios-qa.sh down`.
+
+### Ограничения перед production
+
+- По результатам `CI` должна пройти вся серверная тестовая база и PostgreSQL migration.
+- Реальная почта Resend/SMTP пока не настроена.
+- Сопоставить актуальную ветку с фактическим production-коммитом и перенести недостающие изменения продукта.
+- После настройки HTTPS проверить iPhone Safari и установленную PWA отдельно.
