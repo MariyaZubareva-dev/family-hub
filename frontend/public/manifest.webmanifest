@@ -1,0 +1,21 @@
+{
+  "id": "/",
+  "name": "Family Hub",
+  "short_name": "Family Hub",
+  "description": "Общее пространство семьи: покупки, бюджет, события и напоминания",
+  "lang": "ru",
+  "start_url": "/?source=pwa",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#f8f6f3",
+  "theme_color": "#0f766e",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "/icons/family-hub.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
