@@ -16,12 +16,14 @@ class BootstrapQaEmailLogin extends Command
     public function handle(): int
     {
         // This emergency QA workflow must never be available on production or on the real family DB.
-        if (!app()->environment(['local', 'testing', 'staging'])) {
-            $this->error('Only local/testing/staging environments are supported.');
+        if (!app()->environment(['local', 'testing', 'staging']) || !filter_var(env('QA_STAND'), FILTER_VALIDATE_BOOLEAN)) {
+            $this->error('Only isolated QA environments with QA_STAND enabled are supported.');
             return self::FAILURE;
         }
-        if (config('app.url') === 'https://teamportal.ru') {
-            $this->error('Refusing to modify the production application URL.');
+        if (config('app.url') === 'https://teamportal.ru' ||
+            config('database.default') !== 'pgsql' ||
+            config('database.connections.pgsql.database') !== 'family_hub_qa') {
+            $this->error('Refusing to modify an unrecognised database or production URL.');
             return self::FAILURE;
         }
 
