@@ -10,8 +10,6 @@ use Symfony\Component\HttpFoundation\Response;
 
 class BrowserOrTelegramAuthenticate
 {
-    public function __construct(private TelegramAuthenticate $telegram) {}
-
     public function handle(Request $request, Closure $next): Response
     {
         // Feature tests use actingAs() and never issue external browser cookies.
@@ -19,7 +17,7 @@ class BrowserOrTelegramAuthenticate
 
         // Telegram's signed initData always takes precedence inside Telegram.
         if ($request->header('X-Telegram-Init-Data')) {
-            return $this->telegram->handle($request, $next);
+            return app(TelegramAuthenticate::class)->handle($request, $next);
         }
         $token = $request->cookie('fh_browser_session');
         if ($token && preg_match('/^[a-f0-9]{64}$/D', $token)) {
