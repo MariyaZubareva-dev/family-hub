@@ -157,7 +157,7 @@ class BrowserAuthController extends Controller
         $token = $request->cookie('fh_browser_session');
         if (!$token || !preg_match('/^[a-f0-9]{64}$/D', $token)) return response()->json(['authenticated' => false], 401);
         $session = DB::table('browser_sessions')->where('token_hash', hash('sha256', $token))->where('expires_at', '>', now())->first();
-        if (!$session) return response()->json(['authenticated' => false], 401);
+        if (!$session || !User::whereKey($session->user_id)->whereNotNull('email_verified_at')->exists()) return response()->json(['authenticated' => false], 401);
         $csrf = bin2hex(random_bytes(32));
         DB::table('browser_sessions')->where('token_hash', $session->token_hash)->update(['csrf_hash' => hash('sha256', $csrf), 'updated_at' => now()]);
         return response()->json(['authenticated' => true, 'csrf' => $csrf]);
