@@ -1,9 +1,9 @@
-import { useEffect, useState, type FormEvent } from 'react';
+import { useEffect, useState, type FormEvent, type ReactNode } from 'react';
 import { authRequest, isTelegram, setBrowserCsrf } from './lib/browserAuth';
 import './browser-auth.css';
 
 type Mode = 'login' | 'register' | 'verify';
-export default function BrowserAuth({ children }: {children: React.ReactNode}) {
+export default function BrowserAuth({ children }: {children: ReactNode}) {
   const [mode, setMode] = useState<Mode>('login');
   const [ready, setReady] = useState(false);
   const [logged, setLogged] = useState(isTelegram());
