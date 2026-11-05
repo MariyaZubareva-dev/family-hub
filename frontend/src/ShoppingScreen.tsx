@@ -1,3 +1,4 @@
+import { familyHeaders } from './lib/browserAuth'
 import { useEffect, useState, type FormEvent } from 'react'
 import { Field, Modal } from './FinanceScreen'
 import './shopping.css'
@@ -9,16 +10,13 @@ type Purchase = {id:string;type:Kind;name:string;category?:string;estimated_amou
 const money=(n:unknown)=>`${Number(n).toLocaleString('ru-RU',{maximumFractionDigits:2})} ₽`
 const dateLabel=(s:string)=>new Date(s.slice(0,10)+'T12:00:00').toLocaleDateString('ru-RU',{day:'numeric',month:'short',year:'numeric'})
 async function request(path:string,body?:unknown,method?:string){
-  const headers:Record<string,string>={Accept:'application/json','Content-Type':'application/json'}
-  const initData=(window as any).Telegram?.WebApp?.initData
-  if(initData)headers['X-Telegram-Init-Data']=initData
-  else headers['X-Dev-Telegram-User-Id']=localStorage.getItem('dev_telegram_id')||'999001'
+  const headers = familyHeaders(method||(body===undefined?'GET':'POST'))
   let response:Response
-  try{response=await fetch('/api/v1/planned-purchases'+path,{method:method||(body===undefined?'GET':'POST'),headers,body:body===undefined?undefined:JSON.stringify(body)})}
+  try{response=await fetch('/api/v1/planned-purchases'+path,{method:method||(body===undefined?'GET':'POST'),headers,credentials:'same-origin',body:body===undefined?undefined:JSON.stringify(body)})}
   catch{throw new Error('Нет связи с сервером. Проверьте интернет и попробуйте ещё раз.')}
   const json=await response.json().catch(()=>null)
   if(!response.ok){
-    if(response.status===401)throw new Error('Откройте приложение заново через Telegram.')
+    if(response.status===401)throw new Error('Сессия завершена. Войди снова.')
     if(response.status===403)throw new Error('Нет доступа к покупкам этой семьи. Обратитесь к администратору.')
     if(response.status>=500)throw new Error('Сервер временно недоступен. Попробуйте ещё раз позже.')
     const message=Object.values(json?.errors||{}).flat()[0]||json?.message
