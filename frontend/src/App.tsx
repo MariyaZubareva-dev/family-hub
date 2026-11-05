@@ -1,3 +1,5 @@
+import { familyHeaders, isTelegram, authRequest, setBrowserCsrf } from './lib/browserAuth'
+import { EmailLinkPanel } from './BrowserAuth'
 import { useEffect, useMemo, useState } from 'react'
 import './styles.v07.css'
 import './family.css'
@@ -23,18 +25,9 @@ function FamilySymbol({kind}:{kind:string}) {
 }
 
 // ---- API helpers (Telegram auth + local dev fallback) ----
-function getAuthHeaders(): Record<string,string> {
-  const h: Record<string,string> = { 'Content-Type': 'application/json', 'Accept': 'application/json' }
-  const tg = (window as any).Telegram?.WebApp
-  if (tg?.initData) h['X-Telegram-Init-Data'] = tg.initData
-  else {
-    const devId = (typeof localStorage !== 'undefined' && localStorage.getItem('dev_telegram_id')) || '999001'
-    h['X-Dev-Telegram-User-Id'] = devId
-  }
-  return h
-}
+function getAuthHeaders(method = 'GET'): Record<string,string> { return familyHeaders(method) }
 async function apiError(response:Response):Promise<Error>{
-  const fallback=response.status===401?'Откройте Family Hub заново через Telegram.':response.status===403?'Этот раздел доступен после вступления в семью. Откройте раздел «Семья» и примите приглашение.':`Не удалось выполнить запрос (${response.status}). Попробуйте ещё раз.`
+  const fallback=response.status===401?'Сессия завершена. Войди в Family Hub ещё раз.':response.status===403?'Этот раздел доступен после вступления в семью. Откройте раздел «Семья» и примите приглашение.':`Не удалось выполнить запрос (${response.status}). Попробуйте ещё раз.`
   const body=await response.text()
   try{
     const data=JSON.parse(body)
@@ -45,17 +38,17 @@ async function apiError(response:Response):Promise<Error>{
   return new Error(fallback)
 }
 async function apiGet(path:string){
-  const r = await fetch(`/api/v1${path}`, { headers: getAuthHeaders() })
+  const r = await fetch(`/api/v1${path}`, { headers: getAuthHeaders(), credentials:'same-origin' })
   if(!r.ok) throw await apiError(r)
   return r.json()
 }
 async function apiPost(path:string, body:any){
-  const r = await fetch(`/api/v1${path}`, { method:'POST', headers: getAuthHeaders(), body: JSON.stringify(body) })
+  const r = await fetch(`/api/v1${path}`, { method:'POST', headers: getAuthHeaders('POST'), credentials:'same-origin', body: JSON.stringify(body) })
   if(!r.ok) throw await apiError(r)
   return r.json()
 }
 async function apiPatch(path:string, body:any){
-  const r = await fetch(`/api/v1${path}`, { method:'PATCH', headers: getAuthHeaders(), body: JSON.stringify(body) })
+  const r = await fetch(`/api/v1${path}`, { method:'PATCH', headers: getAuthHeaders('PATCH'), credentials:'same-origin', body: JSON.stringify(body) })
   if(!r.ok) throw await apiError(r)
   return r.json()
 }
@@ -175,6 +168,7 @@ export default function App(){
     {/* TOPBAR */}
     <header className="topbar">
       <h1>Family Hub</h1>
+      {!isTelegram()&&<button type="button" className="email-link-toggle" onClick={async()=>{try{await authRequest('logout',{});setBrowserCsrf(null);window.location.reload()}catch(e){setAccessError(e instanceof Error?e.message:'Не удалось выйти')}}}>Выйти</button>}
     </header>
 
     <main className="page">
@@ -186,7 +180,7 @@ export default function App(){
       {access?.calendar&&section==='calendar' && <CalendarScreen initialKind={calendarAction} onActionConsumed={()=>setCalendarAction(undefined)} />}
       {access?.shopping&&section==='lists' && <ShoppingScreen isAdmin={familyRole==='ADMIN'} startInStore={firstAction==='shopping'} onStartConsumed={()=>setFirstAction(null)} />}
       {access?.finance&&section==='finance' && <FinanceScreen initialExpense={firstAction==='finance'} onInitialExpenseConsumed={()=>setFirstAction(null)} initialTab={financeTarget} initialReceiptFile={homeReceipt} onReceiptConsumed={()=>setHomeReceipt(null)} />}
-      {hasFamily&&access&&section==='family' && <FamilyV07 initialInvite={openFamilyInvite} onInviteConsumed={()=>setOpenFamilyInvite(false)} />}
+      {hasFamily&&access&&section==='family' && <><EmailLinkPanel/><FamilyV07 initialInvite={openFamilyInvite} onInviteConsumed={()=>setOpenFamilyInvite(false)} /></>}
     </main>
 
     {hasFamily&&<nav className="bottom-nav" aria-label="Основная навигация" style={{gridTemplateColumns:`repeat(${2+Number(!!access?.calendar)+Number(!!access?.shopping)+Number(!!access?.finance)},minmax(0,1fr))`}}>
