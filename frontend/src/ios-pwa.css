@@ -1,0 +1,19 @@
+/* iOS Home Screen experience; the same components remain available in Telegram. */
+@supports (-webkit-touch-callout: none) {
+  html { -webkit-text-size-adjust: 100%; }
+  body { overscroll-behavior-y: none; }
+  input, select, textarea { font-size: max(16px, 1em); }
+  .topbar { padding-top: max(14px, env(safe-area-inset-top)); }
+  .bottom-nav { padding-bottom: max(10px, env(safe-area-inset-bottom)); }
+  .app-shell { min-height: 100dvh; }
+}
+@media (display-mode: standalone) {
+  html, body, #root { min-height: 100%; }
+  .app-shell { min-height: 100dvh; }
+  .topbar { padding-top: calc(12px + env(safe-area-inset-top)); }
+  .bottom-nav { padding-bottom: calc(8px + env(safe-area-inset-bottom)); }
+  button, a { -webkit-tap-highlight-color: transparent; }
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { scroll-behavior: auto !important; }
+}

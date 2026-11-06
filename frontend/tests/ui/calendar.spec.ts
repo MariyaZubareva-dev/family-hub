@@ -1,5 +1,5 @@
 import { wallTimeToDate, zoneInput } from '../../src/lib/timezone'
-import { expect, test, type Page } from '@playwright/test'
+import { expect, test, type Page } from './auth-fixture'
 
 async function mockCalendar(page:Page,omitCreatedStatus=false){
   await page.clock.install({time:new Date('2026-10-21T09:00:00Z')})

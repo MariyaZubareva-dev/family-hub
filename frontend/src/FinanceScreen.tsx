@@ -1,3 +1,4 @@
+import { familyHeaders } from './lib/browserAuth'
 import { useEffect, useLayoutEffect, useId, useRef, useState, type ReactNode, type FormEvent } from 'react'
 import { createPortal } from 'react-dom'
 import './finance.css'
@@ -21,16 +22,13 @@ const inPeriod = (date:string,period:string) => {
 }
 const errorText = (error:unknown) => error instanceof Error ? error.message : 'Не удалось выполнить действие. Попробуйте ещё раз.'
 export async function request(path:string, method='GET', body?:unknown) {
-  const headers:Record<string,string> = { 'Content-Type':'application/json', Accept:'application/json' }
-  const initData = (window as any).Telegram?.WebApp?.initData
-  if (initData) headers['X-Telegram-Init-Data'] = initData
-  else headers['X-Dev-Telegram-User-Id'] = localStorage.getItem('dev_telegram_id') || '999001'
+  const headers = familyHeaders(method)
   let response:Response
-  try { response = await fetch('/api/v1'+path, { method, headers, body:body===undefined?undefined:JSON.stringify(body) }) }
+  try { response = await fetch('/api/v1'+path, { method, headers, credentials:'same-origin', body:body===undefined?undefined:JSON.stringify(body) }) }
   catch { throw new Error('Нет связи с сервером. Проверьте интернет и попробуйте ещё раз.') }
   const json = await response.json().catch(()=>null)
   if (!response.ok) {
-    if (response.status===401) throw new Error('Откройте приложение заново через Telegram.')
+    if (response.status===401) throw new Error('Сессия завершена. Войди снова.')
     if (response.status===403) throw new Error(json?.code==='SECTION_HIDDEN'?'Администратор ограничил доступ к этому разделу.':'Для этого действия нужны права администратора семьи.')
     if (response.status===413) throw new Error('Фото слишком большое. Выберите изображение меньшего размера.')
     if (response.status===429) throw new Error('Слишком много запросов. Подождите минуту и попробуйте ещё раз.')

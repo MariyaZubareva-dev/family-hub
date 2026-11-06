@@ -1,4 +1,4 @@
-import {expect,test,type Page} from '@playwright/test'
+import {expect,test,type Page} from './auth-fixture'
 import {readFileSync} from 'node:fs'
 
 function forecastSample(mode:string,extra:any={}){return {kind:'ESTIMATE',recalculation_mode:mode,interest_policy:'NEXT_PAYMENT',original_last_payment_date:'2027-01-22',last_payment_date:mode==='TERM'?'2026-12-22':'2027-01-22',payment_before:200,payment_after:mode==='TERM'?200:166.67,payment_reduction:mode==='TERM'?0:33.33,term_reduction_months:mode==='TERM'?1:0,term_reduction_days:0,remaining_payments_before:3,remaining_payments_after:mode==='TERM'?2:3,final_payment_before:200,final_payment_after:200,final_payment_reduction:0,next_payment:{date:'2026-11-22',payment:mode==='TERM'?200:166.67},bank_snapshot_date:'2026-10-04',interest_saved:12.5,prepayment:{principal:100},assumptions:['Обычные платежи вносятся вовремя.'],rows:[],...extra}}

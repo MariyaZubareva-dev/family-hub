@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test'
+import { expect, test } from './auth-fixture'
 
 for(const state of ['ready','multiple','uncertain','timeout','unavailable'])test(`receipt without QR handles ${state}`,async({page})=>{
   const multiple=state==='multiple',uncertain=state==='uncertain',failure=state==='timeout'||state==='unavailable',empty=multiple||failure

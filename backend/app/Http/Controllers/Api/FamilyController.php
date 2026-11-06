@@ -33,8 +33,15 @@ class FamilyController extends BaseApiController
         $user=$request->user();
         $membership=$user->familyMembers()->where('status','ACTIVE')->first();
         $query=FamilyInvitation::where('status',FamilyInvitation::PENDING)->where(function($q)use($user){
-            $q->where('telegram_user_id',$user->telegram_user_id);
-            if($user->username){ $q->orWhere(fn($match)=>$match->whereNull('telegram_user_id')->whereRaw('LOWER(username)=?', [mb_strtolower(ltrim($user->username,'@'))])); }
+            if ($user->telegram_user_id) {
+                $q->where('telegram_user_id', $user->telegram_user_id);
+                if ($user->username) {
+                    $q->orWhere(fn($match)=>$match->whereNull('telegram_user_id')->whereRaw('LOWER(username)=?', [mb_strtolower(ltrim($user->username,'@'))]));
+                }
+            } else {
+                // Email-only users have no Telegram invitations; never match every NULL ID.
+                $q->whereRaw('1 = 0');
+            }
         });
         if($membership && $membership->role==='ADMIN'){
             $query=FamilyInvitation::where('family_id',$membership->family_id)->where('status',FamilyInvitation::PENDING);

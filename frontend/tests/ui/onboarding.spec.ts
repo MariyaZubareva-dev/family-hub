@@ -1,4 +1,4 @@
-import { expect, test, type Page } from '@playwright/test'
+import { expect, test, type Page } from './auth-fixture'
 async function setup(page: Page, options: { invited?: boolean; existing?: boolean; failCreate?: boolean } = {}) {
   let member = !!options.existing, failed = false
   const writes: string[] = []

@@ -1,4 +1,4 @@
-import { expect, test, type Page } from '@playwright/test'
+import { expect, test, type Page } from './auth-fixture'
 
 const full = { calendar: true, shopping: true, finance: true }
 function fixture() {

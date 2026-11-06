@@ -1,4 +1,4 @@
-import { expect, test, type Page } from '@playwright/test'
+import { expect, test, type Page } from './auth-fixture'
 
 async function mockShopping(page:Page){
   const categories=[{id:'c1',name:'Для дома'},{id:'c2',name:'Подарки'}]

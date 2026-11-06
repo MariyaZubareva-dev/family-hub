@@ -1,0 +1,15 @@
+.browser-auth-screen{min-height:100dvh;display:grid;place-items:center;padding:calc(24px + env(safe-area-inset-top)) 20px calc(24px + env(safe-area-inset-bottom));background:linear-gradient(160deg,#edf7f3,#f9f8f3 70%);font-family:-apple-system,BlinkMacSystemFont,'Inter',sans-serif;color:#203c38}
+.browser-auth-card{width:min(100%,410px);border:1px solid #e0e8e1;background:#fff;border-radius:26px;padding:30px 24px;box-shadow:0 14px 45px #143d2b12;text-align:center}
+.browser-auth-card>img{border-radius:19px}.browser-auth-card h1{margin:14px 0 4px;font-size:28px}.browser-auth-card>p{color:#65776d;font-size:14px;line-height:1.5}.browser-auth-card h2{font-size:19px;text-align:left;margin-top:26px}
+.browser-auth-card form,.email-link form{display:grid;gap:13px;text-align:left}.browser-auth-card label,.email-link label{display:grid;gap:6px;font-size:13px;font-weight:600}
+.browser-auth-card input,.email-link input{min-height:48px;border:1px solid #cbd9d1;background:#fff;border-radius:12px;padding:12px 14px;font-size:16px;color:#203c38}
+.browser-auth-card form>button,.email-link form>button{border:0;border-radius:13px;min-height:49px;background:#0f766e;color:#fff;font-size:16px;font-weight:650}
+.browser-auth-card button:disabled,.email-link button:disabled{opacity:.65}
+.browser-auth-card small,.browser-auth-help{color:#718078;line-height:1.45}
+.browser-auth-error{color:#a51e32;background:#fff1f2;padding:10px;border-radius:10px;font-size:13px}
+.browser-auth-notice{color:#115e59;background:#f0fdf4;padding:10px;border-radius:10px;font-size:13px}
+.browser-auth-switch{display:flex;gap:15px;justify-content:center;margin-top:20px;flex-wrap:wrap}
+.browser-auth-switch button{border:0;background:none;color:#0f766e;text-decoration:underline;font-size:13px}
+.browser-auth-help{font-size:12px;margin-top:22px}.browser-auth-loading{min-height:100dvh;display:grid;place-items:center}
+.email-link{margin:5px 0 14px}.email-link-toggle{background:#e7f3ec;border:1px solid #cce4d5;border-radius:10px;color:#0f766e;padding:8px 12px}
+.email-link form{padding:15px;margin-top:12px;border-radius:16px;background:#f4f8f5}.email-link p{font-size:13px;color:#48645c}
