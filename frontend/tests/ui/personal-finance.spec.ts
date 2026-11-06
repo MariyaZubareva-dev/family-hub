@@ -1,4 +1,4 @@
-import { expect, test, type Page } from '@playwright/test'
+import { expect, test, type Page } from './auth-fixture'
 async function setup(page:Page) {
   const pots:any[]=[{id:'p1',name:'Отпуск',balance:20000,target_amount:100000,target_date:null,archived_at:null}],income:any[]=[]
   const history:any[]=[],requests:any[]=[]
