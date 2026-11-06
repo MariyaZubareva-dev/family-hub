@@ -1,4 +1,4 @@
-import { expect, test, type Page } from '@playwright/test'
+import { expect, test, type Page } from './auth-fixture'
 import { readFileSync } from 'node:fs'
 
 async function mockFinance(page:Page) {
