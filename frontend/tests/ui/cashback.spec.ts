@@ -1,4 +1,4 @@
-import { expect,test,type Page } from '@playwright/test'
+import { expect,test,type Page } from './auth-fixture'
 import { readFileSync } from 'node:fs'
 
 const entry=(category:string,rate:number,extra:any={})=>({category,rate,reward_unit:'RUB',active:true,cap_amount:null,notes:null,valid_from:null,valid_to:null,...extra})
