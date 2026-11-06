@@ -49,17 +49,17 @@ class BrowserAuthTest extends TestCase
         $token = $login->headers->getCookies()[0]->getValue();
         $csrf = $login->json('data.csrf');
 
-        $this->withCookie('fh_browser_session', $token)
+        $this->withUnencryptedCookie('fh_browser_session', $token)
             ->getJson('/api/v1/me')->assertOk()->assertJsonPath('data.id', $user->id);
-        $this->withCookie('fh_browser_session', $token)
+        $this->withUnencryptedCookie('fh_browser_session', $token)
             ->postJson('/api/v1/families', ['name' => 'Наша семья'])->assertStatus(419);
-        $this->withCookie('fh_browser_session', $token)->withHeader('X-Family-CSRF', $csrf)
+        $this->withUnencryptedCookie('fh_browser_session', $token)->withHeader('X-Family-CSRF', $csrf)
             ->postJson('/api/v1/families', ['name' => 'Наша семья'])->assertCreated();
 
         // Session termination must revoke the server-side token.
-        $this->withCookie('fh_browser_session', $token)->withHeader('X-Family-CSRF', $csrf)
+        $this->withUnencryptedCookie('fh_browser_session', $token)->withHeader('X-Family-CSRF', $csrf)
             ->postJson('/api/v1/auth/logout')->assertOk();
-        $this->withCookie('fh_browser_session', $token)
+        $this->withUnencryptedCookie('fh_browser_session', $token)
             ->getJson('/api/v1/me')->assertUnauthorized();
     }
 
@@ -78,7 +78,7 @@ class BrowserAuthTest extends TestCase
             'email' => 'reset@example.com', 'code' => '123456',
             'password' => 'brand-new-password-789',
         ])->assertOk();
-        $this->withCookie('fh_browser_session', $token)
+        $this->withUnencryptedCookie('fh_browser_session', $token)
             ->getJson('/api/v1/me')->assertUnauthorized();
         $this->postJson('/api/v1/auth/login', [
             'email' => 'reset@example.com', 'password' => 'original-password-123',
