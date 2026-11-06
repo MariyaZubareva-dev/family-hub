@@ -1,4 +1,4 @@
-import { expect,test,type Page } from '@playwright/test'
+import { expect,test,type Page } from './auth-fixture'
 
 async function mockStore(page:Page){
   const items:any[]=[{id:'auto1',name:'Шампунь',quantity:null,notes:null,is_completed:false,recurring_purchase_id:'p1',recurring_due_date:'2026-10-22'}]
